@@ -9,16 +9,14 @@ object DecodeLogic {
         if (bp.width == width) bp
         else {
             require(bp.width == width, s"Not aligned bp = '$bp',width = '$width'")
-            val diff = width - bp.width
-            require(diff > 0, s"Cannot pad '$bp' to '$width' because it is already '${bp.width}' bits wide!")
-            BitPat(0.U(diff.W)) ## bp
+            Nil
         }
     }
 
-    def apply(addr: UInt, default: BitPat, mapping: Iterable[(BitPat, BitPat)]): UInt =
-      chisel3.util.experimental.decode.decoder(QMCMinimizer, addr, TruthTable(mapping, default))
+    def apply(instr: UInt, default: BitPat, mapping: Iterable[(BitPat, BitPat)]): UInt =
+      chisel3.util.experimental.decode.decoder(QMCMinimizer, instr, TruthTable(mapping, default))
 
-    def apply(addr: UInt, default: Seq[BitPat], mappingIn: Iterable[(BitPat, Seq[BitPat])]): Seq[UInt] = {
+    def apply(instr: UInt, default: Seq[BitPat], mappingIn: Iterable[(BitPat, Seq[BitPat])]): Seq[UInt] = {
         val nElts = default.size
         require(mappingIn.forall(_._2.size == nElts),
             s"All Seq[BitPat] must be of the same length, got $nElts vs. ${mappingIn.find(_._2.size != nElts).get}"
@@ -36,7 +34,7 @@ object DecodeLogic {
         val mappingInPadded = mappingIn.map { case (in, elts) =>
             in -> elts.zip(elementWidths).map { case (bp, w) => checkWidth(bp, w) }
         }
-        val decoded = apply(addr, defaultsPadded.reduce(_ ## _), mappingInPadded.map { case (in, out) => (in, out.reduce(_ ## _)) })
+        val decoded = apply(instr, defaultsPadded.reduce(_ ## _), mappingInPadded.map { case (in, out) => (in, out.reduce(_ ## _)) })
         //返回译码结果
         elementIndices.zip(elementIndices.tail).map { case (msb, lsb) => decoded(msb, lsb + 1) }.toList
     }
