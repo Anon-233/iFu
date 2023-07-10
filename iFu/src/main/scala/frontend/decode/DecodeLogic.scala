@@ -9,7 +9,7 @@ object DecodeLogic {
         if (bp.width == width) bp
         else {
             require(bp.width == width, s"Not aligned bp = '$bp',width = '$width'")
-            Nil
+            None
         }
     }
 
