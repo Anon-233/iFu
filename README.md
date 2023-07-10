@@ -1,2 +1,3 @@
 # iFu
 阶段0...
+  - 正在新增LoongArch ISA
