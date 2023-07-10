@@ -14,6 +14,7 @@ object DecodeLogic {
             BitPat(0.U(diff.W)) ## bp
         }
     }
+
     def apply(addr: UInt, default: BitPat, mapping: Iterable[(BitPat, BitPat)]): UInt =
       chisel3.util.experimental.decode.decoder(QMCMinimizer, addr, TruthTable(mapping, default))
 
