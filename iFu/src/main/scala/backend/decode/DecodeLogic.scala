@@ -1,4 +1,4 @@
-package iFu.backend
+package iFu.frontend
 
 import chisel3._
 import chisel3.util.BitPat
@@ -6,36 +6,25 @@ import chisel3.util.experimental.decode._
 
 object DecodeLogic {
     private def checkWidth(bp: BitPat, width: Int): BitPat = {
-        if (bp.width == width) bp
-        else {
-            require(bp.width == width, s"Not aligned bp = '$bp',width = '$width'")
-            None
-        }
+        require(bp.width == width)
+        bp
     }
 
     def apply(instr: UInt, default: BitPat, mapping: Iterable[(BitPat, BitPat)]): UInt =
-      chisel3.util.experimental.decode.decoder(QMCMinimizer, instr, TruthTable(mapping, default))
+        chisel3.util.experimental.decode.decoder(QMCMinimizer, instr, TruthTable(mapping, default))
 
-    def apply(instr: UInt, default: Seq[BitPat], mappingIn: Iterable[(BitPat, Seq[BitPat])]): Seq[UInt] = {
-        val nElts = default.size
-        require(mappingIn.forall(_._2.size == nElts),
-            s"All Seq[BitPat] must be of the same length, got $nElts vs. ${mappingIn.find(_._2.size != nElts).get}"
+    def apply(instr: UInt, default: Seq[BitPat], mapping: Iterable[(BitPat, Seq[BitPat])]): Seq[UInt] = {
+        val nSignals = default.size
+        require(mapping.forall(_._2.size == nSignals),
+            s"The number of signals doesn't match. default = $nSignals , mappingIn =  ${mapping.find(_._2.size != nSignals).get}"
         )
-
-        val elementsGrouped = mappingIn.map(_._2).transpose
-        val elementWidths = elementsGrouped.zip(default).map { case (elts, default) =>
-            (default :: elts.toList).map(_.getWidth).max //将default添加到列表的开头，最终得到一行元素中最大宽度，即每一个信号对应的宽度
+        val signalWidths = default.map(i => i.getWidth)
+        val totalWidth = signalWidths.sum
+        val signalIdxs = signalWidths.scan(totalWidth-1){
+            case(l,r) => l-r
         }
-        val resultWidth = elementWidths.sum
-
-        val elementIndices = elementWidths.scan(resultWidth - 1) { case (l, r) => l - r }
-
-        val defaultsPadded = default.zip(elementWidths).map { case (bp, w) => checkWidth(bp, w) }
-        val mappingInPadded = mappingIn.map { case (in, elts) =>
-            in -> elts.zip(elementWidths).map { case (bp, w) => checkWidth(bp, w) }
-        }
-        val decoded = apply(instr, defaultsPadded.reduce(_ ## _), mappingInPadded.map { case (in, out) => (in, out.reduce(_ ## _)) })
+        val decoded = apply(instr, default.reduce(_ ## _), mapping.map { case (in, out) => (in, out.reduce(_ ## _)) })
         //返回译码结果
-        elementIndices.zip(elementIndices.tail).map { case (msb, lsb) => decoded(msb, lsb + 1) }.toList
+        signalIdxs.zip(signalIdxs.tail).map { case (lidx, ridx) => decoded(lidx, ridx + 1) }.toList
     }
 }
