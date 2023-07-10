@@ -1,4 +1,4 @@
-package frontend.ISA
+package frontend.isa
 
 import chisel3.util.BitPat
 
