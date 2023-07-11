@@ -139,6 +139,4 @@ class PreDecode extends CoreModule with PreDecodeConsts {
     io.out.shadowable   := isShadowable &&
             (!hasRs2 ||
             (io.inst(9,5) === io.inst(4,0))||
-            (io.inst === ADDW && io.inst(9,5) === 0.U))
-
 }
