@@ -20,8 +20,7 @@ class FetchBufferResp() extends CoreBundle
     val uops = Vec(coreWidth,Valid(new MicroOp()))
 }
 
-class FetchBuffer() extends CoreBundle
-    with HasCoreParameters
+class FetchBuffer extends CoreModule
 {
     val io = IO(new CoreBundle{
         val clear = Input(Bool())
