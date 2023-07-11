@@ -8,12 +8,16 @@ final case class BPUParameters(
 
 final case class ICacheParameters(
     blockBytes: Int = 256,
-    nBanks: Int = 2
+    nBanks: Int = 2,
+    bankWidth: Int = 128 // blockBytes / nBanks
+
 )
 
 final case class FrontendParameters(
-    iCacheParams: ICacheParameters = ICacheParameters()
-    numFTQEntries: Int = 40
+    iCacheParams: ICacheParameters = ICacheParameters(),
+    numFTQEntries: Int = 40,
+    numFBEntries: Int = 32,
+    fetchWidth: Int = 8
 )
 
 trait HasCoreParameters {
@@ -22,4 +26,6 @@ trait HasCoreParameters {
     val coreInstrBits: Int = coreInstrBytes * 8 // 指令位数
     val bpdParams: BPUParameters = BPUParameters()
     val frontendParams: FrontendParameters = FrontendParameters()
+    val coreWidth = 4                           // coreWith
+    val nBanks: Int = 2
 }

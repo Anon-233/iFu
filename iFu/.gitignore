@@ -1,6 +1,6 @@
 .idea
 .bsp
-.target
-.project
+target
+project
 .vscode
 .metals
