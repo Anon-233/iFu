@@ -4,6 +4,7 @@ import chisel3._
 
 final case class BPUParameters(
     // TODO: add more parameters
+    // for test
 )
 
 trait HasCoreParameters {
