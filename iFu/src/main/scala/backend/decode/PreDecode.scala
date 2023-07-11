@@ -92,11 +92,16 @@ class PreDecode extends CoreModule with PreDecodeConsts {
     val isJalr      = bpdSignals(2)(0)
     val isShadowable  = bpdSignals(3)(0)
     val hasRs2      = bpdSignals(4)(0)
-    io.out.isRet := isJalr && io.inst(4,0) === BitPat("b00000") && io.inst(9,5) === BitPat("b00001")
-    io.out.isCall := isJalr && io.inst(25) === BitPat("b1")
-    io.out.target := Mux(isBr,io.inst(25,10),Cat(io.inst(9,0),io.inst(25,10)))
+    io.out.isRet := isJalr && io.inst(26) === BitPat("b0") &&
+            io.inst(4,0) === BitPat("b00000") &&
+            io.inst(9,5) === BitPat("b00001") &&
+            io.inst(25,10) === 0.U
+    io.out.isCall := isJalr && io.inst(26) === BitPat("b1")
+    io.out.target := ((Mux(isBr,
+        Cat(Fill(14,io.inst(25)),io.inst(25,10),0.U(2.W)),
+        Cat(Fill(4,io.inst(9)),io.inst(9,0),io.inst(25,10),0.U(2.W))).asSInt + io.pc.asSInt).asSInt & (-4).S).asUInt
     io.out.cfiType := Mux(isBr,CFI_BR,
-        Mux(isJal,CFI_JAL,
+            Mux(isJal,CFI_JAL,
             Mux(isJalr,CFI_JALR,CFI_X)))
     val brOffset = Cat(io.inst(25,10),0.U(2.W))
 
@@ -108,7 +113,7 @@ class PreDecode extends CoreModule with PreDecodeConsts {
     io.out.sfbOffset.bits   := brOffset
     io.out.shadowable   := isShadowable &&
             (!hasRs2 ||
-            (io.inst(9,5) === io.inst(4,0)))||
-            (io.inst === ADDW && io.inst(4,0) === 0.U)
+            (io.inst(9,5) === io.inst(4,0))||
+            (io.inst === ADDW && io.inst(4,0) === 0.U))
 
 }
