@@ -56,7 +56,7 @@ trait MicroOpCode {
     val uopERTN         = 46.U(UOPC_SZ)
 
     val uopIDLE         = 47.U(UOPC_SZ)
-    
+
     val uopTLBSRCH      = 48.U(UOPC_SZ)
     val uopTLBRD        = 49.U(UOPC_SZ)
     val uopTLBWR        = 50.U(UOPC_SZ)
