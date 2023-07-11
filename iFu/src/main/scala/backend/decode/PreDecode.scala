@@ -123,7 +123,6 @@ class PreDecode extends CoreModule with PreDecodeConsts {
             3.偏移量不为0
             4.偏移量在一个Cacheline内
      */
-    //是sfb指令的条件：是条件分支指令，并且
     io.out.sfbOffset.valid := isBr &&
             !io.inst(25) &&
             brOffset =/= 0.U &&
