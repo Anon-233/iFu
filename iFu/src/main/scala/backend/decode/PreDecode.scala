@@ -4,7 +4,7 @@ import iFu.common.{CoreBundle, CoreModule}
 import chisel3._
 import chisel3.util._
 import frontend.isa.Instructions._
-// TODO 前端fetch f3预译码
+//TODO 合并常量
 
 trait PreDecodeConsts {
     val CFI_SZ = 3
@@ -85,18 +85,30 @@ class PreDecode extends CoreModule with PreDecodeConsts {
         val pc      = Input(UInt(vaddrBits.W))
         val out     = Output(new PreDecodeSignals)
     })
-
+    //TODO 换成asBool
     val bpdSignals  = DecodeLogic(io.inst,default,table)
     val isBr        = bpdSignals(0)(0)
     val isJal       = bpdSignals(1)(0)
     val isJalr      = bpdSignals(2)(0)
     val isShadowable  = bpdSignals(3)(0)
     val hasRs2      = bpdSignals(4)(0)
-    io.out.isRet := isJalr && io.inst(28) === BitPat("b0") &&
+
+    /**
+     * isRet的情况：
+     *      1.为JIRL指令
+     *      2.rd=0，rj=1
+     *      3立即数值为0
+     */
+    io.out.isRet := isJalr && io.inst(28) === BitPat("b0") && //BL和JIRL指令都是isJalr的，需要区分两者
             io.inst(4,0) === BitPat("b00000") &&
             io.inst(9,5) === BitPat("b00001") &&
             io.inst(25,10) === 0.U
+
+    /**
+     * isCall的情况：为BL指令
+     */
     io.out.isCall := isJalr && io.inst(28) === BitPat("b1")
+    //target输出一个32位的地址，结果要进行对齐
     io.out.target := ((Mux(isBr,
         Cat(Fill(14,io.inst(25)),io.inst(25,10),0.U(2.W)),
         Cat(Fill(4,io.inst(9)),io.inst(9,0),io.inst(25,10),0.U(2.W))).asSInt + io.pc.asSInt).asSInt & (-4).S).asUInt
@@ -104,13 +116,26 @@ class PreDecode extends CoreModule with PreDecodeConsts {
             Mux(isJal,CFI_JAL,
             Mux(isJalr,CFI_JALR,CFI_X)))
     val brOffset = Cat(io.inst(25,10),0.U(2.W))
-
+    /**
+        是否是sfb:
+            1.是条件分支指令
+            2.偏移量为正值
+            3.偏移量不为0
+            4.偏移量在一个Cacheline内
+     */
+    //是sfb指令的条件：是条件分支指令，并且
     io.out.sfbOffset.valid := isBr &&
             !io.inst(25) &&
             brOffset =/= 0.U &&
             brOffset(17,log2Ceil(blockBytes)) === 0.U
 //            (brOffset >> log2Ceil(blockBytes)) === 0.U
     io.out.sfbOffset.bits   := brOffset
+
+    /**
+        shadowable的条件：
+            1.指令本身是可以shadowable的
+            2.没有RS2或者（RD==RS1）或者（为ADDW指令并且RS2=0）
+     */
     io.out.shadowable   := isShadowable &&
             (!hasRs2 ||
             (io.inst(9,5) === io.inst(4,0))||
