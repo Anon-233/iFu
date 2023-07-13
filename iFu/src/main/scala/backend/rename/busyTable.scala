@@ -40,7 +40,7 @@ class BusyTable(
 
     //输出
     //这里我们将不考虑转发，转发逻辑在外面顶层模块进行
-    for (i <-0 plWidth){
+    for (i <-0 until plWidth){
         io.busy_resps(i).prs1_busy := busyTable(io.ren_uop(i).prs1)
         io.busy_resps(i).prs2_busy := busyTable(io.ren_uop(i).prs2)
     }
