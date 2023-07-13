@@ -20,10 +20,10 @@ class FetchBuffer extends CoreModule {
     val numRow = numEnt / coreWidth     // dequeue 1 row of uops at a time
 
     val ram = Reg(Vec(numEnt, new MicroOp)) // physical implementation of the buffer
-    val deqVec = Wire(Vec(numRow, Vec(coreWidth, new MicroOp))) // logical implementation of the buffer
+    val lram = Wire(Vec(numRow, Vec(coreWidth, new MicroOp))) // logical implementation of the buffer
 
     for(i <- 0 until numEnt){
-        deqVec(i / coreWidth)(i % coreWidth) := ram(i)
+        lram(i / coreWidth)(i % coreWidth) := ram(i)
     }
 
     val head = RegInit(1.U(numRow.W))   // pointer to the dequeue row
@@ -44,7 +44,7 @@ class FetchBuffer extends CoreModule {
         }.map {case (bit,idx) => bit}).asUInt       // get the tail position which need to be check
     ).map(newTail => head & newTail).reduce(_|_).orR    // check if any of the insertions hit the head
     // if not hit head, indicate that there are at least 8 empty slots in the buffer or the buffer is full
-    
+
     // now we check whether the second case is true
     // if the buffer is full, tail will be equal to head, and mayFull will be true
     val atHead = (
@@ -73,7 +73,7 @@ class FetchBuffer extends CoreModule {
             inUops(i).ftqIdx    := io.enq.bits.ftq_idx
             inUops(i).instr     := io.enq.bits.exp_insts(i) // TODO: why exp_insts?
             inUops(i).taken     := io.enq.bits.cfi_idx === i.U && io.enq.bits.cfi_idx.valid
-            
+
             // TODO: exception handling
             /*
             inUops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
@@ -86,23 +86,23 @@ class FetchBuffer extends CoreModule {
 
     // the index of the uop which will be enqueued
     // note: the index is one-hot encoded
-    val enq_idxs = Wire(Vec(frontendParams.fetchWidth,UInt(numEnt.W)))
+    val enqIdxOH = Wire(Vec(frontendParams.fetchWidth,UInt(numEnt.W)))
 
     def inc(ptr: UInt) = {  // the pointer is one-hot encoded, so simply shift it
         val n = ptr.getWidth
         Cat(ptr(n-2,0), ptr(n-1))
     }
 
-    var enq_idx = tail
+    var enqIdx = tail
     for (i <- 0 until frontendParams.fetchWidth){
-        enq_idxs(i) := enq_idx
-        enq_idx = Mux(inMask(i), inc(enq_idx), enq_idx) // if the uop is valid, enqueue it
+        enqIdxOH(i) := enqIdx
+        enqIdx = Mux(inMask(i), inc(enqIdx), enqIdx) // if the uop is valid, enqueue it
     }
 
     // enqueue the uops
     for( i <- 0 until frontendParams.fetchWidth){   // for each uop
         for(j <- 0 until numEnt){   // for each entry in the buffer
-            when (doEnqueue && inMask(i) && enq_idxs(i)(j)){
+            when (doEnqueue && inMask(i) && enqIdxOH(i)(j)){
                 ram(j) := inUops(i)
             }
         }
@@ -127,7 +127,7 @@ class FetchBuffer extends CoreModule {
     val deqValid = (~MaskUpper(slotWillHitTail)).asBools    // the positions before the tail are valid
 
     (io.deq.bits.uops zip deqValid).map { case (d, valid) => d.valid := valid }  // connect the valid signal using the map function
-    (io.deq.bits.uops zip Mux1H(head, deqVec)).map {case (d, uop) => d.bits := uop}
+    (io.deq.bits.uops zip Mux1H(head, lram)).map {case (d, uop) => d.bits := uop}
     io.deq.valid := deqValid.reduce(_||_)
     // note: here, we dequeue uops from the buffer if it's not empty, which means there may not be at least 4 uops in the buffer
     // however, there's no need to worry as we use the signal doDequeue to control the head, this means that if there are not 4 uops,
@@ -137,7 +137,7 @@ class FetchBuffer extends CoreModule {
     // update registers
     // note: priority: clear > enqueue > dequeue
     when (doEnqueue){
-        tail := enq_idx
+        tail := enqIdx
         when (inMask.reduce(_||_)){
             mayFull := true.B
         }
