@@ -1,9 +1,9 @@
-package frontend
+package iFu.frontend
 
-import iFu.common.{CoreBundle, CoreModule}
+import iFu.common._
 import chisel3._
-import chisel3.util.{isPow2, log2Ceil}
-import frontend.Parameters._
+import chisel3.util._
+import iFu.frontend.Parameters._
 import iFu.BankedPredictor
 import iFu.frontend.{FetchBufferResp, ICache}
 import iFu.frontend.predictors.{MaskLower, globalHistoryLength}
