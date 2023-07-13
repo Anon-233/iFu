@@ -4,77 +4,77 @@ import chisel3._
 import chisel3.util._
 import iFu.common._
 
-/**
-  * we need to add the following parameters:
-  * coreWidth MicroOp
-  * 
-  * ----------------------------------------
-  * we need to add the following class:
-  * HasFrontendParameters
-  * HasFrontendParameters
-  * 
-  */
-
-class FetchBufferResp() extends CoreBundle
-{
-    val uops = Vec(coreWidth,Valid(new MicroOp()))
+class FetchBufferResp() extends CoreBundle {
+    val uops = Vec(coreWidth,Valid(new MicroOp))
 }
 
-class FetchBuffer extends CoreModule
-{
+class FetchBuffer extends CoreModule {
     val io = IO(new CoreBundle{
         val clear = Input(Bool())
-
-        val enq = Flipped(Decoupled(new FetchBundle()))
-        val deq = new DecoupledIO(new FetchBufferResp())
+        val enq = Flipped(Decoupled(new FetchBundle()))     // Input
+        val deq = new DecoupledIO(new FetchBufferResp())    // Output
     })
+
     val numEnt = frontendParams.numFBEntries
+    require(numEnt % coreWidth == 0, "FetchBuffer size must be divisible by coreWidth")
+    val numRow = numEnt / coreWidth     // dequeue 1 row of uops at a time
 
-    val numRow = numEnt / coreWidth
+    val ram = Reg(Vec(numEnt, new MicroOp)) // physical implementation of the buffer
+    val deqVec = Wire(Vec(numRow, Vec(coreWidth, new MicroOp))) // logical implementation of the buffer
 
-    val Opram = Reg(Vec(numEnt, new MicroOp))
+    for(i <- 0 until numEnt){
+        deqVec(i / coreWidth)(i % coreWidth) := ram(i)
+    }
 
-    val deqVec = Wire(Vec(numRow, Vec(coreWidth, new MicroOp)))
+    val head = RegInit(1.U(numRow.W))   // pointer to the dequeue row
+    val tail = RegInit(1.U(numEnt.W))   // pointer to the enqueue position
 
-    val head = RegInit(1.U(numRow.W))
-    val tail = RegInit(1.U(numEnt.W))
+    val mayFull = RegInit(false.B)  // if enqueueing, set to true
+                                    // note: mayFull indicates that there are uops present in the buffer
 
-    val mayFull = RegInit(false.B) //入队置为1
-
-
-    //入队阶段
-    def rotateLeft(in : UInt, k:Int) = {
-        val n =in.getWidth
+    // enqueue stage
+    def rotateLeft(in : UInt, k : Int) = {
+        val n = in.getWidth
         Cat(in(n-k-1,0),in(n-1,n-k))
     }
 
-    val mayHitHead = (1 until frontendParams.fetchWidth).map(k => VecInit(rotateLeft(tail, k).asBools.zipWithIndex.filter
-    {case (e,i) => i % coreWidth == 0}.map {case (e,i) => e}).asUInt).map(tail => head & tail).reduce(_|_).orR
-    val atHead = (VecInit(tail.asBools.zipWithIndex.filter {case (e,i) => i % coreWidth == 0}
-    .map {case (e,i) => e}).asUInt & head).orR
-    val doEnqueue = !(atHead && mayFull || mayHitHead)
+    val mayHitHead = (1 until frontendParams.fetchWidth).map(   // testing insert 1, 2, ..., fetchWidth uops
+        k => VecInit(rotateLeft(tail, k).asBools.zipWithIndex.filter {
+            case (bit,idx) => idx % coreWidth == 0  // the head is always aligned to a row boundary, so only check those
+        }.map {case (bit,idx) => bit}).asUInt       // get the tail position which need to be check
+    ).map(newTail => head & newTail).reduce(_|_).orR    // check if any of the insertions hit the head
+    // if not hit head, indicate that there are at least 8 empty slots in the buffer or the buffer is full
+    
+    // now we check whether the second case is true
+    // if the buffer is full, tail will be equal to head, and mayFull will be true
+    val atHead = (
+        VecInit(tail.asBools.zipWithIndex.filter {
+            case (bit,idx) => idx % coreWidth == 0    // get the bits on position which need to be check
+        }.map {case (bit,idx) => bit}).asUInt & head).orR   // chech whether the tail is equal to head
+
+    val doEnqueue = !(atHead && mayFull || mayHitHead)  // if the first case is true, we can enqueue
 
     io.enq.ready := doEnqueue
 
-    val inMask = Wire(Vec(frontendParams.fetchWidth, Bool()))
+    val inMask = Wire(Vec(frontendParams.fetchWidth, Bool())) // which uops are valid
     val inUops = Wire(Vec(frontendParams.fetchWidth, new MicroOp()))
 
     for(b <- 0 until nBanks){
         for (w <- 0 until frontendParams.iCacheParams.bankWidth){
-            val i =(b*frontendParams.iCacheParams.bankWidth) + w
+            val i = (b * frontendParams.iCacheParams.bankWidth) + w     // the index of the uop
 
-            val pcLowbit = (bankAlign(io.enq.bits.pc) + (i << 1).U)
+            val pc = (bankAlign(io.enq.bits.pc) + (i << 1).U)     // the low bit of the pc of the uop
 
-            inUops(i) := DontCare
+            inUops(i) := DontCare   // set the value afterward
             inMask(i) := io.enq.valid && io.enq.bits.mask(i)
-            inUops(i).pcLowBits := pcLowbit
 
-            inUops(i).isSFB := io.enq.bits.sfbs(i) || io.enq.bits.shadowed_mask(i)
-
-            inUops(i).ftqIdx := io.enq.bits.ftq_idx
-            inUops(i).instr := io.enq.bits.exp_insts(i)
-            inUops(i).taken := io.enq.bits.cfi_idx === i.U && io.enq.bits.cfi_idx.valid
+            inUops(i).pcLowBits := pc
+            inUops(i).isSFB     := io.enq.bits.sfbs(i) || io.enq.bits.shadowed_mask(i) // is sfb_br or sfb_shadow
+            inUops(i).ftqIdx    := io.enq.bits.ftq_idx
+            inUops(i).instr     := io.enq.bits.exp_insts(i) // TODO: why exp_insts?
+            inUops(i).taken     := io.enq.bits.cfi_idx === i.U && io.enq.bits.cfi_idx.valid
             
+            // TODO: exception handling
             /*
             inUops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
             inUops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
@@ -84,9 +84,11 @@ class FetchBuffer extends CoreModule
         }
     }
 
+    // the index of the uop which will be enqueued
+    // note: the index is one-hot encoded
     val enq_idxs = Wire(Vec(frontendParams.fetchWidth,UInt(numEnt.W)))
 
-    def inc(ptr: UInt) = {
+    def inc(ptr: UInt) = {  // the pointer is one-hot encoded, so simply shift it
         val n = ptr.getWidth
         Cat(ptr(n-2,0), ptr(n-1))
     }
@@ -94,37 +96,46 @@ class FetchBuffer extends CoreModule
     var enq_idx = tail
     for (i <- 0 until frontendParams.fetchWidth){
         enq_idxs(i) := enq_idx
-        enq_idx = Mux(inMask(i),inc(enq_idx),enq_idx)
+        enq_idx = Mux(inMask(i), inc(enq_idx), enq_idx) // if the uop is valid, enqueue it
     }
 
-    //写入
-    for( i <- 0 until frontendParams.fetchWidth){
-        for(j <- 0 until numEnt){
+    // enqueue the uops
+    for( i <- 0 until frontendParams.fetchWidth){   // for each uop
+        for(j <- 0 until numEnt){   // for each entry in the buffer
             when (doEnqueue && inMask(i) && enq_idxs(i)(j)){
-                Opram(j) := inUops(i)
+                ram(j) := inUops(i)
             }
         }
     }
 
-    //出队阶段
-    val mayHitTail = VecInit((0 until numEnt).map(i =>
-                          head(i/coreWidth) && (!mayFull || (i % coreWidth != 0).B))).asUInt & tail
-    val slotWillHitTail = (0 until numRow).map(i => mayHitTail((i+1)*coreWidth-1, i*coreWidth)).reduce(_|_)
-    val willHitTail = slotWillHitTail.orR
+    // dequeue stage
+    val mayHitTail = VecInit((0 until numEnt).map(
+        idx => head(idx / coreWidth) && (!mayFull || (idx % coreWidth != 0).B)
+    )).asUInt & tail
+    // First, expand the head to the size of the tail by copying each bit of the head four times
+    // Then, if shifting the head four times still does not reach the tail, it indicates that the buffer has at least 4 valid uops
+    // If the head is equal to the tail, we need to check whether the buffer is full or empty
+    // If mayFull is false, it means the buffer was dequeued the last time, and thus the buffer is empty
+
+    val slotWillHitTail = (0 until numRow).map(
+        i => mayHitTail((i + 1) * coreWidth - 1, i * coreWidth)
+    ).reduce(_|_)   // 4 bits, indicate which slot will hit the tail, if not, equal to 0000
+    val willHitTail = slotWillHitTail.orR   // if hit, slotWillHitTail will have one bit set to 1
 
     val doDequeue = io.deq.ready && !willHitTail
 
-    val deqVal = (~MaskUpper(slotWillHitTail)).asBools
+    val deqValid = (~MaskUpper(slotWillHitTail)).asBools    // the positions before the tail are valid
 
-    for(i <- 0 until numEnt){
-        deqVec(i/coreWidth)(i%coreWidth) := Opram(i)
-    }
+    (io.deq.bits.uops zip deqValid).map { case (d, valid) => d.valid := valid }  // connect the valid signal using the map function
+    (io.deq.bits.uops zip Mux1H(head, deqVec)).map {case (d, uop) => d.bits := uop}
+    io.deq.valid := deqValid.reduce(_||_)
+    // note: here, we dequeue uops from the buffer if it's not empty, which means there may not be at least 4 uops in the buffer
+    // however, there's no need to worry as we use the signal doDequeue to control the head, this means that if there are not 4 uops,
+    // we should not modify the head, next time, we will still dequeue the same uops until we have dequeued the 4 uops
+    // the repetitive uops will be handled in the next stage, the decode stage, in core.scala.
 
-    io.deq.bits.uops zip deqVal           map {case (d,v) => d.valid := v}
-    io.deq.bits.uops zip Mux1H(head, deqVec) map {case (d,q) => d.bits  := q}
-    io.deq.valid := deqVal.reduce(_||_)
-
-    //更新
+    // update registers
+    // note: priority: clear > enqueue > dequeue
     when (doEnqueue){
         tail := enq_idx
         when (inMask.reduce(_||_)){
@@ -142,7 +153,6 @@ class FetchBuffer extends CoreModule
         tail := 1.U
         mayFull := false.B
     }
-
 
     when(reset.asBool){
         io.deq.bits.uops map { u => u.valid := false.B}
