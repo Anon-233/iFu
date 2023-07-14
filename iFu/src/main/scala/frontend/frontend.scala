@@ -492,7 +492,7 @@ class Frontend extends CoreModule
      *  1.s2指令有效
      *  2.icache返回结果有效，或者是tlb除了miss以外的异常。miss情况可能可以由ptw解决，所以暂时不入队
      */
-
+    //TODO 没有ptw,s2_tlb_miss或许不需要判定is_replay，并把s2_tlb_miss与ae,pf合在一起
     f3.io.enq.valid     := (s2_valid && !f2_clear &&
             (icache.io.resp.valid || ((s2_tlb_resp.ae.valid || s2_tlb_resp.pf.valid) && !s2_tlb_miss))
             )
