@@ -12,6 +12,7 @@ import iFu.frontend.predictors.{MaskLower, globalHistoryLength}
 //TODO 重命名FrontEndExceptions,GlobalHistory,如果之后RAS增加计数器，Histories的update函数需要更改，
 //TODO FetchBundle重命名为FetchBufferEntry
 //TODO 检查valid信号 569行
+//TODO HasFrontEndparameters的函数只适用与ICache
 import chisel3.util._
 object Parameters{
     val fetchWidth = 8
@@ -21,7 +22,9 @@ object Parameters{
     val nRasEntries = 32
     val fetchBytes = fetchWidth * 4
 
+    val nBanks = 2
     val icBlockBytes = 64
+    val icBlockOffBits = icBlockBytes * 8
 
     val ftqSz = 40 //numFTQEntries
     val localHistoryLength = 16
@@ -39,7 +42,63 @@ object Parameters{
     val CFI_JAL = 2.U(CFI_SZ.W) // JAL
     val CFI_JALR = 3.U(CFI_SZ.W) // JALR
 }
+trait HasFrontendParameters extends HasL1ICacheParameters
+{
+    // How many banks does the ICache use?
+    // How many bytes wide is a bank?
+    val bankBytes = fetchBytes/nBanks
 
+    val bankWidth = fetchWidth/nBanks
+
+    require(nBanks == 1 || nBanks == 2)
+
+
+
+    // How many "chunks"/interleavings make up a cache line?
+    val numChunks = icBlockBytes / bankBytes
+
+    // Which bank is the address pointing to?
+    def bank(addr: UInt) = if (nBanks == 2) addr(log2Ceil(bankBytes)) else 0.U
+    def isLastBankInBlock(addr: UInt) = {
+        (nBanks == 2).B && addr(icBlockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U
+    }
+    def mayNotBeDualBanked(addr: UInt) = {
+        require(nBanks == 2)
+        isLastBankInBlock(addr)
+    }
+
+    def blockAlign(addr: UInt) = ~(~addr | (icBlockBytes-1).U)
+    def bankAlign(addr: UInt) = ~(~addr | (bankBytes-1).U)
+
+    def fetchIdx(addr: UInt) = addr >> log2Ceil(fetchBytes)
+
+    def nextBank(addr: UInt)= bankAlign(addr) + bankBytes.U
+    def nextFetch(addr: UInt) = {
+
+        require(nBanks == 2)
+        bankAlign(addr) + Mux(mayNotBeDualBanked(addr), bankBytes.U, fetchBytes.U)
+    }
+
+    def fetchMask(addr: UInt) = {
+        val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstrBytes)-1, log2Ceil(coreInstrBytes))
+        if (nBanks == 1) {
+            ((1 << fetchWidth)-1).U << idx
+        } else {
+            val shamt = idx.extract(log2Ceil(fetchWidth)-2, 0)
+            val end_mask = Mux(mayNotBeDualBanked(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
+            ((1 << fetchWidth)-1).U << shamt & end_mask
+        }
+    }
+
+    def bankMask(addr: UInt) = {
+        val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstrBytes)-1, log2Ceil(coreInstrBytes))
+        if (nBanks == 1) {
+            1.U(1.W)
+        } else {
+            Mux(mayNotBeDualBanked(addr), 1.U(2.W), 3.U(2.W))
+        }
+    }
+}
 object WrapDec
 {
     // "n" is the number of increments, so we wrap at n-1.
@@ -142,64 +201,7 @@ class GlobalHistory extends CoreBundle {
         new_history
     }
 }
-trait HasFrontendParameters extends HasL1ICacheParameters
-{
-    // How many banks does the ICache use?
-    val nBanks = if (cacheParams.fetchBytes <= 8) 1 else 2
-    // How many bytes wide is a bank?
-    val bankBytes = fetchBytes/nBanks
 
-    val bankWidth = fetchWidth/nBanks
-
-    require(nBanks == 1 || nBanks == 2)
-
-
-
-    // How many "chunks"/interleavings make up a cache line?
-    val numChunks = cacheParams.blockBytes / bankBytes
-
-    // Which bank is the address pointing to?
-    def bank(addr: UInt) = if (nBanks == 2) addr(log2Ceil(bankBytes)) else 0.U
-    def isLastBankInBlock(addr: UInt) = {
-        (nBanks == 2).B && addr(blockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U
-    }
-    def mayNotBeDualBanked(addr: UInt) = {
-        require(nBanks == 2)
-        isLastBankInBlock(addr)
-    }
-
-    def blockAlign(addr: UInt) = ~(~addr | (cacheParams.blockBytes-1).U)
-    def bankAlign(addr: UInt) = ~(~addr | (bankBytes-1).U)
-
-    def fetchIdx(addr: UInt) = addr >> log2Ceil(fetchBytes)
-
-    def nextBank(addr: UInt) = bankAlign(addr) + bankBytes.U
-    def nextFetch(addr: UInt) = {
-
-            require(nBanks == 2)
-            bankAlign(addr) + Mux(mayNotBeDualBanked(addr), bankBytes.U, fetchBytes.U)
-    }
-
-    def fetchMask(addr: UInt) = {
-        val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
-        if (nBanks == 1) {
-            ((1 << fetchWidth)-1).U << idx
-        } else {
-            val shamt = idx.extract(log2Ceil(fetchWidth)-2, 0)
-            val end_mask = Mux(mayNotBeDualBanked(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
-            ((1 << fetchWidth)-1).U << shamt & end_mask
-        }
-    }
-
-    def bankMask(addr: UInt) = {
-        val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
-        if (nBanks == 1) {
-            1.U(1.W)
-        } else {
-            Mux(mayNotBeDualBanked(addr), 1.U(2.W), 3.U(2.W))
-        }
-    }
-}
 //FetchBufferEntry
 class FetchBundle extends CoreBundle with HasFrontendParameters
 {
@@ -275,7 +277,7 @@ class FrontendToCPUIO extends CoreModule
 }
 class FrontendIO extends CoreBundle {
     val cpu = Flipped(new FrontendToCPUIO())
-//    val ptw = new TLBPTWIO()
+    val ptw = new TLBPTWIO()
     val errors = new ICacheErrors
 }
 
@@ -392,7 +394,7 @@ class Frontend extends CoreModule
     //当前s1寄存器有效。注意，s1阶段可能会replay
     when (s1_valid && !s1_tlb_miss){
         // 发生tlb异常时停止取指
-        s0_valid    := !(s1_tlb_resp.ae.inst || s1_tlb_resp.pf.inst)
+        s0_valid    := !(s1_tlb_resp.ae.valid || s1_tlb_resp.pf.valid)
         s0_tsrc     := BSRC_1
         s0_vpc      := f1_predicted_target
         s0_ghist    := f1_predicted_ghist
@@ -412,7 +414,7 @@ class Frontend extends CoreModule
     val s2_tlb_resp = RegNext(s1_tlb_resp)
     val s2_tlb_miss = RegNext(s1_tlb_miss)
     val s2_is_replay = RegNext(s1_is_replay) && s2_valid
-    val s2_xcpt = s2_valid && (s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay
+    val s2_xcpt = s2_valid && (s2_tlb_resp.ae.valid || s2_tlb_resp.pf.valid) && !s2_is_replay
     val f3_ready = Wire(Bool())
 
     icache.io.s2_kill := s2_xcpt
@@ -443,7 +445,7 @@ class Frontend extends CoreModule
     //当本周期s2需要阻塞时，下一周期s2寄存器valid为假，并且会将内容传给s1寄存器（通过s0）
     when((s2_valid && !icache.io.resp.valid) ||
             (s2_valid && icache.io.resp.valid && !f3_ready)){
-        s0_valid := (!s2_tlb_resp.ae.inst && !s2_tlb_resp.pf.inst) || s2_is_replay || s2_tlb_miss
+        s0_valid := (!s2_tlb_resp.ae.valid && !s2_tlb_resp.pf.valid) || s2_is_replay || s2_tlb_miss
         s0_vpc := s2_vpc
         s0_is_replay := s2_valid && icache.io.resp.valid
         // When this is not a replay (it queried the BPDs, we should use f3 resp in the replaying s1)
@@ -459,7 +461,7 @@ class Frontend extends CoreModule
         when((s1_valid && (s1_vpc =/= f2_predicted_target || f2_correct_f1_ghist)) || !s1_valid){
             f1_clear    := true.B
 
-            s0_valid    := !((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay)
+            s0_valid    := !((s2_tlb_resp.ae.valid || s2_tlb_resp.pf.valid) && !s2_is_replay)
             s0_vpc      := f2_predicted_target
             s0_is_replay:= false.B
             s0_ghist    := f2_predicted_ghist
@@ -492,7 +494,7 @@ class Frontend extends CoreModule
      */
 
     f3.io.enq.valid     := (s2_valid && !f2_clear &&
-            (icache.io.resp.valid || ((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_tlb_miss))
+            (icache.io.resp.valid || ((s2_tlb_resp.ae.valid || s2_tlb_resp.pf.valid) && !s2_tlb_miss))
             )
     f3.io.enq.bits.pc := s2_vpc
     f3.io.enq.bits.data := Mux(s2_xcpt, 0.U, icache.io.resp.bits.data)
@@ -541,8 +543,8 @@ class Frontend extends CoreModule
     f3_fetch_bundle.br_mask := f3_br_mask.asUInt
     f3_fetch_bundle.pc      := f3_imemresp.pc
     f3_fetch_bundle.ftq_idx := 0.U      //之后会被赋值
-    f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf.inst
-    f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae.inst
+    f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf.valid
+    f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae.valid
     f3_fetch_bundle.fsrc := f3_imemresp.fsrc
 //    f3_fetch_bundle.tsrc := f3_imemresp.tsrc
     f3_fetch_bundle.shadowed_mask := f3_shadowed_mask
