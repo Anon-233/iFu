@@ -17,6 +17,9 @@ trait IssueStateEnum {
     // s_valid_1 -> normal valid uop
     // s_valid_2 -> STA-like uop
     val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(3)
+
+    def isValid(s: UInt) = s =/= s_invalid
+    def isInvalid(s: UInt) = s === s_invalid
 }
 
 class IssueUnitWakeup(val pregSz: Int) extends Bundle {
@@ -31,9 +34,9 @@ class IssueUnitIO(
 ) extends CoreBundle {
     val disUops = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
-    val wakeup = Vec(numWakeupPorts, Flipped(Valid(new IssueUnitWakeup(/*TODO*/))))
+    val wakeup = Vec(numWakeupPorts, Flipped(Valid(new IssueUnitWakeup(maxPregSz.W))))
     val predWakeup = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
-    val specLdWakeup = Vec(/*TODO*/, Flipped(Valid(UInt(/*TODO*/))))
+    val specLdWakeup = Vec(memWidth, Flipped(Valid(UInt(maxPregSz.W))))
     val ldMiss = Input(Bool())
 
     val fuTypes = Vec(issueWidth, Input(Bits(/*TODO*/)))
@@ -61,7 +64,7 @@ abstract class IssueUnit(
         disUops(w).iw_p1_poinsoned := false.B
         disUops(w).iw_p2_poinsoned := false.B
 
-        when((io.disUops(w).bits.uopc === uopSta)) {
+        when ((io.disUops(w).bits.uopc === uopSta)) {
             disUops(w).iw_state := s_valid_2
         }
 
@@ -80,7 +83,7 @@ abstract class IssueUnit(
         slotsIOs(i).wakeup := io.wakeup
         slotsIOs(i).predWakeup := io.predWakeup
         slotsIOs(i).specLdWakeup := io.specLdWakeup
-        slotsIOs(i).ldMiss := io.ldMiss
+        slotsIOs(i).ldSpecMiss := io.ldMiss
         slotsIOs(i).brUpdate := io.brUpdate
         slotsIOs(i).kill := io.flushPipeline
     }
