@@ -25,7 +25,7 @@ class ReMapReq(val lregSz:Int,val pregSz:Int) extends Bundle
     val valid = Bool()
 }
 
-class RenamemapTable(
+class RenameMapTable(
     val plWidth:Int,
     val numLregs:Int,
     val numPregs:Int)(implicit p: Parameters) extends CoreBundle
