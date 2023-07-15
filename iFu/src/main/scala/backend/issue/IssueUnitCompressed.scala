@@ -6,10 +6,10 @@ import chisel3.util._
 import iFu.common._
 
 class IssueUnitCompressed(
-    // TODO
+    // TODO: add parameters
 ) extends IssueUnit(/*TODO*/) {
     val maxShift = dispatchWidth
-    val vacants = slotsIOs.map(!_.valid) ++ io.disUops.map(_.valid).map(!_.asBool)
+    val vacants = issueSlots.map(!_.valid) ++ io.disUops.map(_.valid).map(!_.asBool)
     val shamtOH = Array.fill(numIssueSlots + dispatchWidth) { Wire(UInt(maxShift.W)) }
 
     def getShamtOH(countOH: UInt, inc: Bool): UInt = {
@@ -27,27 +27,27 @@ class IssueUnitCompressed(
         case i => shamtOH(i) := getShamtOH(shamtOH(i - 1), vacants(i - 1))
     }
 
-    val willBeValid = (0 until numIssueSlots),map(i => slotsIOs(i).willBeValid) ++
+    val willBeValid = (0 until numIssueSlots),map(i => issueSlots(i).willBeValid) ++
                       (0 until dispatchWidth).map(i => io.disUops(i).valid &&
                                                     //    !disUops(i).exception &&
                                                     //    !disUops(i).is_fence &&
                                                     //    !disUops(i).is_fencei
                       )
-    val uops = slotsIOs.map(_.outUop) ++ disUops.map(_)
+    val uops = issueSlots.map(_.outUop) ++ disUops.map(_)
     for (i <- 0 until numIssueSlots) {
-        slotsIOs(i).inUop.valid := false.B
-        slotsIOs(i).inUop.bits := uop(i + 1)    // out of bounds?
+        issueSlots(i).inUop.valid := false.B
+        issueSlots(i).inUop.bits := uop(i + 1)    // out of bounds?
         for (j <- 1 to maxShift) {
             when (shamtOH(i + j) === (1 << (j - 1)).U) {
-                slotsIOs(i).inUop.valid := willBeValid(i + j)
-                slotsIOs(i).inUop.bits := uops(i + j)
+                issueSlots(i).inUop.valid := willBeValid(i + j)
+                issueSlots(i).inUop.bits := uops(i + j)
             }
         }
-        slotsIOs(i).clear := shamtOH(i) =/= 0.U
+        issueSlots(i).clear := shamtOH(i) =/= 0.U
     }
 
     val willBeAvailable = (0 until numIssueSlots).map (
-        i => (!slotsIOs(i).willBeValid || slotsIOs(i).clear) && !(slotsIOs(i).inUop.valid)
+        i => (!issueSlots(i).willBeValid || issueSlots(i).clear) && !(issueSlots(i).inUop.valid)
     )
     val numAvailable = PopCount(willBeAvailable)
     for (w <- 0 until dispatchWidth) {
@@ -63,19 +63,19 @@ class IssueUnitCompressed(
         io.issueUops(w).lrs2_rtype := RT_X
     }
 
-    val request = slotsIOs.map(_.request)
+    val request = issueSlots.map(_.request)
     val issued = Array.fill(issueWidth) { false.B }
 
     for (i <- 0 until numIssueSlots) {
-        slotsIOs(i).grant := false.B
+        issueSlots(i).grant := false.B
         var uopIssued = false.B
 
         for (w <- 0 until issueWidth) {
-            val canAllocate = (slotsIOs(i).uop.fu_code & io.fuTypes(w)) =/= 0.U
+            val canAllocate = (issueSlots(i).uop.fu_code & io.fuTypes(w)) =/= 0.U
             when (request(i) && !uopIssued && canAllocate && !issued(w)) {
-                slotsIOs(i).grant := true.B
+                issueSlots(i).grant := true.B
                 io.issueValids(w) := true.B
-                io.issueUops(w) := slotsIOs(i).uop
+                io.issueUops(w) := issueSlots(i).uop
             }
             val wasIssuedYet = issued(w)
             issued(w) = (request(i) && !uopIssued && canAllocate) | issued(w)

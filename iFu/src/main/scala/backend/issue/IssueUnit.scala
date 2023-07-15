@@ -6,25 +6,24 @@ import chisel3.util._
 import iFu.common._
 
 case class IssueParams(
-    iqType: Int,
-    numIssueSlots: Int,
+    iqType: Int,        // issue queue type: IQT_INT, IQT_MEM
+    numIssueSlots: Int, // number of issue slots
     dispatchWidth: Int,
-    issueWidth: Int
+    issueWidth: Int    // maximum number of uops issued per cycle
 )
 
-trait IssueStateEnum {
-    // s_invalid -> no valid uop
-    // s_valid_1 -> normal valid uop
-    // s_valid_2 -> STA-like uop
+trait IssueState {
+    // s_invalid -> no valid instruction
+    // s_valid_1 -> normal valid instruction
+    // s_valid_2 -> store-like instruction
     val s_invalid :: s_valid_1 :: s_valid_2 :: Nil = Enum(3)
 
     def isValid(s: UInt) = s =/= s_invalid
     def isInvalid(s: UInt) = s === s_invalid
 }
 
-class IssueUnitWakeup(val pregSz: Int) extends Bundle {
+class IssueWakeup(val pregSz: Int) extends Bundle {
     val pdst = UInt(pregSz.W)   // physical destination register
-    val poisoned = Bool()
 }
 
 class IssueUnitIO(
@@ -34,9 +33,10 @@ class IssueUnitIO(
 ) extends CoreBundle {
     val disUops = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
-    val wakeup = Vec(numWakeupPorts, Flipped(Valid(new IssueUnitWakeup(maxPregSz.W))))
-    val predWakeup = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
-    val specLdWakeup = Vec(memWidth, Flipped(Valid(UInt(maxPregSz.W))))
+    val wakeupPorts = Vec(numWakeupPorts, Flipped(Valid(new IssueWakeup(maxPregSz.W))))
+    val predWakeupPorts = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
+    val specLdWakeupPorts = Vec(memWidth, Flipped(Valid(UInt(maxPregSz.W))))
+
     val ldMiss = Input(Bool())
 
     val fuTypes = Vec(issueWidth, Input(Bits(/*TODO*/)))
@@ -49,12 +49,12 @@ class IssueUnitIO(
 }
 
 abstract class IssueUnit(
-    val iqType: Int,    // TODO: iqType?
+    val iqType: Int,
     val numIssueSlots: Int,
     val dispatchWidth: Int,
     val numWakeupPorts: Int,
     val issueWidth: Int
-) extends CoreModule with IssueStateEnum {
+) extends CoreModule with IssueState {
     val io = IO(new IssueUnitIO(dispatchWidth, numWakeupPorts, issueWidth))
 
     val disUops = Array.fill(dispatchWidth) { Wire(new MicroOp) }
@@ -77,14 +77,14 @@ abstract class IssueUnit(
     val slots = (0 until numIssueSlots).map {
         case i => Module(new IssueSlot(numWakeupPorts))
     }
-    val slotsIOs = VecInit(slots.map(_.io))
+    val issueSlots = VecInit(slots.map(_.io))
 
     for (w <- 0 until numIssueSlots) {
-        slotsIOs(i).wakeup := io.wakeup
-        slotsIOs(i).predWakeup := io.predWakeup
-        slotsIOs(i).specLdWakeup := io.specLdWakeup
-        slotsIOs(i).ldSpecMiss := io.ldMiss
-        slotsIOs(i).brUpdate := io.brUpdate
-        slotsIOs(i).kill := io.flushPipeline
+        issueSlots(i).wakeupPorts := io.wakeupPorts
+        issueSlots(i).predWakeupPorts := io.predWakeupPorts
+        issueSlots(i).specLdWakeupPorts := io.specLdWakeupPorts
+        issueSlots(i).ldSpecMiss := io.ldMiss
+        issueSlots(i).brUpdate := io.brUpdate
+        issueSlots(i).kill := io.flushPipeline
     }
 }
