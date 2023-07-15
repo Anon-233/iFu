@@ -1,49 +1,32 @@
-package iFu.frontend.predictors
+package iFu.frontend
 
 import chisel3._
 import chisel3.util._
-import iFu.frontend.predictors._
 
-val vaddrBits = 32
-val bankWidth = 4
-val fetchWidth = 8
-val nBanks = 2
-val localHistoryLength = 16
-val maxMetaLength = 16
-val fetchBytes = 32
 
-val nSets = 2048
 
-val nWrBypassEntries = 2
-
-def fetchIdx(addr: UInt) = addr >> log2Ceil(fetchBytes)
-def WrapInc(x: UInt, max: UInt) = Mux(x === max, 0.U, x + 1.U)
-
-class BimPredictMeta {
-    val bims  = Vec(bankWidth, UInt(2.W))
+class BimPredictMeta extends Bundle with HasBimParameters{
+    val bim  = UInt(2.W)
 }
 
-def bimWrite(v: UInt, taken: Bool): UInt = {
-val oldBimSatTaken  = v === 3.U
-val oldBimSatNtaken = v === 0.U
-Mux(oldBimSatTaken  &&  taken, 3.U,
-    Mux(oldBimSatNtaken && !taken, 0.U,
-    Mux(taken, v + 1.U, v - 1.U)))
-}
 
-class Bimpredictor {
-    io = IO(Bundle{
-        val s0PC = Input(UInt(vaddrBits.W))
+class BimPredictor extends Module with HasBimParameters{
+    val io = IO(new Bundle{
+        val s0pc = Input(UInt(vaddrBits.W))
         val s0valid = Input(Bool())
 
         val s2taken = Output(Vec(bankWidth, Bool()))
 
-        val s3meta = Output(new BtbPredictMeta)
+        val s3meta = Output(Vec(bankWidth,new BimPredictMeta))
 
-        val s1update = Input(Valid(new UpdateInfo))
+        val s1update = Input(Valid(new BankedUpdateInfo))
     })
 
-    val s2meta = Wire(new BimPredictMeta)
+    val clockcnt = RegInit((0.U)(10.W))
+    clockcnt := clockcnt + 1.U
+    printf("Bim Clock %d :\n", clockcnt)
+
+    val s2meta = Wire(Vec(bankWidth,new BimPredictMeta))
 
     val reseting =RegInit(true.B)
     val resetIdx =RegInit(0.U(log2Ceil(nSets).W))
@@ -56,20 +39,21 @@ class Bimpredictor {
 
     val ram = SyncReadMem(nSets,Vec(bankWidth,UInt(2.W)))
 
-    val s0idx = fetchIdx(s0PC)
-    val s2valid = RegNext(RegNext(s0valid))
+    val s0idx = fetchIdx(io.s0pc)
+    val s2valid = RegNext(RegNext(io.s0valid))
 
-    val s2rdata = RegNext(ram.read(s0idx,Uint(2.W)))
+    val s2rdata = RegNext(VecInit(ram.read(s0idx,io.s0valid).map(_.asTypeOf(UInt(2.W)))))
 
     for(w <- 0 until bankWidth){
         io.s2taken(w) := s2valid && s2rdata(w)(1) && !reseting
-        s2meta.bims(w) := s2rdata(w)
+        s2meta(w).bim := s2rdata(w)
     }
 
+    val s1update = io.s1update
     val s1updatewData = Wire(Vec(bankWidth,UInt(2.W)))
-    val s1updateIdx = fetchIdx(io.s1update.bits.PC)
+    val s1updateIdx = fetchIdx(io.s1update.bits.pc)
     val s1updatewMask = Wire(Vec(bankWidth,Bool()))
-    val s1updateMeta = io.s1update.bits.meta.bimMeta
+    val s1updateMeta = VecInit(io.s1update.bits.meta.map(_.bimMeta))
 
     val wrBypassIdxs = Reg(Vec(nWrBypassEntries,UInt(log2Ceil(nSets).W)))
     val wrBypass = Reg(Vec(nWrBypassEntries,Vec(bankWidth,UInt(2.W))))
@@ -87,33 +71,33 @@ class Bimpredictor {
         s1updatewMask(w) := false.B
         s1updatewData(w) := DontCare
 
-        val updatePC = io.s1update.bits.PC + (w << 2).U
-        val updateIdx = fetchIdx(updatePC)
+        val updatepc = io.s1update.bits.pc + (w << 2).U
+        val updateIdx = fetchIdx(updatepc)
 
         when(s1update.bits.brMask(w)||
             (s1update.bits.cfiIdx.valid && s1update.bits.cfiIdx.bits === w.U))
         {
-            val was_taken = (
-                s1updateMeta.bits.cfiIdx.valid &&
-                (s1_update.bits.cfiIdx.bits === w.U) &&
+            val wasTaken = (
+                s1update.bits.cfiIdx.valid &&
+                (s1update.bits.cfiIdx.bits === w.U) &&
                 (
-                    (s1update.bits.cfiIsBr) && (s1update.bits.cfiIsBr && s1update.bits.brmask(w) && s1update.bits.cfiTaken) ||
+                    (s1update.bits.cfiIsBr) && (s1update.bits.cfiIsBr && s1update.bits.brMask(w) && s1update.bits.cfiTaken) ||
                     s1update.bits.cfiIsJal 
                 )
             )
             val oldbimvalue = Mux(wrBypassHit ,
                 wrBypass(wrBypassHitIdx)(w),
-                s1updateMeta.bims(w)
+                s1updateMeta(w).asUInt
             )
 
             s1updatewMask(w) := true.B
-            s1updatewData(w) := bimWrite(oldbimvalue,was_taken)
+            s1updatewData(w) := bimWrite(oldbimvalue.asUInt,wasTaken)
         }
     }
 
     when(reseting){
-        ram.write(resetIdx,VecInit(Seq.fill(bankWidth){2.U}), (~(0.U(bankWidth.W))))
-    }.otherwise(s1update.valid && s1update.bits.isCommitUpdate){
+        ram.write(resetIdx,VecInit(Seq.fill(bankWidth){2.U}), (~(0.U(bankWidth.W))).asBools)
+    }.elsewhen(s1update.valid && s1update.bits.isCommitUpdate){
         ram.write(s1updateIdx,s1updatewData,s1updatewMask.asUInt.asBools)
     }
 
@@ -123,7 +107,7 @@ class Bimpredictor {
         }.otherwise{
             wrBypass(wrBypassEnqIdx) := s1updatewData
             wrBypassIdxs(wrBypassEnqIdx) := s1updateIdx
-            wrBypassEnqIdx := WrapInc(wrBypassEnqIdx,nWrBypassEntries)
+            wrBypassEnqIdx := WrapInc(wrBypassEnqIdx,nWrBypassEntries.asUInt)
         }
     }
 
