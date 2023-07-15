@@ -63,23 +63,24 @@ class IssueUnitCompressed(
         io.issueUops(w).lrs2_rtype := RT_X
     }
 
-    val request = issueSlots.map(_.request)
-    val issued = Array.fill(issueWidth) { false.B }
+    // choose which uops to issue
+    val requests = issueSlots.map(_.request)    // get request from each slot
+    val portIssued = Array.fill(issueWidth) { false.B }
 
-    for (i <- 0 until numIssueSlots) {
+    for (i <- 0 until numIssueSlots) {  // iterate through all slots
         issueSlots(i).grant := false.B
         var uopIssued = false.B
 
         for (w <- 0 until issueWidth) {
             val canAllocate = (issueSlots(i).uop.fu_code & io.fuTypes(w)) =/= 0.U
-            when (request(i) && !uopIssued && canAllocate && !issued(w)) {
+            when (canAllocate && requests(i) && !uopIssued && !portIssued(w)) {
                 issueSlots(i).grant := true.B
                 io.issueValids(w) := true.B
                 io.issueUops(w) := issueSlots(i).uop
             }
-            val wasIssuedYet = issued(w)
-            issued(w) = (request(i) && !uopIssued && canAllocate) | issued(w)
-            uopIssued = (request(i) && canAllocate && !wasIssuedYet) | uopIssued
+            val wasIssuedYet = portIssued(w)
+            portIssued(w) = (canAllocate && requests(i) && !uopIssued) | portIssued(w)
+            uopIssued = (canAllocate && requests(i) && !wasIssuedYet) | uopIssued
         }
     }
 }
