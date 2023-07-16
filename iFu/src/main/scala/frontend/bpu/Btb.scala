@@ -1,65 +1,56 @@
-package iFu.frontend.predictors
+package iFu.frontend
 
 import chisel3._
 import chisel3.util._
-import iFu.frontend.predictors._
 
-val vaddrBits = 32
-val bankWidth = 4
-val fetchWidth = 8
-val nBanks = 2
-val localHistoryLength = 16
-val maxMetaLength = 16
-val fetchBytes = 32
-val offsetSz = 13
-val nWays        =2
-val tagSz         = vaddrBits - log2Ceil(fetchWidth) - 1
-val nSets        = 128
-val extendedNSets = 128
+import scala.math.min
 
 
-def fetchIdx(addr: UInt) = addr >> log2Ceil(fetchBytes)
 
-
-class BTBEntry extends Bundle {
+class BtbEntry extends Bundle with HasBtbParameters {
     val offset   = SInt(offsetSz.W)
     val extended = Bool()
 }
 
-val btbEntrySz = offsetSz + 1
 
 
 
-class BtbMeta extends Bundle {
+
+class BtbMeta extends Bundle with HasBtbParameters {
     val isBr = Bool()
     val tag   = UInt(tagSz.W)
 }
 
-val btbMetaSz = tagSz + 1
 
-class BtbPredictMeta extends Bundle {
+
+class BtbPredictMeta extends Bundle with HasBtbParameters {
     val writeWay = UInt(log2Ceil(nWays).W)
+    val hit = Bool()
 }
 
-class Btb{
-    io = IO(Bundle{
-        val s0PC = Input(UInt(vaddrBits.W))
+class BtbPredictor extends Module with HasBtbParameters{
+    val io = IO(new Bundle{
+        val s0pc = Input(UInt(vaddrBits.W))
         val s0valid = Input(Bool())
-        val s2targs  = Output(Vec(bankWidth, Valid(UInt(vaddrBitsExtended.W))))
+        val s2targs  = Output(Vec(bankWidth, Valid(UInt(vaddrBits.W))))
         
         val s2br = Output(Vec(bankWidth, Bool()))
         val s2jal = Output(Vec(bankWidth, Bool()))
         val s2taken = Output(Vec(bankWidth, Bool()))
 
-        val s3meta = Output(new BtbPredictMeta)
+        val s3meta = Output(Vec(bankWidth,new BtbPredictMeta))
 
-        val s1update = Input(Valid(new UpdateInfo))
+        val s1update = Input(Valid(new BankedUpdateInfo))
     })
 
-    s0idx := fetchIdx(io.s0PC)
-    s1idx := RegNext(s0idx) 
-    s1valid := RegNext(io.s0valid)
-    s1PC := RegNext(io.s0PC)
+    val clockcnt = RegInit((0.U)(10.W))
+    clockcnt := clockcnt + 1.U
+    printf("Btb Clock %d :\n", clockcnt)
+
+    val s0idx = fetchIdx(io.s0pc)
+    val s1idx = RegNext(s0idx) 
+    val s1valid = RegNext(io.s0valid)
+    val s1pc = RegNext(io.s0pc)
 
     val reseting = RegInit(true.B)
     val resetIdx   = RegInit(0.U(log2Ceil(nSets).W))
@@ -72,16 +63,18 @@ class Btb{
 
     val meta = Seq.fill(nWays) { SyncReadMem(nSets, Vec(bankWidth, UInt(btbMetaSz.W))) }
     val btb  = Seq.fill(nWays) { SyncReadMem(nSets, Vec(bankWidth, UInt(btbEntrySz.W))) }
-    val ebtb = SyncReadMem(extendedNSets, UInt(vaddrBitsExtended.W))
+    val ebtb = SyncReadMem(extendedNSets, UInt(vaddrBits.W))
 
-    val s1meta = Wire(new BtbPredictMeta)
+    val s1meta = Wire(Vec (bankWidth ,new BtbPredictMeta))
     io.s3meta := RegNext(RegNext(s1meta))
 
-    val s1rbtb = VecInit(btb.map(b => VecInit(b.read(s0idx, s0valid).map(_.asTypeOf(new BtbEntry)))))
-    val s1rmeta = VecInit(meta.map(m => VecInit(m.read(s0idx, s0valid).map(_.asTypeOf(new BtbMeta)))))
-    val s1rebtb = ebtb.read(s0idx, s0valid)
+    val s1rbtb = VecInit(btb.map(b => VecInit(b.read(s0idx, io.s0valid).map(_.asTypeOf(new BtbEntry)))))
+    val s1rmeta = VecInit(meta.map(m => VecInit(m.read(s0idx, io.s0valid).map(_.asTypeOf(new BtbMeta)))))
+
+    // 相较于Ubtb,这里专门给offset装不下的指令
+    val s1rebtb = ebtb.read(s0idx, io.s0valid)
     
-    val s1tag = s1_idx >> log2Ceil(nSets)
+    val s1tag = s1idx >> log2Ceil(nSets)
 
     val s1hitOHs = VecInit((0 until bankWidth)map{
         i => VecInit((0 until nWays)map{
@@ -102,34 +95,39 @@ class Btb{
         io.s2targs(w).bits := RegNext(Mux(
             entryBtb.extended,
             s1rebtb,
-            (s1PC.asSInt + entryBtb.offset + (w << 2)).asUInt))
+            (s1pc.asSInt + entryBtb.offset + (w << 2).asSInt).asUInt))
         io.s2br(w) := RegNext(isBr)
         io.s2jal(w) := RegNext(isJal)
         io.s2taken(w) := RegNext(isJal)
     }
 
     val calculateWay = {
-        val rmeta = Cat(VecInit(s1rmeta.map{w => VecInit(w.map(_.tag))}.asUInt, s1tag))
+        val rmeta = Cat((VecInit(s1rmeta.map{w => VecInit(w.map(_.tag))})).asUInt, s1tag(tagSz-1,0))
         val l = log2Ceil(nWays)
         val nChunks = (rmeta.getWidth+ l -1) / l
-        val chunks = (0 until nChunks)map{i=>
+        val chunks = (0 until nChunks)map{ i=>
             rmeta(min((i+1)*l,rmeta.getWidth)-1,i*l)
         }
         chunks.reduce(_^_)
     }
 
-    s1meta.writeWay := Mux(s1hits.reduce(_||_),
-        PriorityEncoder(s1.hitohs.map(_.asUInt).reduce(_|_)),
+    for (w <- 0 until bankWidth){
+    s1meta(w).writeWay := Mux(s1hits(w),
+        PriorityEncoder(s1hitOHs(w).asUInt),
         calculateWay)
+
+    s1meta(w).hit := s1hits(w)
+    }
     
+    val s1update = io.s1update
     val s1updateCfiIdx = s1update.bits.cfiIdx.bits
-    val s1updateMeta = s1update.bits.meta.btbMeta
+    val s1updateMeta = VecInit(s1update.bits.meta.map(_.btbMeta.asTypeOf(new BtbPredictMeta)))
     
     val maxOffsetValue = (~(0.U)((offsetSz-1).W)).asSInt
     val minOffsetValue = Cat(1.B, (0.U)((offsetSz-1).W)).asSInt
     val newOffsetValue = (s1update.bits.target.asSInt -
-                            (s1update.bits.PC + (s1update.bits.cfiIdx.bits<<2)).asSInt)
-    
+                            (s1update.bits.pc + (s1update.bits.cfiIdx.bits<<2)).asSInt)
+    // 相较于Ubtb,这里专门处理了offset的问题
     val needExtend = (newOffsetValue > maxOffsetValue ||
                         newOffsetValue < minOffsetValue)
 
@@ -138,13 +136,14 @@ class Btb{
     s1updateWBtbData.extended := needExtend
     s1updateWBtbData.offset := newOffsetValue
 
-    val s1updateIdx = fetchIdx(s1update.bits.PC)
+    val s1updateIdx = fetchIdx(s1update.bits.pc)
 
-    val s1updatewBtbMask = (UIntToOH(s1updateCfiIdx)&
-        Fill(bankWidth, s1update.bits.cfiIdx.valid && s1_update.bits.cfiTaken && s1update.bits.isCommitUpdates))
+    val s1updatewBtbMask = (UIntToOH(s1updateCfiIdx) &
+        Fill(bankWidth, s1update.bits.cfiIdx.valid && s1update.bits.cfiTaken && s1update.bits.isCommitUpdate))
     
-    val s1updatewMetaMask = ((s1updatewBtbMask|s1update.bits.brMask)&
-        (Fill(bankWidth,s1update.valid && s1update.bits.btbMispredicts)))
+    val s1updatewMetaMask = ((s1updatewBtbMask | s1update.bits.brMask) &
+        (Fill(bankWidth, s1update.valid && s1update.bits.isCommitUpdate)) |  
+        (Fill(bankWidth, s1update.valid ) & s1update.bits.btbMispredicts))
 
     val s1updatewMetaData = Wire(Vec(bankWidth, new BtbMeta))
 
@@ -166,16 +165,17 @@ class Btb{
             VecInit(Seq.fill(bankWidth){ 0.U(btbMetaSz.W)}),
             (~(0.U(bankWidth.W))).asBools
             )
-        }.otherwise(s1_update_meta.writeWay === w.U ){
+            // 命中，写到对应的way
+        }.elsewhen(s1updateMeta(w).writeWay === w.U && s1updateMeta(w).hit){
             btb(w).write(
             s1updateIdx,
-            VecInit(Seq.fill(bankWidth){s1updateWBtbData}),
+            VecInit(Seq.fill(bankWidth){s1updateWBtbData.asUInt}),
             (s1updatewBtbMask).asBools
             )
 
             meta(w).write(
             s1updateIdx,
-            VecInit(s1updatewMetaData.map(_.asUint)),
+            VecInit(s1updatewMetaData.map(_.asUInt)),
             (s1updatewMetaMask).asBools
             )
         }
@@ -184,6 +184,5 @@ class Btb{
     when (s1updatewBtbMask =/= 0.U && needExtend){
         ebtb.write(s1updateIdx , s1update.bits.target)
     }
-
-
+    
 }

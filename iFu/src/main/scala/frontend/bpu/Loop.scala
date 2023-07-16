@@ -1,35 +1,16 @@
-package iFu.frontend.predictors
+package iFu.frontend
 
 import chisel3._
 import chisel3.util._
-import iFu.frontend.predictors._
-import iFu.common
+
 import scala.math.min
 
-val vaddrBits = 32
-val bankWidth = 4
-val fetchWidth = 8
-val nBanks = 2
-val localHistoryLength = 16
-val maxMetaLength = 16
-val fetchBytes = 32
 
-val nSets = 16
-
-val nWrBypassEntries = 2
-
-val nWays = 4
-val tagSz = 10
-def fetchIdx(addr: UInt) = addr >> log2Ceil(fetchBytes)
-
-def WrapInc(x: UInt, max: UInt) = Mux(x === max, 0.U, x + 1.U)
-
-
-class LoopPredictMeta extends Bundle {
+class LoopPredictMeta extends Bundle with HasLoopParameters{
     val sCnt   = UInt(10.W)
 }
 
-class LoopEntry extends Bundle {
+class LoopEntry extends Bundle with HasLoopParameters {
     val tag   = UInt(tagSz.W)
     val conf  = UInt(3.W)
     val age   = UInt(3.W)
@@ -37,13 +18,13 @@ class LoopEntry extends Bundle {
     val sCnt = UInt(10.W)
 }
 
-class LoopPredictorColumn extends Module {
+class LoopPredictorColumn extends Module with HasLoopParameters {
     val io = IO(new Bundle {
         val f2valid = Input(Bool())
         val f2idx  = Input(UInt())
         val f3fire = Input(Bool())
 
-        val f3taken     = Output(Bool())
+        val f3taken     = Output(Valid(Bool()))
         val f3meta     = Output(new LoopPredictMeta)
 
         val updateMispredict = Input(Bool())
@@ -52,18 +33,29 @@ class LoopPredictorColumn extends Module {
         val updateMeta  = Input(new LoopPredictMeta)
     })
 
-    val doingReset = RegInit(true.B)
+    val clockcnt = RegInit((0.U)(10.W))
+    clockcnt := clockcnt + 1.U
+    // printf("Clock %d :\n", clockcnt)
+
+    val reseting = RegInit(true.B)
     val resetIdx = RegInit(0.U(log2Ceil(nSets).W))
-    
-    when(doingReset){
+    // printf("The resetIdx is %d       reseting is %d\n", resetIdx , reseting)
+    when(reseting){
         resetIdx := resetIdx + 1.U
     }
 
     when(resetIdx === (nSets-1).U){ 
-        doingReset := false.B
+        reseting := false.B
     }
 
     val entries = Reg(Vec(nSets, new LoopEntry))
+
+    when(clockcnt === 16.U){
+      for ( i <- 0 to nSets-1 ){
+        val pentry = entries(i)
+        // printf (p"entries $i is : $pentry \n" )
+      }
+    }
 
     // f2读，f3比较输出预测结果，f4更新表项
 
@@ -87,10 +79,16 @@ class LoopPredictorColumn extends Module {
     val f3tag = f3idx(tagSz+log2Ceil(nSets)-1,log2Ceil(nSets))
 
     io.f3meta.sCnt := f3sCnt
-    // 匹配到表项，并且置信度最高，那么就是我们想要的，按照其规则，一到PCnt就不让它跳转
+
+    // 默认为valid = 0
+    io.f3taken.bits := DontCare
+    io.f3taken.valid := false.B
+    // 匹配到表项，并且置信度最高，那么就是我们想要的，按照其规则，一到pcnt就不让它跳转
     when(f3entry.tag === f3tag){
         when (f3sCnt === f3entry.pCnt && f3entry.conf === 7.U){
-            io.f3taken := false.B
+            io.f3taken.bits := false.B
+            // 当且仅当满足以上条件，才是有效的预测结果
+            io.f3taken.valid := true.B
         }
     }
 
@@ -123,7 +121,7 @@ class LoopPredictorColumn extends Module {
     val ctrMatch = entry.pCnt === io.updateMeta.sCnt
     val wentry = WireInit(entry)
 
-    when (io.updateMispredict && !doingReset) {
+    when (io.updateMispredict && !reseting) {
     // 当更新告诉我们，之前用的（也就是现在传进来的updateIdx）那一个表项，
     // 其提供的信息是我们产生了错误的预测，那么我们就要更新这个表项
 
@@ -142,7 +140,7 @@ class LoopPredictorColumn extends Module {
         wentry.conf  := entry.conf + 1.U
         wentry.sCnt := 0.U
 
-      //ctr没match， 说明不可信，直接置信度置零，然后把我们真正执行到的sCnt更新为它的PCnt
+      //ctr没match， 说明不可信，直接置信度置零，然后把我们真正执行到的sCnt更新为它的pcnt
       } .elsewhen (entry.conf =/= 0.U && tagMatch && !ctrMatch) {
         wentry.conf  := 0.U
         wentry.sCnt := 0.U
@@ -168,7 +166,7 @@ class LoopPredictorColumn extends Module {
         wentry.age   := 7.U
         wentry.sCnt := 0.U
 
-            // ctr没match，说明不可信，置信度还是0，sCnt清零，但是我们把它的PCnt更新为我们现在执行到的sCnt
+            // ctr没match，说明不可信，置信度还是0，sCnt清零，但是我们把它的pcnt更新为我们现在执行到的sCnt
       } .elsewhen (entry.conf === 0.U && tagMatch && !ctrMatch) {
         wentry.pCnt := io.updateMeta.sCnt
         wentry.age   := 7.U
@@ -204,12 +202,12 @@ class LoopPredictorColumn extends Module {
 }
 
 
-class LoopPredictor extends CoreModule {
+class LoopPredictor extends Module with HasLoopParameters {
   val io = IO(new Bundle{
     val f2valid = Input(Bool())
-    val f2PC = Input(UInt(vaddrBits.W))
+    val f2pc = Input(UInt(vaddrBits.W))
 
-    val f1update = Input(Vec(bankWidth, Valid(new UpdateInfo)))
+    val f1update = Input(Valid(new BankedUpdateInfo))
 
     // 之前的分支预测后传过来的信息
     val f2targs = Input(Vec(bankWidth, Valid(UInt(vaddrBits.W))))
@@ -218,21 +216,27 @@ class LoopPredictor extends CoreModule {
     val f3fire = Input(Bool())
     val f3mask = Input(UInt(bankWidth.W))
 
-    val f3taken = Output(Vec(bankWidth, Bool()))
+    val f3taken = Output(Vec(bankWidth, Valid(Bool())))
     val f3meta = Output(Vec(bankWidth, new LoopPredictMeta))
 
   })
 
-  val columns = Seq.fill(bankWidth){Module(new LoopPredictorColumn)}
-  val s2idx = fetchIdx(io.f2PC)
 
-  val f1updateIdx = fetchIdx(io.f1update.bits.PC)
+  val clockcnt = RegInit((0.U)(10.W))
+    clockcnt := clockcnt + 1.U
+    printf("Loop Clock %d :\n", clockcnt)
+
+  val columns = Seq.fill(bankWidth){Module(new LoopPredictorColumn)}
+  val s2idx = fetchIdx(io.f2pc)
+
+  val f1updateIdx = fetchIdx(io.f1update.bits.pc)
 
   val f3valid = RegNext(io.f2valid)
   
   for(w <- 0 until bankWidth){
     // 只有跳转指令才会对loop预测产生影响
     val isValidBr = RegNext(io.f2targs(w).valid && io.f2isBr(w))
+    // f3fire在column里面参与的是下周期更新Br指令对应的计数器
     columns(w).io.f3fire := io.f3fire && io.f3mask(w) && f3valid && isValidBr
 
     columns(w).io.f2valid := io.f2valid
@@ -250,11 +254,16 @@ class LoopPredictor extends CoreModule {
                                   io.f1update.bits.isRepairUpdate)
     
     columns(w).io.updateIdx := f1updateIdx
-    columns(w).io.updateMeta := io.f1update(w).bits.meta.loopMeta
+    columns(w).io.updateMeta := io.f1update.bits.meta(w).loopMeta
 
     // 输出预测的信息
     io.f3taken(w) := columns(w).io.f3taken
     io.f3meta(w) := columns(w).io.f3meta
+
+  }
+
+  when(clockcnt >= 16.U){
+    // printf(p"io.f3taken is ${io.f3taken}\n")
   }
 
 
