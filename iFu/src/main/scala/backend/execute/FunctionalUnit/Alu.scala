@@ -1,4 +1,4 @@
-package iFu
+package iFu.backend
 
 import chisel3._
 import chisel3.util._
@@ -25,10 +25,6 @@ class AluFuncCode {
 
 object AluFuncCode {
     def apply() = new AluFuncCode()
-}
-
-class CoreModule extends Module {
-    val xLen = 32
 }
 
 abstract class AbstractAlu[T <: AluFuncCode](val aluFn: T) extends CoreModule {

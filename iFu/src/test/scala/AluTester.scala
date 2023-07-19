@@ -1,4 +1,4 @@
-package iFu
+package iFu.backend
 
 import scala.util.Random
 
@@ -17,7 +17,7 @@ trait AluTestFunc {
     val FN_SRA = 7
     val FN_SRL = 8
     val FN_SLT = 9
-    val FN_SLTU = 11
+    val FN_SLTU = 10
     val funcs = Array(FN_ADD, FN_SUB, FN_AND, FN_NOR, FN_OR, FN_XOR, FN_SL, FN_SRA, FN_SRL, FN_SLT, FN_SLTU)
 
     def alu(fn: Int, op1: Int, op2: Int): Int = {
