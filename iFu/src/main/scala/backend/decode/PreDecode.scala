@@ -5,7 +5,7 @@ import chisel3._
 import chisel3.util._
 import frontend.isa.Instructions._
 //TODO 合并常量
-
+//TODO 修改isRet和isCall
 trait PreDecodeConsts {
     val CFI_SZ = 3
     val CFI_X = 0.U(CFI_SZ.W) // Not a CFI instruction
@@ -27,7 +27,7 @@ trait PreDecodeConsts {
         ////                               |  |  |  |  |
         JIRL                        ->List(N, N, Y, N, X),
         B                           ->List(N, Y, N, N, X),
-        BL                          ->List(N, N, Y, N, X),
+        BL                          ->List(N, Y, N, N, X),
         BEQ                         ->List(Y, N, N, N, X),
         BNE                         ->List(Y, N, N, N, X),
         BLT                         ->List(Y, N, N, N, X),
