@@ -22,8 +22,8 @@ trait MicroOpCode {
     val uopSLTUI        = 12.U(UOPC_SZ.W)
     val uopPCADDI       = 13.U(UOPC_SZ.W)
     val uopPCADDU12I    = 14.U(UOPC_SZ.W)
-    val uopANDN         = 15.U(UOPC_SZ.W)
-    val uopORN          = 16.U(UOPC_SZ.W)
+    val uopANDN         = 15.U(UOPC_SZ.W) // TODO: should alu do this?
+    val uopORN          = 16.U(UOPC_SZ.W) // TODO: should alu do this?
     val uopANDI         = 17.U(UOPC_SZ.W)
     val uopORI          = 18.U(UOPC_SZ.W)
     val uopXORI         = 19.U(UOPC_SZ.W)
@@ -41,8 +41,7 @@ trait MicroOpCode {
     val uopSRLW         = 31.U(UOPC_SZ.W)
     val uopSRAW         = 32.U(UOPC_SZ.W)
     val uopJIRL         = 33.U(UOPC_SZ.W)
-    val uopB            = 34.U(UOPC_SZ.W)
-    val uopBL           = 35.U(UOPC_SZ.W)
+    val uopJAL          = 35.U(UOPC_SZ.W) // b and bl
     val uopBEQ          = 36.U(UOPC_SZ.W)
     val uopBNE          = 37.U(UOPC_SZ.W)
     val uopBLT          = 38.U(UOPC_SZ.W)
@@ -50,6 +49,7 @@ trait MicroOpCode {
     val uopBLTU         = 40.U(UOPC_SZ.W)
     val uopBGEU         = 41.U(UOPC_SZ.W)
     val uopERET         = 42.U(UOPC_SZ.W)
+
     val uopCSRRD        = 43.U(UOPC_SZ.W)
     val uopCSRWR        = 44.U(UOPC_SZ.W)
     val uopCSRXCHG      = 45.U(UOPC_SZ.W)
@@ -71,4 +71,6 @@ trait MicroOpCode {
     val uopLD           = 57.U(UOPC_SZ.W)
     val uopSTA          = 58.U(UOPC_SZ.W)
     val uopSTD          = 59.U(UOPC_SZ.W)
+
+    val uopMov          = 60.U(UOPC_SZ.W)
 }
