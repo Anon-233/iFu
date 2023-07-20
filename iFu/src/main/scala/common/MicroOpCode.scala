@@ -41,19 +41,19 @@ trait MicroOpCode {
     val uopSRLW         = 31.U(UOPC_SZ.W)
     val uopSRAW         = 32.U(UOPC_SZ.W)
     val uopJIRL         = 33.U(UOPC_SZ.W)
-    val uopJAL          = 35.U(UOPC_SZ.W) // b and bl
-    val uopBEQ          = 36.U(UOPC_SZ.W)
-    val uopBNE          = 37.U(UOPC_SZ.W)
-    val uopBLT          = 38.U(UOPC_SZ.W)
-    val uopBGE          = 39.U(UOPC_SZ.W)
-    val uopBLTU         = 40.U(UOPC_SZ.W)
-    val uopBGEU         = 41.U(UOPC_SZ.W)
-    val uopERET         = 42.U(UOPC_SZ.W)
+    val uopB            = 35.U(UOPC_SZ.W)
+    val uopBL           = 36.U(UOPC_SZ.W)
+    val uopBEQ          = 37.U(UOPC_SZ.W)
+    val uopBNE          = 38.U(UOPC_SZ.W)
+    val uopBLT          = 39.U(UOPC_SZ.W)
+    val uopBGE          = 40.U(UOPC_SZ.W)
+    val uopBLTU         = 41.U(UOPC_SZ.W)
+    val uopBGEU         = 42.U(UOPC_SZ.W)
 
-    val uopCSRRD        = 43.U(UOPC_SZ.W)
-    val uopCSRWR        = 44.U(UOPC_SZ.W)
-    val uopCSRXCHG      = 45.U(UOPC_SZ.W)
-    val uopERTN         = 46.U(UOPC_SZ.W)
+    val uopERET         = 43.U(UOPC_SZ.W)
+    val uopCSRRD        = 44.U(UOPC_SZ.W)
+    val uopCSRWR        = 45.U(UOPC_SZ.W)
+    val uopCSRXCHG      = 46.U(UOPC_SZ.W)
 
     val uopIDLE         = 47.U(UOPC_SZ.W)
 
@@ -72,5 +72,9 @@ trait MicroOpCode {
     val uopSTA          = 58.U(UOPC_SZ.W)
     val uopSTD          = 59.U(UOPC_SZ.W)
 
-    val uopMov          = 60.U(UOPC_SZ.W)
+    val uopRDCNTIDW     = 60.U(UOPC_SZ.W)
+    val uopRDCNTVLW     = 61.U(UOPC_SZ.W)
+    val uopRDCNTVHW     = 62.U(UOPC_SZ.W)
+
+    val uopMove         = 63.U(UOPC_SZ.W)
 }
