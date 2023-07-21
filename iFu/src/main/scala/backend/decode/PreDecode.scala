@@ -99,7 +99,7 @@ class PreDecode extends CoreModule with PreDecodeConsts {
      *      2.rd=0，rj=1
      *      3立即数值为0
      */
-    io.out.isRet := isJalr && io.inst(28) === BitPat("b0") && //BL和JIRL指令都是isJalr的，需要区分两者
+    io.out.isRet := isJalr &&
             io.inst(4,0) === BitPat("b00000") &&
             io.inst(9,5) === BitPat("b00001") &&
             io.inst(25,10) === 0.U
@@ -107,7 +107,7 @@ class PreDecode extends CoreModule with PreDecodeConsts {
     /**
      * isCall的情况：为BL指令
      */
-    io.out.isCall := isJalr && io.inst(28) === BitPat("b1")
+    io.out.isCall := isJal && io.inst(26) === BitPat("b1")
     //target输出一个32位的地址，结果要进行对齐
     io.out.target := ((Mux(isBr,
         Cat(Fill(14,io.inst(25)),io.inst(25,10),0.U(2.W)),
