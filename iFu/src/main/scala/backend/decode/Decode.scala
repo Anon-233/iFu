@@ -217,8 +217,8 @@ object XDecode extends DecodeConstants with MicroOpCode
                     //      |  |                 |        |       |       |       |      |     |  |  |  |  |  mem_cmd |   |  |  |  |  |  |
         val table: Array[(BitPat, List[BitPat])] = Array(//       |       |       |      |     |  |  |  |  |    |     |   |  |  |  |  |  |
             LLW     -> List(Y, uopLLW       , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS14, Y, N, N, N, N, M_XLL, 0.U, N, N, N, Y, Y, CSR.N),
-            SCW     -> List(Y, uopSCW       , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS14, N, Y, Y, N, N, M_XSC, 0.U, N, N, N, Y, Y, CSR.N),
-            PRELD   -> List(Y, uopPRELD     , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_X  , immS12, N, N, N, N, N, M_X  , 0.U, N, N, N, N, N, CSR.N),//暂定Preld
+            SCW     -> List(Y, uopAMO_AG       , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS14, N, Y, Y, N, N, M_XSC, 0.U, N, N, N, Y, Y, CSR.N),
+            PRELD   -> List(Y, uopLD     , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_X  , immS12, N, N, N, N, N, M_X  , 0.U, N, N, N, N, N, CSR.N),//暂定为load指令
             DBAR    -> List(Y, uopDBAR      , IQT_MEM, FU_MEM, RT_X  , RT_X  , RT_X  , immX  , N, Y, N, Y, N, M_X  , 0.U, N, N, N, Y, Y, CSR.N),
             IBAR    -> List(Y, uopNOP       , IQT_MEM, FU_X  , RT_X  , RT_X  , RT_X  , immX  , N, N, N, N, Y, M_X  , 0.U, N, N, N, Y, Y, CSR.N),
             SRLIW   -> List(Y, uopSRLIW     , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immU5 , N, N, N, N, N, M_X  , 1.U, Y, N, N, N, N, CSR.N),

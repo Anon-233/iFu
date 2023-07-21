@@ -9,6 +9,7 @@ import iFu.frontend.WrapInc
 
 //TODO  memWidth为2，如果为1，需要wakeup不成功后增加一周期delay
 //TODO tlb_miss直接抛出异常。应该修改retry，以及异常的检测，输出等，与tlb_miss相关。
+//TODO 删除Hella Cache相关的代码
 object IsKilledByBranch
 {
     def apply(brupdate: BrUpdateInfo, uop: MicroOp): Bool = {

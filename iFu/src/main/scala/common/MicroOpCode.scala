@@ -75,7 +75,7 @@ trait MicroOpCode {
     val uopSTD          = 57.U(UOPC_SZ.W)
 
     val uopLLW          = 58.U(UOPC_SZ.W)
-    val uopSCW          = 59.U(UOPC_SZ.W)
+    val uopAMO_AG          = 59.U(UOPC_SZ.W)
 
     val uopRDCNTIDW     = 60.U(UOPC_SZ.W)
     val uopRDCNTVLW     = 61.U(UOPC_SZ.W)
