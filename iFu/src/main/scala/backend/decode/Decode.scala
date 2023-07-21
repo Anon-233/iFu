@@ -4,12 +4,14 @@ import chisel3._
 import chisel3.util._
 import iFu.backend.{DecodeLogic, PreDecodeConsts}
 import backend.decode.CSR
-import iFu.common.{CoreBundle, MicroOpCode}
+import iFu.common.{CoreBundle, CoreModule, MicroOp, MicroOpCode}
 import backend.decode.common._
 import frontend.isa.Instructions._
-//TODO 增加Ori的检测，为move指令
+//TODO 增加Ori的检测，为move指令。增加andi的检测，为Nop指令  Done
 //TODO ALU Decode
-//TODO CSR指令中rd既是源操作数，又是目的操作数
+//TODO CSR指令中rd既是源操作数(rs1)，又是目的操作数 Done
+//TODO B和BL的uop均为uopJAL，BL的目的寄存器恒为1 Done
+//TODO Wired Decode和TLB Decode
 object common extends OpConstants with IQType with FUConstants with MemoryOpConstants
 {
 
@@ -259,9 +261,9 @@ object XDecode extends DecodeConstants with MicroOpCode
             SLTU    -> List(Y, uopSLTU     , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, M_X  , 1.U, Y, N, N, N, N, CSR.N),
             AND     -> List(Y, uopAND      , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, M_X  , 1.U, Y, N, N, N, N, CSR.N),
             XOR     -> List(Y, uopXOR      , IQT_INT, FU_ALU , RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, M_X  , 1.U, Y, N, N, N, N, CSR.N),
-            JIRL    -> List(Y, uopJIRL      , IQT_INT, FU_JMP, RT_FIX, RT_FIX, RT_X  , immS16, N, N, N, N, N, M_X  , 1.U, N, N, N, N, N, CSR.N),
-            B       -> List(Y, uopB         , IQT_INT, FU_JMP, RT_X  , RT_X  , RT_X  , immS26, N, N, N, N, N, M_X  , 1.U, N, N, N, N, N, CSR.N),
-            BL      -> List(Y, uopBL        , IQT_INT, FU_JMP, RT_FIX, RT_X  , RT_X  , immS26, N, N, N, N, N, M_X  , 1.U, N, N, N, N, N, CSR.N),
+            JIRL    -> List(Y, uopJIRL     , IQT_INT, FU_JMP, RT_FIX, RT_FIX, RT_X  , immS16, N, N, N, N, N, M_X  , 1.U, N, N, N, N, N, CSR.N),
+            B       -> List(Y, uopJAL      , IQT_INT, FU_JMP, RT_X  , RT_X  , RT_X  , immS26, N, N, N, N, N, M_X  , 1.U, N, N, N, N, N, CSR.N),
+            BL      -> List(Y, uopJAL      , IQT_INT, FU_JMP, RT_FIX, RT_X  , RT_X  , immS26, N, N, N, N, N, M_X  , 1.U, N, N, N, N, N, CSR.N),
             BEQ     -> List(Y, uopBEQ      , IQT_INT, FU_ALU , RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, M_X  , 0.U, N, Y, N, N, N, CSR.N),
             BNE     -> List(Y, uopBNE      , IQT_INT, FU_ALU , RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, M_X  , 0.U, N, Y, N, N, N, CSR.N),
             BGE     -> List(Y, uopBGE      , IQT_INT, FU_ALU , RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, M_X  , 0.U, N, Y, N, N, N, CSR.N),
@@ -305,12 +307,12 @@ object CSRDecode extends DecodeConstants with MicroOpCode
                 //      |     |              |        |       |       |    rs2_type  |    |  |  |  |  |          |   |  |  |  |  |  |
                 //      |     |              |        |       |       |       |      |    |  |  |  |  |  mem_cmd |   |  |  |  |  |  |
     val table: Array[(BitPat, List[BitPat])] = Array( //      |       |       |      |    |  |  |  |  |    |     |   |  |  |  |  |  |
-        CSRRD  -> List(Y, uopCSRRD       , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N, M_X, 0.U, N, N, N, N, N, CSR.N),
-        CSRWR  -> List(Y, uopCSRWR       , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N, M_X, 0.U, N, N, N, N, N, CSR.N),
-        CSRXCHG-> List(Y, uopCSRXCHG    , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N, M_X, 1.U, Y, N, N, N, N, CSR.N),
-        ERTN   -> List(Y, uopERET      , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immU5, N, N, N, N, N, M_X, 1.U, Y, N, N, N, N, CSR.N),
-        SYSCALL-> List(Y, uopERET   , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N, M_X, 0.U, N, N, N, N, N, CSR.N),
-        BREAK  -> List(Y, uopERET      , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N, M_X, 0.U, N, N, N, N, N, CSR.N),
+        CSRRD  -> List(Y, uopCSRRD       , IQT_INT, FU_CSR, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, M_X, 0.U, N, N, N, Y, Y, CSR.R),
+        CSRWR  -> List(Y, uopCSRWR       , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_X  , immX, N, N, N, N, N, M_X, 0.U, N, N, N, Y, Y, CSR.W),
+        CSRXCHG-> List(Y, uopCSRXCHG    , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N, M_X, 0.U, N, N, N, Y, Y, CSR.W),
+        ERTN   -> List(Y, uopERET      , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N, M_X, 0.U, Y, N, N, Y, Y, CSR.I),
+        SYSCALL-> List(Y, uopERET       , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N, M_X, 0.U, N, N, Y, Y, Y, CSR.I),
+        BREAK  -> List(Y, uopERET      , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N, M_X, 0.U, N, N, Y, Y, Y, CSR.I),
 
                 )
 }
@@ -327,6 +329,7 @@ object WeirdDecode extends DecodeConstants with MicroOpCode
                 //      |     |              |        |       |       |    rs2_type  |    |  |  |  |  |          |   |  |  |  |  |  |
                 //      |     |              |        |       |       |       |      |    |  |  |  |  |  mem_cmd |   |  |  |  |  |  |
     val table: Array[(BitPat, List[BitPat])] = Array( //      |       |       |      |    |  |  |  |  |    |     |   |  |  |  |  |  |
+
         IDLE    -> List(Y, uopIDLE),
         CACOP   -> List(Y, uopCACOP     , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N, M_X, 0.U, N, N, N, N, N, CSR.N),
         RDCNTIDW-> List(Y, uopRDCNTIDW  , IQT_INT, FU_CNT, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N, M_X, 0.U, N, N, N, N, N, CSR.N),
@@ -335,6 +338,112 @@ object WeirdDecode extends DecodeConstants with MicroOpCode
 //
                 )
 }
-class Decode {
+/**
+ * IO bundle for the Decode unit
+ */
+//TODO 修改CSRFile
+class DecodeUnitIO() extends CoreModule
+{
+    val enq = new Bundle { val uop = Input(new MicroOp()) }
+    val deq = new Bundle { val uop = Output(new MicroOp()) }
+
+    // from CSRFile
+    val status = Input(new freechips.rocketchip.rocket.MStatus())
+    val csr_decode = Flipped(new freechips.rocketchip.rocket.CSRDecodeIO)
+    val interrupt = Input(Bool())
+    val interrupt_cause = Input(UInt(xLen.W))
+}
+//TODO 添加对CSR环境下异常指令的检测
+class DecodeUnit extends CoreModule with MicroOpCode
+{
+    val io = IO(new DecodeUnitIO)
+    val uop = Wire(new MicroOp())
+    uop := io.enq.uop
+    var decode_table = XDecode.table
+    if(usingCSR) decode_table ++= CSRDecode.table
+    if(usingTLB) decode_table ++= TLBDeocde.table
+    if(usingWired)decode_table ++= WeirdDecode.table
+    val inst = uop.instr
+    val cs = Wire(new CtrlSigs()).decode(inst,decode_table)
+
+    def checkExceptions(x: Seq[(Bool, UInt)]) =
+        (x.map(_._1).reduce(_ || _), PriorityMux(x))
+    val cs_legal = cs.legal
+    val id_illegal_insn = !cs_legal
+    val (xcpt_valid,xcpt_cause) = checkExceptions(List(
+        (io.interrupt && !io.enq.uop.isSFB, io.interrupt_cause),
+        (uop.bp_xcpt_if,                    (Causes.breakpoint).U),
+        (uop.xcpt_pf_if,                    (Causes.fetch_page_fault).U),
+        (uop.xcpt_ae_if,                    (Causes.fetch_access).U),
+        (id_illegal_insn,                   (Causes.illegal_instruction).U)
+    ))
+
+    uop.exception := xcpt_valid
+    uop.excCause  := xcpt_cause
+
+    //-------------------------------------------------------------
+    uop.uopc        := cs.uopc
+    uop.iqType     := cs.iq_type
+    uop.fuCode     := cs.fu_code
+
+    uop.ldst        := inst(4,0)
+    uop.lrs1        := inst(9,5)
+    uop.lrs2        := inst(14,10)
+    when(uop.uopc === uopJAL) {
+        uop.ldst := 1.U
+    }
+    when(uop.uopc === uopBEQ || uop.uopc === uopBNE || uop.uopc === uopBGE || uop.uopc === uopBGEU || uop.uopc === uopBLT || uop.uopc === uopBLTU){
+        uop.lrs2    := inst(4,0)
+    }
+    when(uop.uopc === uopSTA){
+        uop.lrs2    := inst(4,0)
+    }
+    when(uop.uopc === uopCSRWR || uop.uopc === uopCSRXCHG) {
+        uop.lrs1 := inst(4, 0)
+        uop.lrs2 := inst(9, 5)
+    }
+    uop.ldst_val   := cs.dst_type =/= RT_X && !(uop.ldst === 0.U && uop.dst_rtype === RT_FIX)
+    uop.dst_rtype  := cs.dst_type
+    uop.lrs1_rtype := cs.rs1_type
+    uop.lrs2_rtype := cs.rs2_type
+
+    uop.ldst_is_rs1:= uop.is_sfb_shadow
+    when(uop.is_sfb_shadow && cs.rs2_type === RT_X) {
+        uop.lrs2_rtype := RT_FIX
+        uop.lrs2 := inst(4, 0)
+        uop.ldst_is_rs1 := false.B
+    }.elsewhen(uop.is_sfb_shadow) {
+        uop.lrs1 := inst(4, 0)
+        uop.ldst_is_rs1 := true.B
+    }
+    when(cs.uopc === uopORI && inst(21,10) === 0.U){
+        uop.uopc    := uopMove
+    }
+    when(cs.uopc === uopANDI && inst(21,0) === 0.U){
+        uop.uopc    := uopNOP
+    }
+    when(uop.is_sfb_br){
+        uop.fuCode := FU_JMP
+    }
+
+    uop.mem_cmd     := cs.mem_cmd
+    uop.mem_size    := inst(23,22)
+    uop.mem_signed  := !inst(25)
+    uop.use_ldq     := cs.uses_ldq
+    uop.use_stq     := cs.uses_stq
+    uop.is_amo      := cs.is_amo
+    uop.is_dbar     := cs.is_dbar
+    uop.is_ibar     := cs.is_ibar
+    uop.is_sys_pc2epc  := cs.is_sys_pc2epc
+    uop.is_unique   := cs.inst_unique
+    uop.flush_on_commit:= cs.flush_on_commit
+    uop.bypassable  := cs.bypassable
+
+    uop.immPacked := inst(25,0)
+
+    uop.isBr      := cs.is_br
+    uop.isJal     := (uop.uopc === uopJAL)
+    uop.isJalr    := (uop.uopc === uopJIRL)
+
 
 }
