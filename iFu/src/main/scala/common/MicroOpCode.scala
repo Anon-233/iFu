@@ -42,8 +42,8 @@ trait MicroOpCode {
     val uopSRAW         = 32.U(UOPC_SZ.W)
 
     val uopJIRL         = 33.U(UOPC_SZ.W)
-    val uopB            = 34.U(UOPC_SZ.W)
-    val uopBL           = 35.U(UOPC_SZ.W)
+    val uopJAL          = 34.U(UOPC_SZ.W)
+    // val uopBL           = 35.U(UOPC_SZ.W)
 
     val uopBEQ          = 36.U(UOPC_SZ.W)
     val uopBNE          = 37.U(UOPC_SZ.W)

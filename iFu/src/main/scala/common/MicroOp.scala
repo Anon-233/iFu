@@ -37,7 +37,6 @@ class MicroOp extends CoreBundle with MicroOpCode {
     val robIdx = UInt(/*TODO*/)
     val ldqIdx = UInt(/*TODO*/)
     val stqIdx = UInt(/*TODO*/)
-    // val rxqIdx = UInt(/*TODO*/) // ???
 
     val pdst = UInt(maxPregSz.W)
     val prs1 = UInt(maxPregSz.W)
