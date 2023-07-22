@@ -16,9 +16,12 @@ trait AluTestFunc {
     val FN_SL  = 6
     val FN_SRA = 7
     val FN_SRL = 8
-    val FN_SLT = 9
-    val FN_SLTU = 10
-    val funcs = Array(FN_ADD, FN_SUB, FN_AND, FN_NOR, FN_OR, FN_XOR, FN_SL, FN_SRA, FN_SRL, FN_SLT, FN_SLTU)
+    val FN_ANDN = 9
+    val FN_ORN  = 10
+    val FN_SLT = 11
+    val FN_SLTU = 13
+    // val funcs = Array(FN_ADD, FN_SUB, FN_AND, FN_NOR, FN_OR, FN_XOR, FN_SL, FN_SRA, FN_SRL, FN_SLT, FN_SLTU)
+    val funcs = Array(FN_ADD, FN_SUB, FN_AND, FN_NOR, FN_OR, FN_XOR, FN_SL, FN_SRA, FN_SRL, FN_SLT, FN_SLTU, FN_ANDN, FN_ORN)
 
     def alu(fn: Int, op1: Int, op2: Int): Int = {
         fn match {
@@ -33,6 +36,8 @@ trait AluTestFunc {
             case FN_SRL => (op1 >>> op2)
             case FN_SLT => if (op1 < op2) 1 else 0
             case FN_SLTU => if ((op1 & 0xFFFFFFFFL) < (op2 & 0xFFFFFFFFL)) 1 else 0
+            case FN_ANDN => op1 & ~op2
+            case FN_ORN  => op1 | ~op2
         }
     }
 

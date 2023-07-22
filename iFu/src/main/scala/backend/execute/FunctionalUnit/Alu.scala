@@ -15,12 +15,14 @@ class AluFuncCode {
     def FN_SL   = 6.U(SZ_ALU_FN.W)  // 0b0110
     def FN_SRA  = 7.U(SZ_ALU_FN.W)  // 0b0111
     def FN_SRL  = 8.U(SZ_ALU_FN.W)  // 0b1000
-    def FN_SLT  = 9.U(SZ_ALU_FN.W)  // 0b1001
-    def FN_SLTU = 10.U(SZ_ALU_FN.W) // 0b1010
+    def FN_ANDN = 9.U(SZ_ALU_FN.W)  // 0b1011
+    def FN_ORN  = 10.U(SZ_ALU_FN.W) // 0b1100
+    def FN_SLT  = 11.U(SZ_ALU_FN.W) // 0b1011
+    def FN_SLTU = 13.U(SZ_ALU_FN.W) // 0b1101
 
     def isSub(cmd: UInt) = cmd(0)
     def isCmp(cmd: UInt) = cmd >= FN_SLT
-    def cmpUnsigned(cmd: UInt) = cmd(1)
+    def cmpUnsigned(cmd: UInt) = cmd(2)
 }
 
 object AluFuncCode {
@@ -56,9 +58,12 @@ class Alu(val debug: Boolean = false) extends AbstractAlu(AluFuncCode()) {
     val shout = Mux(io.fn === aluFn.FN_SRL || io.fn === aluFn.FN_SRA, shout_r, 0.U) |
                 Mux(io.fn === aluFn.FN_SL, shout_l, 0.U)
 
-    val logic = Mux(io.fn === aluFn.FN_XOR || io.fn === aluFn.FN_OR, op1XorOp2, 0.U) |
-                Mux(io.fn === aluFn.FN_OR || io.fn === aluFn.FN_AND, io.op1 & io.op2, 0.U) |
-                Mux(io.fn === aluFn.FN_NOR, ~(io.op1 | io.op2), 0.U)    // TODO: can this be simplified?
+    val logicTmp1 = Mux(io.fn === aluFn.FN_XOR || io.fn === aluFn.FN_OR, op1XorOp2, 0.U) |
+                Mux(io.fn === aluFn.FN_OR || io.fn === aluFn.FN_AND, io.op1 & io.op2, 0.U)
+    val logicTmp2 = Mux(io.fn === aluFn.FN_ANDN, io.op1 & ~io.op2, 0.U) |
+                Mux(io.fn === aluFn.FN_ORN, io.op1 | ~io.op2, 0.U) |
+                Mux(io.fn === aluFn.FN_NOR, ~(io.op1 | io.op2), 0.U)
+    val logic = logicTmp1 | logicTmp2
 
     val shift_logic = (aluFn.isCmp(io.fn) && slt) | logic | shout
 
@@ -87,6 +92,10 @@ class Alu(val debug: Boolean = false) extends AbstractAlu(AluFuncCode()) {
             printf(p"alu: fn=SLT,  ")
         }.elsewhen(io.fn === aluFn.FN_SLTU) {
             printf(p"alu: fn=SLTU, ")
+        }.elsewhen(io.fn === aluFn.FN_ANDN) {
+            printf(p"alu: fn=ANDN, ")
+        }.elsewhen(io.fn === aluFn.FN_ORN) {
+            printf(p"alu: fn=ORN,  ")
         }.otherwise {
             printf(p"alu: fn=UNKNOWN, ")
         }
