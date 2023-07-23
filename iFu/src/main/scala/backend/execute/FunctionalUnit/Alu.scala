@@ -2,6 +2,7 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
+import iFu.common._
 
 class AluFuncCode {
     val SZ_ALU_FN = 4
