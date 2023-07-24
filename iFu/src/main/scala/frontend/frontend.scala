@@ -4,11 +4,10 @@ import Chisel.RegNext
 import iFu.common._
 import chisel3._
 import chisel3.util._
+import frontend.{SFenceReq, TLB, TLBResp}
 import iFu.backend.{PreDecode, PreDecodeSignals}
 import iFu.frontend.Parameters._
-import iFu.{BankedPredictor, BranchPredictionBundle}
 import iFu.frontend.{FetchBufferResp, ICache}
-import iFu.frontend.predictors.{MaskLower, globalHistoryLength}
 //TODO 重命名FrontEndExceptions,GlobalHistory,如果之后RAS增加计数器，Histories的update函数需要更改，
 //TODO FetchBundle重命名为FetchBufferEntry
 //TODO 检查valid信号 569行
@@ -127,7 +126,7 @@ object WrapInc
 //实际上是S3寄存器，存储icache的输出
 class S3 extends CoreBundle{
     val pc      = UInt(vaddrBits.W)
-    val insts   = UInt((fetchWidth * coreInstrBits).W)
+    val data   = UInt((fetchWidth * coreInstrBits).W)
     val mask    = UInt(fetchWidth.W)
     val xcpt    = new FrontendExceptions
     val ghist   = new GlobalHistory
@@ -135,16 +134,16 @@ class S3 extends CoreBundle{
 }
 class FrontendExceptions extends Bundle {
     val pf = new Bundle {
-        val valid = Bool()
+        val inst = Bool()
     }
     val gf = new Bundle {
-        val valid = Bool()
+        val inst = Bool()
     }
     val ae = new Bundle {
-        val valid = Bool()
+        val inst = Bool()
     }
 }
-class GlobalHistory extends CoreBundle {
+class GlobalHistory extends CoreBundle with HasBPUParameters {
     val old_history = UInt(globalHistoryLength.W)
     val current_saw_branch_not_taken = Bool()
     val new_saw_branch_not_taken = Bool()
@@ -277,7 +276,6 @@ class FrontendToCPUIO extends CoreModule
 }
 class FrontendIO extends CoreBundle {
     val cpu = Flipped(new FrontendToCPUIO())
-    val ptw = new TLBPTWIO()
     val errors = new ICacheErrors
 }
 
@@ -301,7 +299,6 @@ class Frontend extends CoreModule
     val icache = Module(new ICache())
     icache.io.invalidate := io.cpu.flush_icache
     val tlb = Module(new TLB())
-    io.ptw <> tlb.io.ptw
 //    io.cpu.perf.tlbMiss := io.ptw.req.fire
 //    io.cpu.perf.acquire := icache.io.perf.acquire
 
@@ -352,10 +349,10 @@ class Frontend extends CoreModule
     tlb.io.req.bits.vaddr       := s1_vpc
     tlb.io.req.bits.passthrough := false.B  //may be changed
     tlb.io.req.bits.size        := log2Ceil(fetchWidth * coreInstrBytes)
-    tlb.io.req.bits.v           := io.ptw.status.v
-    tlb.io.req.bits.prv         := io.ptw.status.prv
+//    tlb.io.req.bits.v           := io.ptw.status.v
+//    tlb.io.req.bits.prv         := io.ptw.status.prv
     tlb.io.sfence               := RegNext(io.cpu.sfence)
-    tlb.io.kill                 := false.B
+//    tlb.io.kill                 := false.B
     //如果s1阶段将要进行replay，则不考虑tlb miss
     // 因为此时tlb resp的值是被replay的值，而被replay的值来源之前的s2
     //TODO 如果s2的指令发生tlb_miss咋办，信息已经保存在异常中了吗？
@@ -394,7 +391,7 @@ class Frontend extends CoreModule
     //当前s1寄存器有效。注意，s1阶段可能会replay
     when (s1_valid && !s1_tlb_miss){
         // 发生tlb异常时停止取指
-        s0_valid    := !(s1_tlb_resp.ae.valid || s1_tlb_resp.pf.valid)
+        s0_valid    := !(s1_tlb_resp.ae.inst || s1_tlb_resp.pf.inst)
         s0_tsrc     := BSRC_1
         s0_vpc      := f1_predicted_target
         s0_ghist    := f1_predicted_ghist
@@ -414,7 +411,7 @@ class Frontend extends CoreModule
     val s2_tlb_resp = RegNext(s1_tlb_resp)
     val s2_tlb_miss = RegNext(s1_tlb_miss)
     val s2_is_replay = RegNext(s1_is_replay) && s2_valid
-    val s2_xcpt = s2_valid && (s2_tlb_resp.ae.valid || s2_tlb_resp.pf.valid) && !s2_is_replay
+    val s2_xcpt = s2_valid && (s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay
     val f3_ready = Wire(Bool())
 
     icache.io.s2_kill := s2_xcpt
@@ -441,11 +438,11 @@ class Frontend extends CoreModule
         s2_vpc,
         false.B,
         false.B)
-    val f2_correct_f1_ghist = s1_ghist =/= f2_predicted_ghist && enableGHistStallRepair.B
+    val f2_correct_f1_ghist = s1_ghist =/= f2_predicted_ghist
     //当本周期s2需要阻塞时，下一周期s2寄存器valid为假，并且会将内容传给s1寄存器（通过s0）
     when((s2_valid && !icache.io.resp.valid) ||
             (s2_valid && icache.io.resp.valid && !f3_ready)){
-        s0_valid := (!s2_tlb_resp.ae.valid && !s2_tlb_resp.pf.valid) || s2_is_replay || s2_tlb_miss
+        s0_valid := (!s2_tlb_resp.ae.inst && !s2_tlb_resp.pf.inst) || s2_is_replay || s2_tlb_miss
         s0_vpc := s2_vpc
         s0_is_replay := s2_valid && icache.io.resp.valid
         // When this is not a replay (it queried the BPDs, we should use f3 resp in the replaying s1)
@@ -461,7 +458,7 @@ class Frontend extends CoreModule
         when((s1_valid && (s1_vpc =/= f2_predicted_target || f2_correct_f1_ghist)) || !s1_valid){
             f1_clear    := true.B
 
-            s0_valid    := !((s2_tlb_resp.ae.valid || s2_tlb_resp.pf.valid) && !s2_is_replay)
+            s0_valid    := !((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay)
             s0_vpc      := f2_predicted_target
             s0_is_replay:= false.B
             s0_ghist    := f2_predicted_ghist
@@ -494,7 +491,7 @@ class Frontend extends CoreModule
      */
     //TODO 没有ptw,s2_tlb_miss或许不需要判定is_replay，并把s2_tlb_miss与ae,pf合在一起
     f3.io.enq.valid     := (s2_valid && !f2_clear &&
-            (icache.io.resp.valid || ((s2_tlb_resp.ae.valid || s2_tlb_resp.pf.valid) && !s2_tlb_miss))
+            (icache.io.resp.valid || ((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_tlb_miss))
             )
     f3.io.enq.bits.pc := s2_vpc
     f3.io.enq.bits.data := Mux(s2_xcpt, 0.U, icache.io.resp.bits.data)
@@ -543,8 +540,8 @@ class Frontend extends CoreModule
     f3_fetch_bundle.br_mask := f3_br_mask.asUInt
     f3_fetch_bundle.pc      := f3_imemresp.pc
     f3_fetch_bundle.ftq_idx := 0.U      //之后会被赋值
-    f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf.valid
-    f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae.valid
+    f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf.inst
+    f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae.inst
     f3_fetch_bundle.fsrc := f3_imemresp.fsrc
 //    f3_fetch_bundle.tsrc := f3_imemresp.tsrc
     f3_fetch_bundle.shadowed_mask := f3_shadowed_mask
@@ -677,8 +674,8 @@ class Frontend extends CoreModule
     ras.io.write_addr   := f3_aligned_pc + ((f3_fetch_bundle.cfi_idx.bits << 1)) + 4
     ras.io.write_idx    := WrapInc(f3_fetch_bundle.ghist.ras_idx,nRasEntries)
 
-    val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist && enableGHistStallRepair.B
-    val f3_correct_f2_ghist = s2_ghist =/= f3_predicted_ghist && enableGHistStallRepair.B
+    val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist
+    val f3_correct_f2_ghist = s2_ghist =/= f3_predicted_ghist
 
     when(f3.io.deq.valid && f4_ready){
         when(f3_fetch_bundle.cfi_is_call && f3_fetch_bundle.cfi_idx.valid){
@@ -764,9 +761,9 @@ class Frontend extends CoreModule
 
     fb.io.enq.valid := f4.io.deq.valid && ftq.io.enq.ready && !f4_delay
     fb.io.enq.bits  := f4.io.deq.bits
-    fb.io.enq.bits.ftq_idx  := ftq.io.enq_idx
+    fb.io.enq.bits.ftqIdx  := ftq.io.enqIdx
     fb.io.enq.bits.sfbs     := Mux(f4_sfb_valid,UIntToOH(f4_sfb_idx),0.U(fetchWidth.W)).asBools
-    fb.io.enq.bits.shadowed_mask := (
+    fb.io.enq.bits.shadowedMask := (
             Mux(f4_sfb_valid,f4_sfb_mask(fetchWidth-1,0),0.U(fetchWidth.W)) |
                     f4.io.deq.bits.shadowed_mask.asUInt
     ).asBools
