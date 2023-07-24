@@ -28,11 +28,11 @@ class ReMapReq(val lregSz:Int,val pregSz:Int) extends Bundle
 class RenameMapTable(
     val plWidth:Int,
     val numLregs:Int,
-    val numPregs:Int)(implicit p: Parameters) extends CoreBundle
+    val numPregs:Int)extends CoreModule
 {
     val pregSize = log2Ceil(numPregs)
 
-    val io = IO(new CoreBundle()(p){
+    val io = IO(new CoreBundle{
         val map_reqs = Input(Vec(plWidth,new MaptableReq(lregSz)))
         val map_resps = Output(Vec(plWidth,new MaptableResp(pregSz)))
 
@@ -71,7 +71,7 @@ class RenameMapTable(
     //保存分支的map关系（分支预测错误需要回滚)
     for(i <- 0 until plWidth){
         when(io.ren_br_tags(i).valid){
-            br_snapshots(io.ren_br_tags(i).bits) := remapTable(i+1) //i+1是因为scanleft函数
+            brShotMap(io.ren_br_tags(i).bits) := remapTable(i+1) //i+1是因为scanleft函数
         }
     }
 

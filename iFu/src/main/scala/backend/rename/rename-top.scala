@@ -4,16 +4,15 @@ import chisel3._
 import chisel3.util._
 import iFu.common._
 
-
 class RenameTopIO(
     val plWidth: Int,
     val numPhysRegs: Int,
-    val numWbPorts: Int)(implicit p: Parameters) extends CoreBundle
+    val numWbPorts: Int)extends CoreBundle
 
 abstract class AbsRenameStage(
     plWidth :Int,
     numPhysRegs: Int,
-    numWbPorts: Int)(implicit p:Parameters) extends CoreModule
+    numWbPorts: Int) extends CoreModule
 {
     val io = IO(new Bundle{
         val ren_stalls = Output(Vec(plWidth, Bool())) //流水线暂停
@@ -53,7 +52,7 @@ abstract class AbsRenameStage(
 
     for(w <-0 until plWidth){
         ren1Fire(w) := io.dec_fire(w)
-        ren1Uops(w) := io.dec_Uops(w)
+        ren1Uops(w) := io.dec_uops(w)
     }
 
     for(w <- 0 until plWidth){
@@ -61,7 +60,7 @@ abstract class AbsRenameStage(
         val rUop = Reg(new MicroOp)
         val nextUop = Wire(new MicroOp)
 
-        next_uop := rUop
+        nextUop := rUop
 
         //if kill
         when(io.kill){
@@ -75,7 +74,7 @@ abstract class AbsRenameStage(
             nextUop := rUop
         }
 
-        r_uop := GetNewUopAndBrMask(DoBypass(nextUop, ren2Uops, ren2AllocReqs), io.brupdate)
+        rUop := GetNewUopAndBrMask(DoBypass(nextUop, ren2Uops, ren2AllocReqs), io.brupdate)
 
         ren2Valids(w) := rValid
         ren2Uops(w) := rUop
@@ -88,7 +87,7 @@ class RenameStage(
     plWidth : Int,
     numPhysRegs: Int,
     numWbPorts: Int
-)(implicit p: parameters) extends  AbsRenameStage(plWidth,numPhysRegs,numWbPorts)(p)
+) extends  AbsRenameStage(plWidth,numPhysRegs,numWbPorts)
 {
     val pregSize = log2Ceil(numPhysRegs)
     val rtype = RT_FIX
@@ -99,9 +98,9 @@ class RenameStage(
         bypassedUop := uop
 
         //check if bypassing is possible
-        val bypassHitRs1 = (older zip allocReqs) map {case (r,a) => a && r.ldst == uop.lrs1}
-        val bypassHitRs2 = (older zip allocReqs) map {case (r,a) => a && r.ldst == uop.lrs2}
-        val bypassHitDst = (older zip allocReqs) map {case (r,a) => a && r.ldst == uop.ldst}
+        val bypassHitRs1 = (older zip allocReqs) map {case (r,a) => a && r.ldst === uop.lrs1}
+        val bypassHitRs2 = (older zip allocReqs) map {case (r,a) => a && r.ldst === uop.lrs2}
+        val bypassHitDst = (older zip allocReqs) map {case (r,a) => a && r.ldst === uop.ldst}
 
         //select the data to bypass
         val bypassSelRs1 = PriorityEncoderOH(bypassHitRs1.reverse).reverse
@@ -133,7 +132,7 @@ class RenameStage(
         numPhysRegs
     ))
 
-    val freelist = Module(New FreeList(
+    val freelist = Module(new FreeList(
         plWidth,
         numPhysRegs,
         31
@@ -179,7 +178,7 @@ class RenameStage(
         remapReqs(w).pdst := Mux(io.rollback,com.stale_pdst,ren2.pdst)
     }
 
-    ren2AllocReqs zip rbkValids.reverse zip remap_reqs map {
+    ren2AllocReqs zip rbkValids.reverse zip remapReqs map {
         case((a,r),rr) => rr.valid := a||r
     }
 
@@ -195,7 +194,7 @@ class RenameStage(
 
         uop.prs1 := mappings.prs1
         uop.prs2 := mappings.prs2
-        uop.stale_pdst := mapping.stale_pdst
+        uop.stale_pdst := mappings.stale_pdst
     }
 
 
@@ -237,11 +236,13 @@ class RenameStage(
 
         io.ren_stalls(w) := (ren2Uops(w).dst_rtype === rtype) && !canAllocate
 
-        val bypassedUop = Wire(new MicroOP)
+        val bypassedUop = Wire(new MicroOp)
 
         //当w为0时不需要转发,不会有冲突
         if(w >0) bypassedUop := DoBypass(ren2Uops(w),ren2Uops.slice(0,w),ren2AllocReqs.slice(0,w))
         else bypassedUop := ren2Uops(w)
+
+        io.ren2_uops(w) := GetNewUopAndBrMask(bypassedUop,io.brupdate)
     }
 
 
@@ -256,13 +257,13 @@ class PredRenameStage(
     plWidth : Int,
     numPhysRegs : Int,
     numWbPorts: Int
-)(implicit p :Parameters) extends AbsRenameStage(plWidth,numPhysRegs,numWbPorts)(p)
+)extends AbsRenameStage(plWidth,numPhysRegs,numWbPorts)
 {
     def DoBypass(uop:MicroOp,older:Seq[MicroOp],allocReqs:Seq[Bool]): MicroOp ={uop}
 
     ren2AllocReqs := DontCare
 
-    val busyTable = RegInit(VecInit(0,U(ftqSz.W).asBools))
+    val busyTable = RegInit(VecInit(0.U(ftqSz.W).asBools))
     val toBusy = WireInit(VecInit(0.U(ftqSz.W).asBools))
     val unbusy = WireInit(VecInit(0.U(ftqSz.W).asBools))
 
@@ -270,21 +271,21 @@ class PredRenameStage(
     var nextFtqIdx = currentFtqIdx
 
     for(w <- 0 until plWidth){
-        io.ren2_uops(w) := ren2_uops(w)
+        io.ren2_uops(w) := ren2Uops(w)
 
         val isSfbBr = ren2Uops(w).isSfbBr && ren2Fire(w)
         val isSfbShadow = ren2Uops(w).isSfbShadow && ren2Fire(w)
 
-        val ftqIdx = ren2Uops(w).ftq_idx
+        val ftqIdx = ren2Uops(w).ftqIdx
         when(isSfbBr){
-            io.ren2_uops(w).pdst := ftq_idx
-            to_busy(ftq_idx) := true.B
+            io.ren2_uops(w).pdst := ftqIdx
+            toBusy(ftqIdx) := true.B
         }
-        nextFtqIdx = MUX(isSfbBr,ftqIdx,nextFtqIdx)
+        nextFtqIdx = Mux(isSfbBr,ftqIdx,nextFtqIdx)
 
         when (isSfbShadow){
-            io.ren2Uops(w).ppred := nextFtqIdx
-            io.ren_uops(w).ppred_busy := (busyTable(nextFtqIdx) || toBusy(nextFtqIdx)) && !unbusy(nextFtqIdx)
+            io.ren2_uops(w).ppred := nextFtqIdx
+            io.ren2_uops(w).ppred_busy := (busyTable(nextFtqIdx) || toBusy(nextFtqIdx)) && !unbusy(nextFtqIdx)
         }
     }
 
@@ -298,4 +299,15 @@ class PredRenameStage(
     currentFtqIdx := nextFtqIdx
 
     busyTable := ((busyTable.asUInt | toBusy.asUInt) & ~unbusy.asUInt).asBools
+}
+
+
+//-------------------------------------------utils--------------------------------------------
+object GetNewUopAndBrMask
+{
+    def apply(uop: MicroOp, brupdate: BrUpdateInfo): MicroOp = {
+        val newuop = WireInit(uop)
+        newuop.br_mask := uop.br_mask & ~brupdate.b1.resolve_mask
+        newuop
+    }
 }

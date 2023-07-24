@@ -2,92 +2,135 @@ package iFu.frontend
 
 import chisel3._
 import chisel3.util._
+import chisel3.util.random.LFSR
 import iFu.common._
+import iFu.common.HasCoreParameters
 
+import scala.collection.mutable.{ListBuffer}
+
+
+object DescribedSRAM {
+    def apply[T <: Data](
+                          name: String,
+                          desc: String,
+                          size: BigInt, // depth
+                          data: T
+                        ): SyncReadMem[T] = {
+
+        val mem = SyncReadMem(size, data)
+        mem.suggestName(name)
+        val granWidth = data match {
+            case v: Vec[_] => v.head.getWidth
+            case d => d.getWidth
+        }
+        val uid = 0
+        mem
+    }
+}
+class CbusReq extends Bundle{
+    val valid = Bool()
+    val isWrite = Bool()
+    val size = UInt(2.W)
+    val addr = UInt(32.W)
+    val data = UInt(32.W)
+    val mask = UInt(16.W)
+    val axiBurstType = UInt(2.W)
+    val axiLen = UInt(8.W)
+}
+
+class CbusResp extends Bundle{
+    val data = UInt(32.W)
+    val isLast = Bool()
+    val ready = Bool()
+}
 
 //ICache的输出
-class ICacheResp extends Bundle
+class ICacheResp extends CoreBundle
 {
-    val data = UInt((frontendParams.iCacheParams.fetchBytes*8).W)
+    val data = UInt((frontendParams.fetchBytes*8).W)
     val replay = Bool()
 }
 
 
-//ICahe的输入
-trait HasL1ICacheParameters extends HasL1CacheParameters with HasCoreParameters {
-  val cacheParams = tileParams.icache.get
-}
-
-class ICacheReq(implicit p: Parameters) extends CoreBundle()(p) with HasL1ICacheParameters {
+class ICacheReq extends CoreBundle{
   val addr = UInt(vaddrBits.W)
 }
 
 
-
-
-class ICache(val iParams : frontendParams.iCacheParams
+class ICache(val iParams : ICacheParameters
     //val staticIdForMetadataUseOnly: Int
-) extends LazyModule
+) extends CoreModule
 with HasCoreParameters
 {
-    val enableICacheDelay = tileParams.core.asInstanceOf[BoomCoreParams].enableICacheDelay
+
     val io = IO(new CoreBundle{
         val req = Flipped(Decoupled(new ICacheReq))
         val s1_paddr = Input(UInt(paddrBits.W))
 
         val s1_kill = Input(Bool())
         val s2_kill = Input(Bool())
-        val s2_prefetch = Input(Bool())
 
         val resp = Valid(new ICacheResp)
         val invalidate = Input(Bool())
 
-        val pref = Output(new Bundle{
+        val cbusResp = Input(new CbusResp)
+        val cbusReq = Output(new CbusReq)
+
+        val perf = Output(new Bundle{
             val acquire = Bool()
         })
 
     })
 
-    val (tl_out, edge_out) = outer.masterNode.out(0)
-    val wordBits = frontendParams.iCacheParams.fetchBytes * 8
+    def bank(addr: UInt) =  addr(log2Ceil(iParams.bankBytes))
 
-    val refillsToOneBank = (2*tl_out.d.bits.data.getWidth == wordBits)
+    val wordBits = frontendParams.fetchBytes * 8
+
+    val refillsToOneBank = (2*(io.cbusResp.data.getWidth) == wordBits) //false
 
 
-    val s0Valid = io.req.fire
-    val s0Vaddr = io.req.bits.addr
+    val s0Valid = io.req.fire  //发射
+    val s0Vaddr = io.req.bits.addr //虚拟地址
 
-    val s1Valid = RegNext(s0Valid)
-    val s1TagHit = Wire(Vec(nWays,Bool()))
-    val s1Hit = s1TagHit.reduce(_||_)
+    val s1Valid = RegNext(s0Valid) //s1有效
+    val s1TagHit = Wire(Vec(iParams.nWays,Bool())) //s1每一路的命中情况
+    val s1Hit = s1TagHit.reduce(_||_) //出现命中
     
-    val s2Valid = RegNext(s1Valid && !io.s1_kill)
-    val s2Hit = RegNext(s1Hit)
+    val s2Valid = RegNext(s1Valid && !io.s1_kill) //s2有效当且仅当s1有效且没有被kill
+    val s2Hit = RegNext(s1Hit) 
 
-    val invalidated = Reg(Bool())
-    val refillValid = RegInit(false.B)
-    val refillFire = tl_out.a.fire
-    val s2Miss = s2_valid && !s2Hit && !RegNext(refillValid)
+    val invalidated = Reg(Bool()) //清空整个icache
+    val refillValid = RegInit(false.B) 
+    val refillFire = io.cbusReq.valid //&& cbusReq.ready
+    val s2Miss = s2Valid && !s2Hit && !RegNext(refillValid)
     val refillPaddr = RegEnable(io.s1_paddr , s1Valid && !(refillValid || s2Miss))
-    val refillTag = refillPaddr(tagBits + untagBits-1,untagBits)
-    val refillIdx = refillPaddr(untagBits-1,blockOffBits)
-    val refillOneBeat = tl_out.d.fire && edge_out.hasData(tl_out.d.bits)
+    val refillTag = refillPaddr(iParams.tagBits + iParams.untagBits-1,iParams.untagBits)
+    val refillIdx = refillPaddr(iParams.untagBits-1,iParams.blockOffBits)
+    val refillOneBeat = io.cbusReq.valid && io.cbusResp.ready
+        //tl_out.d.fire && edge_out.hasData(tl_out.d.bits)
 
     io.req.ready := !refillOneBeat
 
-    val (_, _, dDone, refillCnt) = edge_out.count(tl_out.d)
+    val dDone = io.cbusResp.ready && io.cbusResp.isLast
+    val refillCnt = RegInit(0.U(4.W)) //和refillCycles
+    when(refillOneBeat){
+        refillCnt := refillCnt + 1.U
+    }
+    when(dDone){
+        refillCnt := 0.U
+    }
+    //val (_, _, dDone, refillCnt) = edge_out.count(tl_out.d)
     val refillDone = refillOneBeat && dDone
-    ti_out.d.ready := true.B
 
-    val replWay = if(isDM) 0.U else LFSR(16,refillFire)
+    val replWay = LFSR(16,refillFire)(log2Ceil(iParams.nWays)-1,0)
 
-    val tagArray = SyncReadMem(nSets,Vec(nWays,Uint(tagBits.W)))
-    val tagRData = tagArray.read(s0Vaddr(untagBits-1,blockOffBits),!refillDone && s0Valid)
+    val tagArray = SyncReadMem(iParams.nSets,Vec(iParams.nWays,UInt(iParams.tagBits.W)))
+    val tagRData = tagArray.read(s0Vaddr(iParams.untagBits-1,iParams.blockOffBits),!refillDone && s0Valid)
     when(refillDone){
-        tagArray.write(refillIdx,Vec(Seq.fill(nWays)(refillTag),Seq.tabulate(nWays)(replWay === _.U)))
+        tagArray.write(refillIdx,VecInit(Seq.fill(iParams.nWays)(refillTag)),Seq.tabulate(iParams.nWays)(replWay === _.U))
     }
 
-    val vbArray = RegInit(0.U((nSets*nWays).W))
+    val vbArray = RegInit(0.U((iParams.nSets*iParams.nWays).W))
     when(refillOneBeat){
         vbArray := vbArray.bitSet(Cat(replWay,refillIdx),refillDone && !invalidated)
 
@@ -98,65 +141,64 @@ with HasCoreParameters
         invalidated := true.B
     }
 
-    val s2Dout = Wire(Vec(nWays,UInt(wordBits.W)))
+    val s2Dout = Wire(Vec(iParams.nWays,UInt(wordBits.W)))
     val s1Bankid = Wire(Bool())
 
-    for(i <- 0 until nWays){
-        val s1Idx = io.s1_paddr(untagBits-1,blockOffBits)
-        val s1Tag = io.s1_paddr(tagBits + untagBits -1,untagBits)
+    for(i <- 0 until iParams.nWays){
+        val s1Idx = io.s1_paddr(iParams.untagBits-1,iParams.blockOffBits)
+        val s1Tag = io.s1_paddr(iParams.tagBits + iParams.untagBits -1,iParams.untagBits)
         val s1Vb = vbArray(Cat(i.U,s1Idx))
         val tag = tagRData(i)
-        s1TagHit(i) := s1Vb && tag == s1Tag
+        s1TagHit(i) := s1Vb && tag === s1Tag
     }
     
     val ramDepth = if(refillsToOneBank){
-        nSets * refillCycles /2
+        iParams.nSets * iParams.refillCycles /2
     }else{
-        nSets * refillCycles
+        iParams.nSets * iParams.refillCycles
     }
 
     //nBanks == 2 
-    val dataArrays = 
-        (0 until nWays).map{
+    val dataArrays =
+        (0 until iParams.nWays).map{
             x=>DescribedSRAM(
                 name = s"dataArrayB0Way_${x}",
                 desc = "ICache Data Array",
                 size = ramDepth,
                 data = UInt((wordBits/nBanks).W)
             )
-        } 
-        ++
-        (0 until nWays).map{
+        } ++
+        (0 until iParams.nWays).map{
             x=>DescribedSRAM(
                 name = s"dataArrayB1Way_${x}",
                 desc = "ICache Data Array",
                 size = ramDepth,
                 data = UInt((wordBits/nBanks).W)
             )
-        } 
+        }
 
     //nBanks == 2 
 
-    val dataArrayB0 = dataArrays.take(nWays)
-    val dataArrayB1 = dataArrays.drop(nWays)
+    val dataArrayB0 = dataArrays.take(iParams.nWays)
+    val dataArrayB1 = dataArrays.drop(iParams.nWays)
 
     def b0Row(addr: UInt) =
         if (refillsToOneBank){
-            addr(untagBits-1,blockOffBits - log2Ceil(refillCycles)+1) + bank(addr)
+            addr(iParams.untagBits-1,iParams.blockOffBits - log2Ceil(iParams.refillCycles)+1) + bank(addr)
         } else {
-            addr(untagBits-1, blockOffBits-log2Ceil(refillCycles)) + bank(addr)
+            addr(iParams.untagBits-1, iParams.blockOffBits-log2Ceil(iParams.refillCycles)) + bank(addr)
         }
 
     def b1Row(addr: UInt) =
         if (refillsToOneBank) {
-            addr(untagBits-1, blockOffBits-log2Ceil(refillCycles)+1)
+            addr(iParams.untagBits-1, iParams.blockOffBits-log2Ceil(iParams.refillCycles)+1)
         } else {
-            addr(untagBits-1, blockOffBits-log2Ceil(refillCycles))
+            addr(iParams.untagBits-1, iParams.blockOffBits-log2Ceil(iParams.refillCycles))
         }
     
     s1Bankid := RegNext(bank(s0Vaddr))
 
-    for(i <- 0 until nWays){
+    for(i <- 0 until iParams.nWays){
         val s0Ren = s0Valid
         val wen = (refillOneBeat && !invalidated) && replWay ===i.U
 
@@ -164,39 +206,35 @@ with HasCoreParameters
         var memIdx1: UInt = null
 
         if(refillsToOneBank){
-            //只写一个bank
-            memIdx0 = Mux(refillOneBeat,(refillIdx << (log2Ceil(refillCycles)-1)) | (refillCnt >> 1.U),
+            //只写一个bank；
+            memIdx0 = Mux(refillOneBeat,((refillIdx << (log2Ceil(iParams.refillCycles)-1)) | (refillCnt >> 1.U)),
                 b0Row(s0Vaddr))
-            memIdx1 =Mux(refill_one_beat, (refill_idx << (log2Ceil(refillCycles)-1)) | (refill_cnt >> 1.U),
-                b1Row(s0_vaddr))
+            memIdx1 =Mux(refillOneBeat, ((refillIdx << (log2Ceil(iParams.refillCycles)-1)) | (refillCnt >> 1.U)),
+                b1Row(s0Vaddr))
 
-            when (wen && refill_cnt(0) === 0.U){
-                dataArrayB0(i).write(memIdx0,tl_out.d.bits.data)
+            when (wen && refillCnt(0) === 0.U){
+                dataArrayB0(i).write(memIdx0,io.cbusResp.data)
             }
-            when (wen && refill_cnt(0) === 1.U){
-                dataArrayB1(i).write(memIdx1,tl_out.d.bits.data)
+            when (wen && refillCnt(0) === 1.U){
+                dataArrayB1(i).write(memIdx1,io.cbusResp.data)
             }
         } else {
             //写两个bank
-            memIdx0 = Mux(refillOneBeat,(refillIdx << log2Ceil(refillCycles)) | refillCnt,
+            memIdx0 = Mux(refillOneBeat,(refillIdx << log2Ceil(iParams.refillCycles)) | refillCnt,
                 b0Row(s0Vaddr))
-            memIdx1 = Mux(refill_one_beat, (refill_idx << log2Ceil(refillCycles)) | refill_cnt,
-                b1Row(s0_vaddr))
+            memIdx1 = Mux(refillOneBeat, (refillIdx << log2Ceil(iParams.refillCycles)) | refillCnt,
+                b1Row(s0Vaddr))
 
             when (wen) {
-                val data = tl_out.d.bits.data
+                val data = io.cbusResp.data
                 dataArrayB0(i).write(memIdx0,data(wordBits/2-1, 0))
                 dataArrayB1(i).write(memIdx1,data(wordBits-1,wordBits/2))
             }
         }
     
-        if(enableICacheDelay){
-            s2Dout(i) := Cat(dataArrayB1(i).read(RegNext(memIdx1), RegNext(!wen && s0Ren)),
-                            dataArrayB0(i).read(RegNext(memIdx0), RegNext(!wen && s0Ren)))
-        } else {
-            s2Dout(i) := RegNext(Cat(dataArrayB1(i).read(memIdx1,!wen && s0Ren),
+
+        s2Dout(i) := RegNext(Cat(dataArrayB1(i).read(memIdx1,!wen && s0Ren),
                                     dataArrayB0(i).read(memIdx0, !wen && s0Ren)))
-        }
     }
 
     //
@@ -218,19 +256,28 @@ with HasCoreParameters
     io.resp.bits.data := s2Data
     io.resp.valid := s2Valid && s2Hit
 
-    tl_out.a.valid := s2_miss && !refill_valid && !io.s2_kill
-    tl_out.a.bits := edge_out.Get(
-    fromSource = 0.U,
-    toAddress = (refill_paddr >> blockOffBits) << blockOffBits,
-    lgSize = lgCacheBlockBytes.U)._2
-    tl_out.b.ready := true.B
-    tl_out.c.valid := false.B
-    tl_out.e.valid := false.B
 
-    io.pref.acquire := tl_out.a.fire
+    //tl_out.a.valid := s2_miss && !refill_valid && !io.s2_kill
+    //tl_out.a.bits := edge_out.Get(
+    //fromSource = 0.U,
+    //toAddress = (refill_paddr >> blockOffBits) << blockOffBits,
+    //lgSize = lgCacheBlockBytes.U)._2
+    //tl_out.b.ready := true.B
+    //tl_out.c.valid := false.B
+    //tl_out.e.valid := false.B
 
-    when (!refill_valid) { invalidated := false.B }
-    when (refill_fire) { refill_valid := true.B }
-    when (refill_done) { refill_valid := false.B }
+    io.cbusReq.valid := s2Miss && !refillValid && !io.s2_kill
+    io.cbusReq.isWrite := false.B
+    io.cbusReq.size := 1.U(2.W)
+    io.cbusReq.addr := (refillPaddr >> iParams.blockOffBits) << iParams.blockOffBits
+    io.cbusReq.mask := 0.U
+    io.cbusReq.axiBurstType := 1.U
+    io.cbusReq.axiLen := iParams.refillCycles.U
+    
+    //io.perf.acquire := tl_out.a.fire
+
+    when (!refillValid) { invalidated := false.B }
+    when (refillFire) { refillValid := true.B }
+    when (refillDone) { refillValid := false.B }
 
 }
