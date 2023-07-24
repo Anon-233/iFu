@@ -5,7 +5,7 @@ import backend.decode.XDecode._
 import backend.decode.common.{immS12, immS14, immS16, immS20, immS26, immU12, immU20, immU5, immX}
 import chisel3._
 import chisel3.util._
-import iFu.backend.{AluFuncCode, DecodeLogic}
+import iFu.backend.{AluFuncCode, DecodeLogic, DivFuncCode, MultFuncCode}
 import iFu.common.{CoreBundle, CoreModule, MicroOp, MicroOpCode}
 /**
  * Control signal bundle for register renaming
@@ -92,6 +92,8 @@ class RRdCtrlSigs extends CoreBundle
 abstract trait RRdDecodeConstants
 {
     val aluFn = new AluFuncCode
+    val mulFn = new MultFuncCode
+    val divFn = new DivFuncCode
     val default: List[BitPat] =
         List[BitPat](BR_N , Y, N, N, aluFn.FN_ADD , DW_X  , OP1_X   , OP2_X   , IS_X, REN_0, CSR.N)
     val table: Array[(BitPat, List[BitPat])]
@@ -171,13 +173,13 @@ object MulDivRRdDecode extends RRdDecodeConstants
             // |      |  |  use mem pipe              |         |         |     rf wen |
             // |      |  |  |  alu fcn        wd/word?|         |         |     |      |
             // |      |  |  |  |              |       |         |         |     |      |
-            BitPat(uopMODWU)    -> List(BR_N  , N, Y, N, aluFn.FN_MODU , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
-            BitPat(uopDIVWU)    -> List(BR_N  , N, Y, N, aluFn.FN_DIVU , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
-            BitPat(uopDIVW)     -> List(BR_N  , N, Y, N, aluFn.FN_DIV  , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
-            BitPat(uopMODW)     -> List(BR_N  , N, Y, N, aluFn.FN_MOD  , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
-            BitPat(uopMULHW)    -> List(BR_N  , N, Y, N, aluFn.FN_MULH , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
-            BitPat(uopMULHWU)   -> List(BR_N  , N, Y, N, aluFn.FN_MULHU, OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
-            BitPat(uopMULW)     -> List(BR_N  , N, Y, N, aluFn.FN_MUL  , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
+            BitPat(uopMODWU)    -> List(BR_N  , N, Y, N, divFn.FN_REMU , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
+            BitPat(uopDIVWU)    -> List(BR_N  , N, Y, N,  divFn.FN_DIVU, OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
+            BitPat(uopDIVW)     -> List(BR_N  , N, Y, N, divFn.FN_DIV  , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
+            BitPat(uopMODW)     -> List(BR_N  , N, Y, N, divFn.FN_REM  , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
+            BitPat(uopMULHW)    -> List(BR_N  , N, Y, N, mulFn.FN_MULH , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
+            BitPat(uopMULHWU)   -> List(BR_N  , N, Y, N, mulFn.FN_MULHU, OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
+            BitPat(uopMULW)     -> List(BR_N  , N, Y, N, mulFn.FN_MUL  , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
 }
 object MemRRdDecode extends RRdDecodeConstants
 {
