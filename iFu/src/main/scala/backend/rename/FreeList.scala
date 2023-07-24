@@ -7,10 +7,10 @@ import iFu.common._
 class FreeList(
     val plWidth: Int,
     val numPregs: Int,
-    val numLregs: Int)(implicit p:parameters) extends CoreBundle
+    val numLregs: Int)extends CoreModule
 {
     val pregSize = log2Ceil(numPregs)
-    val io =IO(new CoreBundle()(p){
+    val io =IO(new Bundle{
         val reqs = Input(Vec(plWidth,Bool()))
         val alloc_pregs = Output(Vec(plWidth,Valid(UInt(pregSize.W))))
 
@@ -28,14 +28,14 @@ class FreeList(
     val brAllocList = Reg(Vec(maxBrCount,UInt(numPregs.W)))
 
     //分配
-    val selPreg = SelectFirstN(free_list,plWidth)
+    val selPreg = SelectFirstN(freeList,plWidth)
     val selPregFire = Wire(Vec(plWidth,Bool()))
 
     val allocPreg = io.alloc_pregs map (a => UIntToOH(a.bits))
     val allocPregMask = (allocPreg zip io.reqs).scanRight(0.U(n.W)){ case ((a,r),m) => m | a & Fill(n,r) }
 
     //标记分配mask
-    val sleMask = (selPreg zip selPregFire) map { case (s,f) => s & Fill(numPregs,f) } reduce(_|_)
+    val sleMask = (selPreg zip selPregFire) map { case (s,f) => s & Fill(numPregs,f) }.reduce(_|_)
     //预测错误的分支中空闲物理寄存器的独热码集合
     val brDeallocs = brAllocList(io.brupdate.b2.uop.br_tag) & Fill(numPregs,io.brupdate.b2.mispredict)
     //需要释放的物理寄存器独热码集合
@@ -67,4 +67,25 @@ class FreeList(
         io.alloc_pregs(w).bits := rSel
         io.alloc_pregs(w).valid := rValid
     }
-}   
+}
+
+
+
+//--------------------------------------------------util------------------------------------
+/**
+ * N-wide one-hot priority encoder.
+ */
+object SelectFirstN
+{
+    def apply(in: UInt, n: Int) = {
+        val sels = Wire(Vec(n, UInt(in.getWidth.W)))
+        var mask = in
+
+        for (i <- 0 until n) {
+            sels(i) := PriorityEncoderOH(mask)
+            mask = mask & ~sels(i)
+        }
+
+        sels
+    }
+}
