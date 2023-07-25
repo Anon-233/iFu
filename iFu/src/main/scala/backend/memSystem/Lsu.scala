@@ -4,7 +4,7 @@ import Chisel.{DecoupledIO, ValidIO}
 import chisel3.{Mux, _}
 import chisel3.util._
 import iFu.common.{CoreBundle, CoreModule, MicroOp}
-import backend.memSystem.Consts._
+import backend.memSystem.LSUConsts._
 import iFu.backend.CommitSignals
 import iFu.frontend.WrapInc
 
@@ -13,6 +13,7 @@ import iFu.frontend.WrapInc
 //TODO 删除Hella Cache相关的代码  Done
 //TODO 删除release，observed等代码，load可以乱序   Done
 //TODO 增加TLB相关逻辑，包括异常检测，发送DCache请求时的地址,发送数据给tlb
+//TODO LSU会将vaddr的idx位发给DCache，TLB_MISS在s1_kill掉请求
 object IsKilledByBranch
 {
     def apply(brupdate: BrUpdateInfo, uop: MicroOp): Bool = {
@@ -44,7 +45,7 @@ object IsOlder
 {
     def apply(i0: UInt, i1: UInt, head: UInt) = ((i0 < i1) ^ (i0 < head) ^ (i1 < head))
 }
-object Consts
+object LSUConsts
 {
     val memWidth = 2
     val coreDataBits = 32

@@ -5,14 +5,14 @@ import chisel3.util._
 import iFu.backend.{DecodeLogic, PreDecodeConsts}
 import backend.decode.CSR
 import iFu.common.{CoreBundle, CoreModule, MicroOp, MicroOpCode}
-import backend.decode.common._
+import common.{Consts, _}
 import frontend.isa.Instructions._
 //TODO 增加Ori的检测，为move指令。增加andi的检测，为Nop指令  Done
 //TODO ALU Decode
 //TODO CSR指令中rd既是源操作数(rs1)，又是目的操作数 Done
 //TODO B和BL的uop均为uopJAL，BL的目的寄存器恒为1 Done
 //TODO Wired Decode和TLB Decode
-object common extends OpConstants with IQType with FUConstants with MemoryOpConstants
+object common extends OpConstants with FUConstants with MemoryOpConstants with Consts
 {
 
 }
@@ -104,12 +104,7 @@ trait MemoryOpConstants {
     def isWriteIntent(cmd: UInt) = isWrite(cmd) || cmd === M_PFW || cmd === M_XLR
 }
 
-trait IQType
-{
-    val IQT_SZ = 2
-    val IQT_INT = 1.U(IQT_SZ.W)
-    val IQT_MEM = 2.U(IQT_SZ.W)
-}
+
 
 trait FUConstants
 {
