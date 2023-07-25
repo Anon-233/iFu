@@ -35,7 +35,7 @@ object Parameters{
     val BSRC_3 = 2.U(BSRC_SZ.W) // 3-cycle branch pred
     val BSRC_C = 3.U(BSRC_SZ.W) // core branch resolution
 
-    val CFI_SZ = 3
+    val CFI_SZ = 2
     val CFI_X = 0.U(CFI_SZ.W) // Not a CFI instruction
     val CFI_BR = 1.U(CFI_SZ.W) // Branch
     val CFI_JAL = 2.U(CFI_SZ.W) // JAL

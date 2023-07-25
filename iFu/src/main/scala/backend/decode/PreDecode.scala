@@ -7,7 +7,7 @@ import frontend.isa.Instructions._
 //TODO 合并常量
 //TODO 修改isRet和isCall
 trait PreDecodeConsts {
-    val CFI_SZ = 3
+    val CFI_SZ = 2
     val CFI_X = 0.U(CFI_SZ.W) // Not a CFI instruction
     val CFI_BR = 1.U(CFI_SZ.W) // Branch
     val CFI_JAL = 2.U(CFI_SZ.W) // JAL

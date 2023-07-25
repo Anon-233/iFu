@@ -10,6 +10,7 @@ case class IssueParams(
     numIssueSlots: Int, // number of issue slots
     dispatchWidth: Int,
     issueWidth: Int    // maximum number of uops issued per cycle
+
 )
 
 trait IssueState {
