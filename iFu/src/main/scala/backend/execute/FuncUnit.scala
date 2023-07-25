@@ -2,9 +2,10 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
+import iFu.common.{CoreBundle, MicroOp}
 
 object FUConst {
-    val FUC_SZ = // TODO
+    val FUC_SZ = 8// TODO
     val FU_X = BitPat.dontCare(FUC_SZ)
     val FU_ALU = 1.U(FUC_SZ.W)
     val FU_JMP = 2.U(FUC_SZ.W)
@@ -18,7 +19,7 @@ object FUConst {
 
 import FUConst._
 
-case class SupportedFuncs() {
+case class SupportedFuncs(
     val alu: Boolean = false,
     val jmp: Boolean = false,
     val mem: Boolean = false,
@@ -26,7 +27,7 @@ case class SupportedFuncs() {
     val csr: Boolean = false
     // val cnt: Boolean = false
     // val tlb: Boolean = false
-}
+)
 
 class FuncUnitReq extends CoreBundle {
     val kill = Bool()
@@ -278,7 +279,7 @@ class ALUUnit(
 }
 
 // 乘法还可以bypass???
-class PipeLinedMulUnit(numStages: Int = 3) extends PipelinedFuncUnit (
+class PipelinedMulUnit(numStages: Int = 3) extends PipelinedFuncUnit (
     numStages = numStages,
     numBypassStages = 0,
     earliestBypassStage = 0
