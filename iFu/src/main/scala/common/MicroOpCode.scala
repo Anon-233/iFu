@@ -81,5 +81,5 @@ trait MicroOpCode {
     val uopRDCNTVLW     = 61.U(UOPC_SZ.W)
     val uopRDCNTVHW     = 62.U(UOPC_SZ.W)
 
-    val uopMove         = 63.U(UOPC_SZ.W)
+    val uopMOV          = 63.U(UOPC_SZ.W)
 }

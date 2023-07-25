@@ -416,8 +416,8 @@ class DecodeUnit extends CoreModule with MicroOpCode
         uop.lrs1 := inst(4, 0)
         uop.ldst_is_rs1 := true.B
     }
-    when(cs.uopc === uopORI && inst(21,10) === 0.U){
-        uop.uopc    := uopMove
+    when( !uop.is_sfb_shadow && cs.uopc === uopORI && inst(21,10) === 0.U){
+        uop.uopc    := uopMOV
     }
     when(cs.uopc === uopANDI && inst(21,0) === 0.U){
         uop.uopc    := uopNOP
