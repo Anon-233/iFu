@@ -4,8 +4,8 @@ import chisel3._
 import chisel3.util._
 
 class DivFuncCode {
-    val SZ_DIV_FN = 2
-    def FN_X    = BitPat("b??")
+    val SZ_DIV_FN = 4
+    def FN_X    = BitPat("b????")
     def FN_DIV  = 1.U(SZ_DIV_FN.W)  // 0b01
     def FN_DIVU = 0.U(SZ_DIV_FN.W)  // 0b00
     def FN_REM  = 3.U(SZ_DIV_FN.W)  // 0b11

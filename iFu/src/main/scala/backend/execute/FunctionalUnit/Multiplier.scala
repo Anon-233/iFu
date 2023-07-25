@@ -4,8 +4,8 @@ import chisel3._
 import chisel3.util._
 
 class MultFuncCode {
-    val SZ_MUL_FN = 2
-    def FN_X    = BitPat("b??")
+    val SZ_MUL_FN = 4
+    def FN_X    = BitPat("b????")
     def FN_MUL  = 3.U(SZ_MUL_FN.W)  // 0b11
     def FN_MULH = 1.U(SZ_MUL_FN.W)  // 0b01
     def FN_MULHU= 0.U(SZ_MUL_FN.W)  // 0b00
