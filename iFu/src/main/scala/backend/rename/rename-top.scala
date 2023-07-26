@@ -4,6 +4,8 @@ import chisel3._
 import chisel3.util._
 import iFu.common._
 
+//TODO:move指令优化
+
 class RenameTopIO(
     val plWidth: Int,
     val numPhysRegs: Int,
