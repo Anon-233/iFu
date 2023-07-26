@@ -4,64 +4,64 @@ import chisel3._
 import chisel3.util._
 
 /*
-各部件行为：
-DcacheMeta：
-
-s0传入的lsu请求信息会进行查找，
-
-s1阶段，如果命中，反馈hit，hitPos，如果miss，传出miss后可以
-进行置换的replacePos，(特别的如果发生了store命中readonly，这也算miss)
-
-s2阶段如果是命中的store指令，就将对应的metaline的dirty置为true后写回
-
-s3写完
-
-
-s1传入的mshr来的fetch请求读取metaline
-然后在s2阶段将读好的信息传给RPU
-
-对于RPU传好的新信息，s1阶段将这些信息发起写回，s2完成
-
-总结：双读写端口，一对读写端口用于lsu请求，
-    一读端口用于mshr的fetch请求，一个写端口用于RPU的写回
-
-
-DcacheData：
-
-s1命中的lsu请求去读取对应的dataline，
-s2读好dataline，load指令就读，store指令的话准备好wdata，最终于s3写回
-
-对于RPU传好的新信息，s1阶段将这些信息发起写回，s2完成
-
-总结：双读写端口，一对读写端口用于lsu请求，
-    一读端口用于mshr的fetch请求，一个写端口用于RPU的写回
-
-
-ReplaceUnit：
-
-负责替换行为，包括fetch和writeback，
-
-mshr要求替换的时候，会先在s0发起请求，随着流水线按照所给地址，命中的路等信息去读metaline，dataline
-然后在s2阶段将将这些信息连同读好的metaline，dataline一并给RPU
-RPU会在s3阶段启动替换行为
-
-当替换完成之后，RPU会将新的metaline，dataline，路号，写回地址等信息在s0随着流水线，
-s1写回DcacheMeta，s2写回DcacheData，同时，将替换完成的信息通知mshr
-
-MSHRFile：
-任何指令发生miss，都会传给mshr
-mshr不满，就能接受任何load指令，同时mshr规定至多存一个store指令
-除了prefetch对Replace的请求之外， mshr负责调控所有miss指令的信号的fetch
-
-mshr的replay会在s0阶段发起，重新随流水线做完这个任务
-
-NonBlockingDcache：
-负责调控整个流水线的行为
-s0阶段，在各种请求之间选择
-
-注：对所有的内部事务，最后不回传任何东西。
-    对成功走到s2的lsu和replay回传resp。
-    对miss的store，必然传回nack，对miss的load，如果mshr未满，什么都不穿，满了传nack
+ * 各部件行为：
+ * DcacheMeta：
+ * 
+ * s0传入的lsu请求信息会进行查找，
+ * 
+ * s1阶段，如果命中，反馈hit，hitPos，如果miss，传出miss后可以
+ * 进行置换的replacePos，(特别的如果发生了store命中readonly，这也算miss)
+ * 
+ * s2阶段如果是命中的store指令，就将对应的metaline的dirty置为true后写回
+ * 
+ * s3写完
+ * 
+ * 
+ * s1传入的mshr来的fetch请求读取metaline
+ * 然后在s2阶段将读好的信息传给RPU
+ * 
+ * 对于RPU传好的新信息，s1阶段将这些信息发起写回，s2完成
+ * 
+ * 总结：双读写端口，一对读写端口用于lsu请求，
+ *     一读端口用于mshr的fetch请求，一个写端口用于RPU的写回
+ * 
+ * 
+ * DcacheData：
+ * 
+ * s1命中的lsu请求去读取对应的dataline，
+ * s2读好dataline，load指令就读，store指令的话准备好wdata，最终于s3写回
+ * 
+ * 对于RPU传好的新信息，s1阶段将这些信息发起写回，s2完成
+ * 
+ * 总结：双读写端口，一对读写端口用于lsu请求，
+ *     一读端口用于mshr的fetch请求，一个写端口用于RPU的写回
+ * 
+ * 
+ * ReplaceUnit：
+ * 
+ * 负责替换行为，包括fetch和writeback，
+ * 
+ * mshr要求替换的时候，会先在s0发起请求，随着流水线按照所给地址，命中的路等信息去读metaline，dataline
+ * 然后在s2阶段将将这些信息连同读好的metaline，dataline一并给RPU
+ * RPU会在s3阶段启动替换行为
+ * 
+ * 当替换完成之后，RPU会将新的metaline，dataline，路号，写回地址等信息在s0随着流水线，
+ * s1写回DcacheMeta，s2写回DcacheData，同时，将替换完成的信息通知mshr
+ * 
+ * MSHRFile：
+ * 任何指令发生miss，都会传给mshr
+ * mshr不满，就能接受任何load指令，同时mshr规定至多存一个store指令
+ * 除了prefetch对Replace的请求之外， mshr负责调控所有miss指令的信号的fetch
+ * 
+ * mshr的replay会在s0阶段发起，重新随流水线做完这个任务
+ * 
+ * NonBlockingDcache：
+ * 负责调控整个流水线的行为
+ * s0阶段，在各种请求之间选择
+ * 
+ * 注：对所有的内部事务，最后不回传任何东西。
+ *     对成功走到s2的lsu和replay回传resp。
+ *     对miss的store，必然传回nack，对miss的load，如果mshr未满，什么都不穿，满了传nack
 */
 
 
@@ -450,34 +450,32 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
 }
 
 
-class lsuDMemIO extends Bundle with HasDcacheParameters
-{
-  // In lsu's dmem stage, send the request
-  val req         = new DecoupledIO(Valid(new DCacheReq))
-  // In lsu's LCAM search stage, kill if order fail (or forwarding possible)
-  val s1kill     = Output(Bool())
-  // Get a request any cycle
-  val resp        = Flipped(new ValidIO(new DCacheResp))
-  // In our response stage, if we get a nack, we need to reexecute
-    //   拿不到数据，需要重复执行,用这个可以实现重复执行
-  val nack        = Flipped(new ValidIO(new DCacheReq))
+class lsuDMemIO extends Bundle with HasDcacheParameters {
+    // In lsu's dmem stage, send the request
+    val req         = new DecoupledIO(Valid(new DCacheReq))
+    // In lsu's LCAM search stage, kill if order fail (or forwarding possible)
+    val s1kill     = Output(Bool())
+    // Get a request any cycle
+    val resp        = Flipped(new ValidIO(new DCacheResp))
+    // In our response stage, if we get a nack, we need to reexecute
+        //   拿不到数据，需要重复执行,用这个可以实现重复执行
+    val nack        = Flipped(new ValidIO(new DCacheReq))
 
-  val brupdate       = Output(new BrUpdateInfo)
-  val exception    = Output(Bool())
+    val brupdate       = Output(new BrUpdateInfo)
+    val exception    = Output(Bool())
 
-//   这两个好像没用
-//   val rob_pnr_idx  = Output(UInt(robAddrSz.W))
-//   val rob_head_idx = Output(UInt(robAddrSz.W))
+    //   这两个好像没用
+    //   val rob_pnr_idx  = Output(UInt(robAddrSz.W))
+    //   val rob_head_idx = Output(UInt(robAddrSz.W))
 
-  // Clears prefetching MSHRs
-  val forceOrder  = Output(Bool())
-  val ordered     = Input(Bool())
+    // Clears prefetching MSHRs
+    val forceOrder  = Output(Bool())
+    val ordered     = Input(Bool())
 
-  val perf = Input(new Bundle {
-    val acquire = Bool()
-    val release = Bool()
-  })
-
+    val perf = Input(new Bundle {
+        val acquire = Bool()
+        val release = Bool()
+    })
 }
 
 
