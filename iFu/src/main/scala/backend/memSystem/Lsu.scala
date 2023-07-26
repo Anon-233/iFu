@@ -1,12 +1,12 @@
 package backend.memSystem
 
-import Chisel.{DecoupledIO, ValidIO}
-import chisel3.{Mux, _}
+import chisel3._
 import chisel3.util._
-import iFu.common.{CoreBundle, CoreModule, MicroOp}
-import backend.memSystem.LSUConsts._
-import iFu.backend.CommitSignals
-import iFu.frontend.WrapInc
+
+import iFu.common._
+import backend.memSystem.LSUConsts._    // TODO
+import iFu.backend.CommitSignals        // TODO
+import iFu.frontend.WrapInc             // TODO
 
 //TODO  memWidth为2，如果为1，需要wakeup不成功后增加一周期delay  Done
 //TODO tlb_miss抛出异常。
@@ -14,8 +14,7 @@ import iFu.frontend.WrapInc
 //TODO 删除release，observed等代码，load可以乱序   Done
 //TODO 增加TLB相关逻辑，包括异常检测，发送DCache请求时的地址,发送数据给tlb
 //TODO LSU会将vaddr的idx位发给DCache，TLB_MISS在s1_kill掉请求
-object IsKilledByBranch
-{
+object IsKilledByBranch {
     def apply(brupdate: BrUpdateInfo, uop: MicroOp): Bool = {
         return maskMatch(brupdate.b1.mispredict_mask, uop.br_mask)
     }
@@ -25,8 +24,7 @@ object IsKilledByBranch
     }
 }
 
-object AgePriorityEncoder
-{
+object AgePriorityEncoder {
     def apply(in: Seq[Bool], head: UInt): UInt = {
         val n = in.size
         val width = log2Ceil(in.size)
@@ -37,22 +35,16 @@ object AgePriorityEncoder
     }
 }
 
-/**
- * Object to determine whether queue
- * index i0 is older than index i1.
- */
-object IsOlder
-{
+object IsOlder {
     def apply(i0: UInt, i1: UInt, head: UInt) = ((i0 < i1) ^ (i0 < head) ^ (i1 < head))
 }
-object LSUConsts
-{
+
+object LSUConsts {
+    val xLen = 32
+    val paddrBits = 32  // ???
+
     val memWidth = 2
-    val coreDataBits = 32
-    val robAddrSz = 5
-
-    val coreMaxAddrBits = 32
-
+    val robAddrSz = 5   // TODO
 
     val numLdqEntries = 32
     val numStqEntries = 32
@@ -60,62 +52,49 @@ object LSUConsts
 
     val ldqAddrSz = log2Ceil(numLdqEntries)
     val stqAddrSz = log2Ceil(numStqEntries)
-    val lsuAddrSz = ldqAddrSz max stqAddrSz
+    val lsuAddrSz = max(ldqAddrSz, stqAddrSz)
 
     val maxPregSz = numIntPhysRegs
-
-    val xLen = 32
-    val paddrBits = 32
 }
 
-class LSUExeIO extends CoreBundle
-{
-    val req     = Flipped(new ValidIO(new FuncUnitResp))
-    val iresp   = new DecoupledIO(new ExeUnitResp)
+class LSUExeIO extends CoreBundle {
+    val req     = Flipped(new Valid(new FuncUnitResp))
+    val iresp   = new Decoupled(new ExeUnitResp)
 }
 
-class DCacheReq extends CoreBundle
-{
-    val addr    = UInt(vaddrBits.W)
-    val data    = Bits(coreDataBits.W)
-    val is_hella    = Bool()
+class DCacheReq extends CoreBundle {
+    val uop         = new MicroOp()
+    val addr        = UInt(vaddrBits.W)
+    val data        = Bits(xLen.W)
 }
 
-class DCacheResp extends CoreBundle
-{
-    val data = Bits(coreDataBits.W)
-    val is_hella = Bool()
+class DCacheResp extends CoreBundle {
+    val uop  = new MicroOp()
+    val data = Bits(xLen.W)
 }
 
-class LSUDMemIO extends CoreBundle
-{
-    val req         = new DecoupledIO(Vec(memWidth,Valid(new DCacheReq)))
+// lsu <> dcache 
+class LSUDMemIO extends CoreBundle {
+    val req         = new Decoupled(Vec(memWidth,Valid(new DCacheReq)))
     val s1_kill     = Output(Vec(memWidth, Bool()))
-    val resp        = Flipped(Vec(memWidth, new ValidIO(new DCacheResp)))
+    val resp        = Flipped(Vec(memWidth, new Valid(new DCacheResp)))
 
-    val nack        = Flipped(Vec(memWidth, new ValidIO(new DCacheReq)))
+    val nack        = Flipped(Vec(memWidth, new Valid(new DCacheReq)))
 
     val brupdate    = Output(new BrUpdateInfo)
     val exception   = Output(Bool())
-    val rob_pnr_idx = Output(UInt(robAddrSz.W))
     val rob_head_idx = Output(UInt(robAddrSz.W))
-
-//    val release     = Flipped(new DecoupledIO(new TLBundleC(edge.bundle)))
 
     val force_order = Output(Bool())
     val ordered     = Input(Bool())
-
-    val perf = Input(new Bundle {
-        val acquire = Bool()
-        val release = Bool()
-    })
 }
+
 /**
- * 输入dispatch阶段的uop,commit的信息,rob,brupdate
- * 输出ldq，stq的索引，是否full,给rob的clear信号
+ * 输入dispatch阶段的uop，commit的信息，rob，brupdate
+ * 输出ldq，stq的索引，是否full，给rob的clear信号
  */
-class LSUCoreIO extends CoreBundle
-{
+// lsu <> core
+class LSUCoreIO extends CoreBundle {
     val exe = Vec(memWidth, new LSUExeIO)
 
     val dis_uops    = Flipped(Vec(coreWidth, Valid(new MicroOp)))
@@ -128,141 +107,113 @@ class LSUCoreIO extends CoreBundle
     val commit      = Input(new CommitSignals)
     val commit_load_at_rob_head = Input(Bool())
 
-    val clr_bsy     = Output(Vec(memWidth,Valid(UInt(robAddrSz.W))))
+    val clr_bsy     = Output(Vec(memWidth,Valid(UInt(robAddrSz.W))))    // TODO
 
     val clr_unsafe  = Output(Vec(memWidth, Valid(UInt(robAddrSz.W))))
 
     val fence_dmem  = Input(Bool())
 
     // Speculatively tell the IQs that we'll get load data back next cycle
-
     val spec_ld_wakeup = Output(Vec(memWidth, Valid(UInt(maxPregSz.W))))
-
     val ld_miss     = Output(Bool())
 
     val brupdate    = Input(new BrUpdateInfo)
-    val rob_pnr_idx = Input(UInt(robAddrSz.W))        //协处理器？
     val rob_head_idx= Input(UInt(robAddrSz.W))
     val exception   = Input(Bool())
 
     val fencei_rdy  = Output(Bool())
 
     val lxcpt       = Output(Valid(new Exception))
-
-    val tsc_reg     = Input(UInt())
-
-    val perf = Output(new Bundle {
-        val acquire = Bool()
-        val release = Bool()
-        val tlbMiss = Bool()
-    })
 }
 
-class LSUIO extends CoreBundle
-{
-//    val ptw     = new TLBPTWIO
+class LSUIO extends CoreBundle {
     val core    = new LSUCoreIO
     val dmem    = new LSUDMemIO
-
-//    val hellacache = Flipped(new HellaCacheIO)
 }
 
-class LDQEntry extends CoreBundle
-{
+class LDQEntry extends CoreBundle {
     val uop         = new MicroOp
-    val addr        = Valid(UInt(coreMaxAddrBits.W))
+    val addr        = Valid(UInt(xLen.W))
     val addr_is_virtual = Bool()
 
     val executed    = Bool()
-    val succeeded   = Bool()
-    val order_fail  = Bool()
-    val observed    = Bool()
+    val succeeded   = Bool() // dcache 返回结果
+    val order_fail  = Bool() // raw 冒险
 
     val st_dep_mask = UInt(numStqEntries.W)
-    val youngest_stq_idx = UInt(stqAddrSz.W)
+    val youngest_stq_idx = UInt(stqAddrSz.W) // 第一条晚于该load的store指令
 
     val forward_std_val = Bool()
     val forward_stq_idx = UInt(stqAddrSz.W)
-
-    val debug_wb_data   = UInt(xLen.W)
 }
 
-class STQEntry extends CoreBundle
-{
+class STQEntry extends CoreBundle {
     val uop     = new MicroOp
-    val addr    = Valid(UInt(coreMaxAddrBits.W))
+    val addr    = Valid(UInt(xLen.W))
     val addr_is_virtual = Bool()
     val data    = Valid(UInt(xLen.W))
 
     val committed   = Bool()
-    val succeeded   = Bool()
-
-    val debug_wb_data = UInt(xLen.W)
+    val succeeded   = Bool() // 访存成功
 }
 
-class Lsu extends CoreModule
-{
+class Lsu extends CoreModule {
+/*=============================================================================*/
+    def widthMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
+/*=============================================================================*/
     val io = IO(new LSUIO)
 
     val ldq = Reg(Vec(numLdqEntries, Valid(new LDQEntry)))
     val stq = Reg(Vec(numStqEntries, Valid(new STQEntry)))
 
-
-    val ldq_head        = Reg(UInt(ldqAddrSz.W))
+    val ldq_head = Reg(UInt(ldqAddrSz.W))
     val ldq_tail = Reg(UInt(ldqAddrSz.W))
-    val stq_head = Reg(UInt(stqAddrSz.W)) // point to next store to clear from STQ (i.e., send to memory)
+    val stq_head = Reg(UInt(stqAddrSz.W)) // will dequeue
     val stq_tail = Reg(UInt(stqAddrSz.W))
-    val stq_commit_head = Reg(UInt(stqAddrSz.W)) // point to next store to commit
+    val stq_commit_head = Reg(UInt(stqAddrSz.W))  // point to next store to commit
     val stq_execute_head = Reg(UInt(stqAddrSz.W)) // point to next store to execute
-    // If we got a mispredict, the tail will be misaligned for 1 extra cycle
-    assert(io.core.brupdate.b2.mispredict ||
-            stq(stq_execute_head).valid ||
-            stq_head === stq_execute_head ||
-            stq_tail === stq_execute_head,
-        "stq_execute_head got off track.")
 
+    /* --------------------------------------------------------------------- */
+    /* If we got a mispredict, the tail will be misaligned for 1 extra cycle */
+    /* --------------------------------------------------------------------- */
 
+    // TODO: check this
+    assert(io.core.brupdate.b2.mispredict || stq(stq_execute_head).valid ||
+           stq_head === stq_execute_head || stq_tail === stq_execute_head,
+        "stq_execute_head got off track."
+    )
 
-//    val dtlb = Module(new NBDTLB(
-//        instruction = false, lgMaxSize = log2Ceil(coreDataBytes), rocket.TLBConfig(dcacheParams.nTLBSets, dcacheParams.nTLBWays)))
+    // TODO: add a dtlb / tlb ?
+    //    val dtlb = Module(new NBDTLB(
+    //        instruction = false, lgMaxSize = log2Ceil(coreDataBytes), rocket.TLBConfig(dcacheParams.nTLBSets, dcacheParams.nTLBWays)))
 
-//    io.ptw <> dtlb.io.ptw
-//    io.core.perf.tlbMiss := io.ptw.req.fire
-    io.core.perf.acquire := io.dmem.perf.acquire
-    io.core.perf.release := io.dmem.perf.release
+    val clear_store = WireInit(false.B) // 清空一条指令
+    val live_store_mask = RegInit(0.U(numStqEntries.W)) // 当前哪些位置有store指令 // diff with valid?
+    var next_live_store_mask = Mux(clear_store, 
+        live_store_mask & ~(1.U << stq_head), // -> 如果store指令提交了，那么该位置零
+        live_store_mask
+    )
 
-
-    val clear_store = WireInit(false.B)
-    val live_store_mask = RegInit(0.U(numStqEntries.W)) //当前哪些位置有store指令
-    var next_live_store_mask = Mux(clear_store, live_store_mask & ~(1.U << stq_head),
-        live_store_mask) //如果store指令提交了，那么该位=0，
-
-
-    def widthMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
-
-
+/*=============================================================================*/
     //-------------------------------------------------------------
+    // Dequeue store entries
     //-------------------------------------------------------------
-    // Enqueue new entries
-    //-------------------------------------------------------------
-    //-------------------------------------------------------------
-
-    // This is a newer store than existing loads, so clear the bit in all the store dependency masks
-    for (i <- 0 until numLdqEntries) //store指令提交后，修改ldq中与该条指令有关的位
-    {
+    for (i <- 0 until numLdqEntries) { // store指令提交后，修改ldq中与该条指令有关的位
         when(clear_store) {
             ldq(i).bits.st_dep_mask := ldq(i).bits.st_dep_mask & ~(1.U << stq_head)
         }
     }
-
-    // Decode stage
-    var ld_enq_idx = ldq_tail //写入尾部
+    //-------------------------------------------------------------
+    // Dequeue store entries
+    //-------------------------------------------------------------
+/*=============================================================================*/
+    //-------------------------------------------------------------
+    // Enqueue new entries
+    //-------------------------------------------------------------
+    var ld_enq_idx = ldq_tail
     var st_enq_idx = stq_tail
-
-    val stq_nonempty = (0 until numStqEntries).map { i => stq(i).valid }.reduce(_ || _) =/= 0.U
-
-    var ldq_full = Bool() //ldq满了
-    var stq_full = Bool() //stq满了
+    var ldq_full = Bool() // 过程中出现ldq已满
+    var stq_full = Bool() // 过程中出现stq已满
 
     for (w <- 0 until coreWidth) {
         ldq_full = WrapInc(ld_enq_idx, numLdqEntries) === ldq_head
@@ -272,7 +223,8 @@ class Lsu extends CoreModule
         stq_full = WrapInc(st_enq_idx, numStqEntries) === stq_head
         io.core.stq_full(w) := stq_full
         io.core.dis_stq_idx(w) := st_enq_idx
-        //进站
+
+        // enq
         val dis_ld_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.use_ldq && !io.core.dis_uops(w).bits.exception
         val dis_st_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.use_stq && !io.core.dis_uops(w).bits.exception
         when(dis_ld_val) {
@@ -285,31 +237,30 @@ class Lsu extends CoreModule
             ldq(ld_enq_idx).bits.executed := false.B
             ldq(ld_enq_idx).bits.succeeded := false.B
             ldq(ld_enq_idx).bits.order_fail := false.B
-            ldq(ld_enq_idx).bits.observed := false.B
             ldq(ld_enq_idx).bits.forward_std_val := false.B
 
             assert(ld_enq_idx === io.core.dis_uops(w).bits.ldqIdx, "[lsu] mismatch enq load tag.")
             assert(!ldq(ld_enq_idx).valid, "[lsu] Enqueuing uop is overwriting ldq entries")
+        } .elsewhen(dis_st_val) {
+            stq(st_enq_idx).valid := true.B
+            stq(st_enq_idx).bits.uop := io.core.dis_uops(w).bits
+
+            stq(st_enq_idx).bits.addr.valid := false.B
+            stq(st_enq_idx).bits.data.valid := false.B
+            stq(st_enq_idx).bits.committed := false.B
+            stq(st_enq_idx).bits.succeeded := false.B
+
+            assert(st_enq_idx === io.core.dis_uops(w).bits.stqIdx, "[lsu] mismatch enq store tag.")
+            assert(!stq(st_enq_idx).valid, "[lsu] Enqueuing uop is overwriting stq entries")
         }
-                .elsewhen(dis_st_val) {
-                    stq(st_enq_idx).valid := true.B
-                    stq(st_enq_idx).bits.uop := io.core.dis_uops(w).bits
-                    stq(st_enq_idx).bits.addr.valid := false.B
-                    stq(st_enq_idx).bits.data.valid := false.B
-                    stq(st_enq_idx).bits.committed := false.B
-                    stq(st_enq_idx).bits.succeeded := false.B
 
-                    assert(st_enq_idx === io.core.dis_uops(w).bits.stqIdx, "[lsu] mismatch enq store tag.")
-                    assert(!stq(st_enq_idx).valid, "[lsu] Enqueuing uop is overwriting stq entries")
-                }
+        ld_enq_idx = Mux(dis_ld_val, WrapInc(ld_enq_idx, numLdqEntries), ld_enq_idx)
+        st_enq_idx = Mux(dis_st_val, WrapInc(st_enq_idx, numStqEntries), st_enq_idx)
 
-        ld_enq_idx = Mux(dis_ld_val, WrapInc(ld_enq_idx, numLdqEntries),
-            ld_enq_idx)
-
-        next_live_store_mask = Mux(dis_st_val, next_live_store_mask | (1.U << st_enq_idx),
-            next_live_store_mask)
-        st_enq_idx = Mux(dis_st_val, WrapInc(st_enq_idx, numStqEntries),
-            st_enq_idx)
+        next_live_store_mask = Mux(dis_st_val,      // 新增store指令
+            next_live_store_mask | (1.U << st_enq_idx),
+            next_live_store_mask
+        )
 
         assert(!(dis_ld_val && dis_st_val), "A UOP is trying to go into both the LDQ and the STQ")
     }
@@ -317,23 +268,23 @@ class Lsu extends CoreModule
     ldq_tail := ld_enq_idx
     stq_tail := st_enq_idx
 
+    // TODO: cacop? fence?
+    val stqEmpty = (0 until numStqEntries).map{ i => stq(i).valid }.asUInt === 0.U
     io.dmem.force_order := io.core.fence_dmem
-    io.core.fencei_rdy := !stq_nonempty && io.dmem.ordered
-
-
+    io.core.fencei_rdy := stqEmpty && io.dmem.ordered
     //-------------------------------------------------------------
+    // Enqueue new entries
+    //-------------------------------------------------------------
+/*=============================================================================*/
     //-------------------------------------------------------------
     // Execute stage (access TLB, send requests to Memory)
     //-------------------------------------------------------------
-    //-------------------------------------------------------------
 
-    // We can only report 1 exception per cycle.
-    // Just be sure to report the youngest one
+    // TODO: which instruction should we select?
     val mem_xcpt_valid = Wire(Bool())
     val mem_xcpt_cause = Wire(UInt())
     val mem_xcpt_uop = Wire(new MicroOp)
     val mem_xcpt_vaddr = Wire(UInt())
-
 
     //---------------------------------------
     // Can-fire logic and wakeup/retry select
@@ -350,12 +301,11 @@ class Lsu extends CoreModule
     val will_fire_load_wakeup = Wire(Vec(memWidth, Bool()))
 
     val exe_req = WireInit(VecInit(io.core.exe.map(_.req)))
+
     // Sfence goes through all pipes
     for (i <- 0 until memWidth) {
         when(io.core.exe(i).req.bits.sfence.valid) {
-            exe_req := VecInit(Seq.fill(memWidth) {
-                io.core.exe(i).req
-            })
+            exe_req := VecInit(Seq.fill(memWidth){ io.core.exe(i).req })
         }
     }
 
@@ -368,20 +318,15 @@ class Lsu extends CoreModule
     val p1_block_load_mask = RegNext(block_load_mask)
     val p2_block_load_mask = RegNext(p1_block_load_mask)
 
-    // Prioritize emptying the store queue when it is almost full
-    val stq_almost_full = RegNext(WrapInc(WrapInc(st_enq_idx, numStqEntries), numStqEntries) === stq_head ||
-            WrapInc(st_enq_idx, numStqEntries) === stq_head)
-
     // The store at the commit head needs the DCache to appear ordered
     // Delay firing load wakeups and retries now
     val store_needs_order = WireInit(false.B)
-    //将要到来的ldq和stq里的元素
+    // 将要到来的ldq和stq里的元素
     val ldq_incoming_idx = widthMap(i => exe_req(i).bits.uop.ldq_idx)
     val ldq_incoming_e = widthMap(i => ldq(ldq_incoming_idx(i)))
 
     val stq_incoming_idx = widthMap(i => exe_req(i).bits.uop.stq_idx)
     val stq_incoming_e = widthMap(i => stq(stq_incoming_idx(i)))
-
 
     val stq_commit_e = stq(stq_execute_head)
     //TODO 使用RegNext，或许是为了改善时序，把wakeup_idx的选择放在s2
@@ -493,10 +438,6 @@ class Lsu extends CoreModule
     }
     assert((memWidth == 1).B ||
             (!(will_fire_sfence.reduce(_ || _) && !will_fire_sfence.reduce(_ && _)) &&
-//                    !will_fire_hella_incoming.reduce(_ && _) &&
-//                    !will_fire_hella_wakeup.reduce(_ && _) &&
-//                    !will_fire_load_retry.reduce(_ && _) &&
-//                    !will_fire_sta_retry.reduce(_ && _) &&
                     !will_fire_store_commit.reduce(_ && _) &&
                     !will_fire_load_wakeup.reduce(_ && _)),
         "Some operations is proceeding down multiple pipes")
@@ -624,7 +565,6 @@ class Lsu extends CoreModule
     io.dmem.brupdate := io.core.brupdate
     io.dmem.exception := io.core.exception
     io.dmem.rob_head_idx := io.core.rob_head_idx
-    io.dmem.rob_pnr_idx := io.core.rob_pnr_idx
 
     val dmem_req = Wire(Vec(memWidth, Valid(new DCacheReq)))
     io.dmem.req.valid := dmem_req.map(_.valid).reduce(_ || _)
@@ -639,7 +579,6 @@ class Lsu extends CoreModule
         dmem_req(w).bits.uop := NullMicroOp
         dmem_req(w).bits.addr := 0.U
         dmem_req(w).bits.data := 0.U
-        dmem_req(w).bits.is_hella := false.B
 
         io.dmem.s1_kill(w) := false.B
 
@@ -1058,7 +997,6 @@ class Lsu extends CoreModule
         // Handle the response
         when(io.dmem.resp(w).valid) {
             when(io.dmem.resp(w).bits.uop.uses_ldq) {
-                assert(!io.dmem.resp(w).bits.is_hella)
                 val ldq_idx = io.dmem.resp(w).bits.uop.ldq_idx
                 val send_iresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FIX
 
@@ -1069,18 +1007,14 @@ class Lsu extends CoreModule
                 dmem_resp_fired(w) := true.B
 
                 ldq(ldq_idx).bits.succeeded := io.core.exe(w).iresp.valid
-                ldq(ldq_idx).bits.debug_wb_data := io.dmem.resp(w).bits.data
             }
                     .elsewhen(io.dmem.resp(w).bits.uop.uses_stq) {
-                        assert(!io.dmem.resp(w).bits.is_hella)
                         stq(io.dmem.resp(w).bits.uop.stq_idx).bits.succeeded := true.B
                         when(io.dmem.resp(w).bits.uop.is_amo) {
                             dmem_resp_fired(w) := true.B
                             io.core.exe(w).iresp.valid := true.B
                             io.core.exe(w).iresp.bits.uop := stq(io.dmem.resp(w).bits.uop.stq_idx).bits.uop
                             io.core.exe(w).iresp.bits.data := io.dmem.resp(w).bits.data
-
-                            stq(io.dmem.resp(w).bits.uop.stq_idx).bits.debug_wb_data := io.dmem.resp(w).bits.data
                         }
                     }
         }
@@ -1097,11 +1031,11 @@ class Lsu extends CoreModule
                     val live = !IsKilledByBranch(io.core.brupdate, forward_uop)
                     val storegen = StoreGen(
                         stq_e.bits.uop.mem_size, stq_e.bits.addr.bits,
-                        stq_e.bits.data.bits, coreDataBits/8)
+                        stq_e.bits.data.bits, xLen/8)
                     val loadgen = LoadGen(
                         forward_uop.mem_size, forward_uop.mem_signed,
                         wb_forward_ld_addr(w),
-                        storegen.data, false.B, coreDataBits/8)
+                        storegen.data, false.B, xLen/8)
 
                     io.core.exe(w).iresp.valid := (forward_uop.dst_rtype === RT_FIX) && data_ready && live
                     io.core.exe(w).iresp.bits.uop := forward_uop
@@ -1111,8 +1045,6 @@ class Lsu extends CoreModule
                         ldq(f_idx).bits.succeeded := data_ready
                         ldq(f_idx).bits.forward_std_val := true.B
                         ldq(f_idx).bits.forward_stq_idx := wb_forward_stq_idx(w)
-
-                        ldq(f_idx).bits.debug_wb_data := loadgen.data
                     }
                 }
     }
@@ -1199,17 +1131,6 @@ class Lsu extends CoreModule
             ldq(idx).bits.forward_std_val := false.B
 
         }
-
-//        if (MEMTRACE_PRINTF) {
-//            when(commit_store || commit_load) {
-//                val uop = Mux(commit_store, stq(idx).bits.uop, ldq(idx).bits.uop)
-//                val addr = Mux(commit_store, stq(idx).bits.addr.bits, ldq(idx).bits.addr.bits)
-//                val stdata = Mux(commit_store, stq(idx).bits.data.bits, 0.U)
-//                val wbdata = Mux(commit_store, stq(idx).bits.debug_wb_data, ldq(idx).bits.debug_wb_data)
-//                printf("MT %x %x %x %x %x %x %x\n",
-//                    io.core.tsc_reg, uop.uopc, uop.mem_cmd, uop.mem_size, addr, stdata, wbdata)
-//            }
-//        }
 
         temp_stq_commit_head = Mux(commit_store,
             WrapInc(temp_stq_commit_head, numStqEntries),
@@ -1306,11 +1227,6 @@ class Lsu extends CoreModule
 }
 
 // -------------------------------------Utils----------------------------------------
-/**
- * Object to take an address and generate an 8-bit mask of which bytes within a
- * double-word.
- */
-
 
 object GenByteMask {
     def apply(addr: UInt, size: UInt): UInt = {
@@ -1323,10 +1239,6 @@ object GenByteMask {
     }
 }
 
-
-/**
- * ...
- */
 class ForwardingAgeLogic(num_entries: Int) extends CoreModule{
     val io = IO(new Bundle {
         val addr_matches = Input(UInt(num_entries.W)) // bit vector of addresses that match
@@ -1366,6 +1278,7 @@ class ForwardingAgeLogic(num_entries: Int) extends CoreModule{
 
     io.forwarding_val := found_match
 }
+
 class StoreGen(typ: UInt, addr: UInt, dat: UInt, maxSize: Int) {
     val size = typ(log2Up(log2Up(maxSize)+1)-1,0)
     def misaligned: Bool =
@@ -1407,18 +1320,12 @@ class LoadGen(typ: UInt, signed: Bool, addr: UInt, dat: UInt, zero: Bool, maxSiz
     def wordData = genData(2)
     def data = genData(0)
 }
-/**
- * Object to check if at least 1 bit matches in two masks
- */
-object maskMatch
-{
+
+object maskMatch {
     def apply(msk1: UInt, msk2: UInt): Bool = (msk1 & msk2) =/= 0.U
 }
-/**
- * Object to return a BR mask given a MicroOp mask and old BR mask.
- */
-object GetNewBrMask
-{
+
+object GetNewBrMask {
     def apply(brupdate: BrUpdateInfo, uop: MicroOp): UInt = {
         return uop.brMask & ~brupdate.b1.resolve_mask
     }
@@ -1427,8 +1334,8 @@ object GetNewBrMask
         return br_mask & ~brupdate.b1.resolve_mask
     }
 }
-object UpdateBrMask
-{
+
+object UpdateBrMask {
     def apply(brupdate: BrUpdateInfo, uop: MicroOp): MicroOp = {
         val out = WireInit(uop)
         out.brMask := GetNewBrMask(brupdate, uop)
