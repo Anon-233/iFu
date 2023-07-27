@@ -37,12 +37,12 @@ class BimPredictor extends Module with HasBimParameters{
 
     when(resetIdx === (nSets-1).U){ reseting := false.B}
 
-    val ram = SyncReadMem(nSets,Vec(bankWidth,UInt(2.W)))
+    val bimRam = SyncReadMem(nSets,Vec(bankWidth,UInt(2.W)))
 
     val s0idx = fetchIdx(io.s0pc)
     val s2valid = RegNext(RegNext(io.s0valid))
 
-    val s2rdata = RegNext(VecInit(ram.read(s0idx,io.s0valid).map(_.asTypeOf(UInt(2.W)))))
+    val s2rdata = RegNext(VecInit(bimRam.read(s0idx,io.s0valid).map(_.asTypeOf(UInt(2.W)))))
 
     for(w <- 0 until bankWidth){
         io.s2taken(w) := s2valid && s2rdata(w)(1) && !reseting
@@ -82,7 +82,7 @@ class BimPredictor extends Module with HasBimParameters{
                 (s1update.bits.cfiIdx.bits === w.U) &&
                 (
                     (s1update.bits.cfiIsBr) && (s1update.bits.cfiIsBr && s1update.bits.brMask(w) && s1update.bits.cfiTaken) ||
-                    s1update.bits.cfiIsJal 
+                    s1update.bits.cfiIsJal
                 )
             )
             val oldbimvalue = Mux(wrBypassHit ,
@@ -96,9 +96,9 @@ class BimPredictor extends Module with HasBimParameters{
     }
 
     when(reseting){
-        ram.write(resetIdx,VecInit(Seq.fill(bankWidth){2.U}), (~(0.U(bankWidth.W))).asBools)
+        bimRam.write(resetIdx,VecInit(Seq.fill(bankWidth){2.U}), (~(0.U(bankWidth.W))).asBools)
     }.elsewhen(s1update.valid && s1update.bits.isCommitUpdate){
-        ram.write(s1updateIdx,s1updatewData,s1updatewMask.asUInt.asBools)
+        bimRam.write(s1updateIdx,s1updatewData,s1updatewMask.asUInt.asBools)
     }
 
     when(s1updatewMask.reduce(_||_) && s1update.valid && s1update.bits.isCommitUpdate){

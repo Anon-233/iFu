@@ -22,6 +22,9 @@ class MSHRdata extends Bundle with HasDcacheParameters{
     // 该项将来充填，必然命中于replaceway，replay的时候不用再进行命中判断，而是直接去找那个路
     val way = UInt(log2Ceil(nWays).W)
 
+    // 流水线号
+    val pipeNumber = UInt(1.W)
+
     // 该项是否在等待fetch
     val waiting = Bool()
 
@@ -40,14 +43,18 @@ class MSHRdata extends Bundle with HasDcacheParameters{
 class MSHR extends Module with HasDcacheParameters{
     val io = IO{new Bundle{
         // 写入请求
-        val req = Flipped(Decoupled(new DCacheReq()))
+        val req = Flipped(Decoupled(Vec( memWidth , new DCacheReq())))
         // 传进来时候的replacePos(missAllocWay)
         val replacePos = Output(UInt(log2Ceil(nWays).W)) 
+        // 流水线号
+        val pipeNumber = Input(UInt(1.W))
 
         // 传出请求
         val replayReq = (Decoupled(new DCacheReq()))
         // 传出时候的hitpos
         val hitPos = Output(UInt(log2Ceil(nWays).W)) 
+        // 流水线号
+        val getPipeNumber = Output(UInt(1.W))
         // 这一项是否真正被replay执行完毕
         val replayDone = Input(Bool())
 
@@ -119,10 +126,13 @@ class MSHR extends Module with HasDcacheParameters{
         mshr.ready := false.B
         mshr.issued := false.B
         mshr.way := io.replacePos
+        mshr.pipeNumber := io.pipeNumber
     }
 
     // 传出id
     io.getID := mshr.id
+    // 传出流水线号
+    io.getPipeNumber := mshr.pipeNumber
 
     // TODO分支预测调整
     when(io.brupdate.valid){
@@ -184,6 +194,8 @@ class MSHRFile extends Module with HasDcacheParameters{
             val req  = Flipped( Decoupled(new DCacheReq)) 
             // 发生miss的请求的replacePos，用于之后读取被替换的行以及发给RPU去使用,以及replace的时候用
             val replacePos = Input(UInt(log2Ceil(nWays).W)) 
+            // 流水线号
+            val pipeNumberIn = Input(UInt(1.W))
 
         // 发起新的fetch请求
             // RPU是否空闲
@@ -198,6 +210,8 @@ class MSHRFile extends Module with HasDcacheParameters{
             val replay = Decoupled(new DCacheReq) 
             // replay对应的路
             val hitPos = Output(UInt(log2Ceil(nWays).W)) 
+            // 流水线号
+            val pipeNumberOut = Output(UInt(1.W))
             // replay是否执行完毕
             val replayDone = Input(Bool())
 
@@ -252,6 +266,7 @@ class MSHRFile extends Module with HasDcacheParameters{
         for(i <- 0 until nFirstMSHRs){ 
         firstMSHRs(i).req.bits := io.req.bits
         firstMSHRs(i).replacePos := io.replacePos
+        firstMSHRs(i).pipeNumber := io.pipeNumberIn
 
         // 一表的id是定好的行号
         firstMSHRs(i).id := i.U(log2Up(nFirstMSHRs).W)
@@ -296,6 +311,7 @@ class MSHRFile extends Module with HasDcacheParameters{
         // 二表相对于一表，只用来写入，和brupdate调整
         secondMSHRs(i).req.bits := io.req.bits
         secondMSHRs(i).replacePos := io.replacePos
+        secondMSHRs(i).pipeNumber := io.pipeNumberIn
         
         secondAllocatable(i) := secondMSHRs(i).req.ready
         
@@ -383,6 +399,7 @@ class MSHRFile extends Module with HasDcacheParameters{
         io.replay.valid := true.B
         io.replay.bits := secondMSHRs(replaypos).replayReq.bits
         io.hitPos := secondMSHRs(replaypos).hitPos
+        io.pipeNumberOut := secondMSHRs(replaypos).getPipeNumber
         // 如果外面接了，就告诉二表项，我已经取走了你的请求，可以准备清空了
         secondMSHRs(replaypos).replayReq.ready := io.replay.ready
     }.otherwise{

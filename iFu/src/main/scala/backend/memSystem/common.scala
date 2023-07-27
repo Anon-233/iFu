@@ -142,6 +142,8 @@ trait HasDcacheParameters {
     val vaddrBits = 32
     def nBlockAddrBits = vaddrBits - nOffsetBits
 
+    val memWidth = 2
+
     val nFirstMSHRs = 4
     val nSecondMSHRs = 8
 

@@ -55,20 +55,20 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
     }
 
     // 通过全局历史和表的行数，计算出折叠后的历史
-    def computeFoldedHist(hist: UInt, l: Int) = {
+    def computeFoldedHist(hist: UInt, l: Int): UInt = {
         val nChunks = (globalHistoryLength + l - 1) / l
-        val hist_chunks = (0 until nChunks) map {i =>
-        hist(min((i+1)*l, globalHistoryLength)-1, i*l)
+        val hist_chunks = (0 until nChunks) map { i =>
+            hist(min((i + 1) * l, globalHistoryLength) - 1, i * l)
         }
-        hist_chunks.reduce(_^_)
+        hist_chunks.reduce(_ ^ _)
     }
 
-// 通过pc和全局历史计算出行号和tag
-    def computeTagandHash(unhashed_idx: UInt, hist: UInt) = {
+    // 通过pc和全局历史计算出行号和tag
+    def computeTagandHash(unhashed_idx: UInt, hist: UInt): (UInt, UInt) = {
         val idx_history = computeFoldedHist(hist, log2Ceil(nRows))
-        val idx = (unhashed_idx ^ idx_history)(log2Ceil(nRows)-1,0)
+        val idx = (unhashed_idx ^ idx_history)(log2Ceil(nRows) - 1, 0)
         val tag_history = computeFoldedHist(hist, tagSz)
-        val tag = ((unhashed_idx >> log2Ceil(nRows)) ^ tag_history)(tagSz-1,0)
+        val tag = ((unhashed_idx >> log2Ceil(nRows)) ^ tag_history)(tagSz - 1, 0)
         (idx, tag)
     }
 
