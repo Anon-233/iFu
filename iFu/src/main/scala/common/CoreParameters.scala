@@ -1,46 +1,45 @@
 package iFu.common
 
-import backend.decode.common.IQT_INT
 import chisel3._
-import common.Consts
-import iFu.backend.IssueParams
 
-final case class BPUParameters(
-    // TODO: add more parameters
-)
+import common.Consts._
 
-final case class ICacheParameters(
-    blockBytes: Int = 256,
-    nBanks: Int = 2,
-    bankWidth: Int = 128, // blockBytes / nBanks
-    nSets: Int = 666666,
-    nWays: Int = 4,
-    tagBits: Int = 666666,
-    untagBits: Int = 666666,
-    blockOffBits : Int = 666666,
-    refillCycles : Int = 666666,
-    bankBytes: Int = 666666
+class BPUParameters {
+    val localHistoryLength: Int  = 0
+    val globalHistoryLength: Int = 0
+    val nRasEntries: Int         = 0
+}
 
-)
+class ICacheParameters {
+    val nBanks: Int        = 0
+    val nSets: Int         = 0
+    val nWays: Int         = 0
+    val tagBits: Int       = 0
+    val untagBits: Int     = 0
+    val blockOffBits : Int = 0
+    val refillCycles : Int = 0
+    val bankBytes: Int     = 0
+}
 
-final case class FrontendParameters(
-    iCacheParams: ICacheParameters = ICacheParameters(),
-    numFTQEntries: Int = 40,
-    numFBEntries: Int = 32,
-    fetchWidth: Int = 8,
-    fetchBytes: Int = 32
-)
+class FrontendParameters{
+    val fetchWidth: Int                = 0
+    val fetchBytes: Int                = fetchWidth * 4
+    val numFTQEntries: Int             = 0
+    val numFetchBufferEntries: Int     = 0
+    val iCacheParams: ICacheParameters = new ICacheParameters
+    val bpdParams: BPUParameters       = new BPUParameters
+    val bankWidth: Int                 = fetchWidth / iCacheParams.nBanks
+}
 
-trait HasCoreParameters extends Consts{
-    val vaddrBits: Int = 32                     // 虚拟地址位数
-    val paddrBits: Int = 32                     //物理地址位数
-    val coreInstrBytes: Int = 4                 // 指令字节数
-    val coreInstrBits: Int = coreInstrBytes * 8 // 指令位数
-    val bpdParams: BPUParameters = BPUParameters()
-    val frontendParams: FrontendParameters = FrontendParameters()
-    val coreWidth = 4                           // coreWith
-    val nBanks: Int = 2
+trait HasCoreParameters {
     val xLen: Int = 32
+    val vaddrBits: Int = xLen
+    val paddrBits: Int = xLen
+    val coreInstrBytes: Int = 4
+    val coreInstrBits: Int = coreInstrBytes * 8
+    val coreWidth = 4
+
+    val frontendParams: FrontendParameters = new FrontendParameters
     val issueParams: Seq[IssueParams] = Seq(
         IssueParams(issueWidth = 1, numIssueSlots = 16, iqType = IQT_MEM.litValue, dispatchWidth = 1),
         IssueParams(issueWidth = 2, numIssueSlots = 16, iqType = IQT_INT.litValue, dispatchWidth = 1))
