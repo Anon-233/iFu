@@ -9,55 +9,57 @@ import iFu.common.CoreModule
 /**
  * Top level core object that connects the Frontend to the rest of the pipeline.
  */
-class Core extends CoreModule
-{
-    val io = IO(new CoreBundle
-    {
-//        val interrupts = Input(new freechips.rocketchip.tile.CoreInterrupts())
-        val ifu = new boom.ifu.BoomFrontendIO       //TODO 添加到core中
+class Core extends CoreModule {
+    val io = IO(new CoreBundle {
+        //        val interrupts = Input(new freechips.rocketchip.tile.CoreInterrupts())
+        val ifu = new boom.ifu.BoomFrontendIO //TODO 添加到core中
         val lsu = Flipped(new boom.lsu.LSUCoreIO)
-//        val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
+        //        val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
     })
     //**********************************
     // construct all of the modules
 
     // Only holds integer-registerfile execution units.
-    val exe_units = new boom.exu.ExecutionUnits(fpu=false)
+    val exe_units = new boom.exu.ExecutionUnits(fpu = false)
     val jmp_unit_idx = exe_units.jmp_unit_idx
     val jmp_unit = exe_units(jmp_unit_idx)
 
 
-    val numIrfWritePorts        = exe_units.numIrfWritePorts + memWidth
-    val numLlIrfWritePorts      = exe_units.numLlIrfWritePorts
-    val numIrfReadPorts         = exe_units.numIrfReadPorts
+    val numIrfWritePorts = exe_units.numIrfWritePorts + memWidth
+    val numLlIrfWritePorts = exe_units.numLlIrfWritePorts
+    val numIrfReadPorts = exe_units.numIrfReadPorts
 
-    val numFastWakeupPorts      = exe_units.count(_.bypassable)
-    val numAlwaysBypassable     = exe_units.count(_.alwaysBypassable)
+    val numFastWakeupPorts = exe_units.count(_.bypassable)
+    val numAlwaysBypassable = exe_units.count(_.alwaysBypassable)
 
-    val numIntIssueWakeupPorts  = numIrfWritePorts + numFastWakeupPorts - numAlwaysBypassable // + memWidth for ll_wb
+    val numIntIssueWakeupPorts = numIrfWritePorts + numFastWakeupPorts - numAlwaysBypassable // + memWidth for ll_wb
     val numIntRenameWakeupPorts = numIntIssueWakeupPorts
 
-    val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
+    val decode_units = for (w <- 0 until decodeWidth) yield {
+        val d = Module(new DecodeUnit); d
+    }
     val dec_brmask_logic = Module(new BranchMaskGenerationLogic(coreWidth))
-    val rename_stage     = Module(new RenameStage(coreWidth, numIntPhysRegs, numIntRenameWakeupPorts, false))
+    val rename_stage = Module(new RenameStage(coreWidth, numIntPhysRegs, numIntRenameWakeupPorts, false))
     val pred_rename_stage = Module(new PredRenameStage(coreWidth, ftqSz, 1))
-    val rename_stages    = if (usingFPU) Seq(rename_stage, fp_rename_stage, pred_rename_stage) else Seq(rename_stage, pred_rename_stage)
+    val rename_stages = if (usingFPU) Seq(rename_stage, fp_rename_stage, pred_rename_stage) else Seq(rename_stage, pred_rename_stage)
 
-    val mem_iss_unit     = Module(new IssueUnitCollapsing(memIssueParam, numIntIssueWakeupPorts))
+    val mem_iss_unit = Module(new IssueUnitCollapsing(memIssueParam, numIntIssueWakeupPorts))
     mem_iss_unit.suggestName("mem_issue_unit")
-    val int_iss_unit     = Module(new IssueUnitCollapsing(intIssueParam, numIntIssueWakeupPorts))
+    val int_iss_unit = Module(new IssueUnitCollapsing(intIssueParam, numIntIssueWakeupPorts))
     int_iss_unit.suggestName("int_issue_unit")
 
-    val issue_units      = Seq(mem_iss_unit, int_iss_unit)
-    val dispatcher       = Module(new BasicDispatcher)
+    val issue_units = Seq(mem_iss_unit, int_iss_unit)
+    val dispatcher = Module(new BasicDispatcher)
 
-    val iregfile         = Module(new RegisterFileSynthesizable(
+    val iregfile = Module(new RegisterFileSynthesizable(
         numIntPhysRegs,
         numIrfReadPorts,
         numIrfWritePorts,
         xLen,
-        Seq.fill(memWidth) {true} ++ exe_units.bypassable_write_port_mask)) // bypassable ll_wb
-    val pregfile         = Module(new RegisterFileSynthesizable(
+        Seq.fill(memWidth) {
+            true
+        } ++ exe_units.bypassable_write_port_mask)) // bypassable ll_wb
+    val pregfile = Module(new RegisterFileSynthesizable(
         ftqSz,
         exe_units.numIrfReaders,
         1,
@@ -68,10 +70,10 @@ class Core extends CoreModule
     // wb arbiter for the 0th ll writeback
     // TODO: 不需要仲裁器
 
-//    val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 1 +
-//            (if (usingFPU) 1 else 0) +
-//            (if (usingRoCC) 1 else 0)))
-    val iregister_read   = Module(new RegisterRead(
+    //    val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 1 +
+    //            (if (usingFPU) 1 else 0) +
+    //            (if (usingRoCC) 1 else 0)))
+    val iregister_read = Module(new RegisterRead(
         issue_units.map(_.issueWidth).sum,
         exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits).toSeq,
         numIrfReadPorts,
@@ -79,36 +81,36 @@ class Core extends CoreModule
         exe_units.numTotalBypassPorts,
         jmp_unit.numBypassStages,
         xLen))
-    val rob              = Module(new Rob(numIrfWritePorts))
+    val rob = Module(new Rob(numIrfWritePorts))
     // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
-    val int_iss_wakeups  = Wire(Vec(numIntIssueWakeupPorts, Valid(new ExeUnitResp(xLen))))
-    val int_ren_wakeups  = Wire(Vec(numIntRenameWakeupPorts, Valid(new ExeUnitResp(xLen))))
-    val pred_wakeup  = Wire(Valid(new ExeUnitResp(1)))
+    val int_iss_wakeups = Wire(Vec(numIntIssueWakeupPorts, Valid(new ExeUnitResp(xLen))))
+    val int_ren_wakeups = Wire(Vec(numIntRenameWakeupPorts, Valid(new ExeUnitResp(xLen))))
+    val pred_wakeup = Wire(Valid(new ExeUnitResp(1)))
 
-    require (exe_units.length == issue_units.map(_.issueWidth).sum)
+    require(exe_units.length == issue_units.map(_.issueWidth).sum)
 
     //***********************************
     // Pipeline State Registers and Wires
 
     // Decode/Rename1 Stage
-    val dec_valids = Wire(Vec(coreWidth, Bool()))  // are the decoded instruction valid? It may be held up though.
-    val dec_uops   = Wire(Vec(coreWidth, new MicroOp()))
-    val dec_fire   = Wire(Vec(coreWidth, Bool()))  // can the instruction fire beyond decode?
+    val dec_valids = Wire(Vec(coreWidth, Bool())) // are the decoded instruction valid? It may be held up though.
+    val dec_uops = Wire(Vec(coreWidth, new MicroOp()))
+    val dec_fire = Wire(Vec(coreWidth, Bool())) // can the instruction fire beyond decode?
     // (can still be stopped in ren or dis)
-    val dec_ready  = Wire(Bool())
-    val dec_xcpts  = Wire(Vec(coreWidth, Bool()))
+    val dec_ready = Wire(Bool())
+    val dec_xcpts = Wire(Vec(coreWidth, Bool()))
     val ren_stalls = Wire(Vec(coreWidth, Bool()))
 
     // Rename2/Dispatch stage
     val dis_valids = Wire(Vec(coreWidth, Bool()))
-    val dis_uops   = Wire(Vec(coreWidth, new MicroOp))
-    val dis_fire   = Wire(Vec(coreWidth, Bool()))
-    val dis_ready  = Wire(Bool())
+    val dis_uops = Wire(Vec(coreWidth, new MicroOp))
+    val dis_fire = Wire(Vec(coreWidth, Bool()))
+    val dis_ready = Wire(Bool())
 
     // Issue Stage/Register Read
     val iss_valids = Wire(Vec(exe_units.numIrfReaders, Bool()))
-    val iss_uops   = Wire(Vec(exe_units.numIrfReaders, new MicroOp()))
-    val bypasses   = Wire(Vec(exe_units.numTotalBypassPorts, Valid(new ExeUnitResp(xLen))))
+    val iss_uops = Wire(Vec(exe_units.numIrfReaders, new MicroOp()))
+    val bypasses = Wire(Vec(exe_units.numTotalBypassPorts, Valid(new ExeUnitResp(xLen))))
     val pred_bypasses = Wire(Vec(jmp_unit.numBypassStages, Valid(new ExeUnitResp(1))))
     require(jmp_unit.bypassable)
 
@@ -122,9 +124,9 @@ class Core extends CoreModule
     // brmask contains masks for rapidly clearing mispredicted instructions
     // brindices contains indices to reset pointers for allocated structures
     //           brindices is delayed a cycle
-    val brupdate  = Wire(new BrUpdateInfo)
-    val b1    = Wire(new BrUpdateMasks)
-    val b2    = Reg(new BrResolutionInfo)
+    val brupdate = Wire(new BrUpdateInfo)
+    val b1 = Wire(new BrUpdateMasks)
+    val b2 = Reg(new BrResolutionInfo)
 
     brupdate.b1 := b1
     brupdate.b2 := b2
@@ -133,8 +135,8 @@ class Core extends CoreModule
         b := a.io.brinfo
         b.valid := a.io.brinfo.valid && !rob.io.flush.valid
     }
-    b1.resolve_mask := brinfos.map(x => x.valid << x.uop.br_tag).reduce(_|_)
-    b1.mispredict_mask := brinfos.map(x => (x.valid && x.mispredict) << x.uop.br_tag).reduce(_|_)
+    b1.resolve_mask := brinfos.map(x => x.valid << x.uop.br_tag).reduce(_ | _)
+    b1.mispredict_mask := brinfos.map(x => (x.valid && x.mispredict) << x.uop.br_tag).reduce(_ | _)
 
     // Find the oldest mispredict and use it to update indices
     var mispredict_val = false.B
@@ -147,18 +149,18 @@ class Core extends CoreModule
         oldest_mispredict = Mux(use_this_mispredict, b, oldest_mispredict)
     }
 
-    b2.mispredict  := mispredict_val
-    b2.cfi_type    := oldest_mispredict.cfi_type
-    b2.taken       := oldest_mispredict.taken
-    b2.pc_sel      := oldest_mispredict.pc_sel
-    b2.uop         := UpdateBrMask(brupdate, oldest_mispredict.uop)
+    b2.mispredict := mispredict_val
+    b2.cfi_type := oldest_mispredict.cfi_type
+    b2.taken := oldest_mispredict.taken
+    b2.pc_sel := oldest_mispredict.pc_sel
+    b2.uop := UpdateBrMask(brupdate, oldest_mispredict.uop)
     b2.jalr_target := RegNext(jmp_unit.io.brinfo.jalr_target)
     b2.target_offset := oldest_mispredict.target_offset
 
     val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftq_idx
 
 
-    assert (!((brupdate.b1.mispredict_mask =/= 0.U || brupdate.b2.mispredict)
+    assert(!((brupdate.b1.mispredict_mask =/= 0.U || brupdate.b2.mispredict)
             && rob.io.commit.rollback), "Can't have a mispredict during rollback.")
 
     io.ifu.brupdate := brupdate
@@ -166,7 +168,6 @@ class Core extends CoreModule
     for (eu <- exe_units) {
         eu.io.brupdate := brupdate
     }
-
 
 
     // Load/Store Unit & ExeUnits
@@ -177,13 +178,9 @@ class Core extends CoreModule
     }
 
 
-//    val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
-//    csr.io.inst foreach { c => c := DontCare }
-//    csr.io.rocc_interrupt := io.rocc.interrupt
-
-
-
-
+    //    val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
+    //    csr.io.inst foreach { c => c := DontCare }
+    //    csr.io.rocc_interrupt := io.rocc.interrupt
 
 
     //-------------------------------------------------------------
@@ -191,23 +188,23 @@ class Core extends CoreModule
     // **** Fetch Stage/Frontend ****
     //-------------------------------------------------------------
     //-------------------------------------------------------------
-    io.ifu.redirect_val         := false.B
-    io.ifu.redirect_flush       := false.B
+    io.ifu.redirect_val := false.B
+    io.ifu.redirect_flush := false.B
 
     // Breakpoint info
-//    io.ifu.status  := csr.io.status
-//    io.ifu.bp      := csr.io.bp
-//    io.ifu.mcontext := csr.io.mcontext
-//    io.ifu.scontext := csr.io.scontext
+    //    io.ifu.status  := csr.io.status
+    //    io.ifu.bp      := csr.io.bp
+    //    io.ifu.mcontext := csr.io.mcontext
+    //    io.ifu.scontext := csr.io.scontext
 
     io.ifu.flush_icache := (0 until coreWidth).map { i =>
         (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_fencei) ||
                 (RegNext(dec_valids(i) && dec_uops(i).is_jalr && csr.io.status.debug))
-    }.reduce(_||_)
+    }.reduce(_ || _)
 
 
-    when (RegNext(rob.io.flush.valid)) {
-        io.ifu.redirect_val   := true.B
+    when(RegNext(rob.io.flush.valid)) {
+        io.ifu.redirect_val := true.B
         io.ifu.redirect_flush := true.B
         val flush_typ = RegNext(rob.io.flush.bits.flush_typ)
         // Clear the global history when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
@@ -215,11 +212,11 @@ class Core extends CoreModule
         new_ghist.current_saw_branch_not_taken := true.B
         new_ghist.ras_idx := io.ifu.get_pc(0).entry.ras_idx
         io.ifu.redirect_ghist := new_ghist
-        when (FlushTypes.useCsrEvec(flush_typ)) {
-            io.ifu.redirect_pc  := Mux(flush_typ === FlushTypes.eret,
+        when(FlushTypes.useCsrEvec(flush_typ)) {
+            io.ifu.redirect_pc := Mux(flush_typ === FlushTypes.eret,
                 RegNext(RegNext(csr.io.evec)),
                 csr.io.evec)
-        } .otherwise {
+        }.otherwise {
             val flush_pc = (AlignPCToBoundary(io.ifu.get_pc(0).pc, icBlockBytes)
                     + RegNext(rob.io.flush.bits.pc_lob)
                     - Mux(RegNext(rob.io.flush.bits.edge_inst), 2.U, 0.U))
@@ -229,18 +226,18 @@ class Core extends CoreModule
 
         }
         io.ifu.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
-    } .elsewhen (brupdate.b2.mispredict && !RegNext(rob.io.flush.valid)) {
+    }.elsewhen(brupdate.b2.mispredict && !RegNext(rob.io.flush.valid)) {
         val block_pc = AlignPCToBoundary(io.ifu.get_pc(1).pc, icBlockBytes)
         val uop_maybe_pc = block_pc | brupdate.b2.uop.pc_lob
         val npc = uop_maybe_pc + Mux(brupdate.b2.uop.is_rvc || brupdate.b2.uop.edge_inst, 2.U, 4.U)
         val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
         jal_br_target := (uop_maybe_pc.asSInt + brupdate.b2.target_offset +
-                (Fill(vaddrBitsExtended-1, brupdate.b2.uop.edge_inst) << 1).asSInt).asUInt
+                (Fill(vaddrBitsExtended - 1, brupdate.b2.uop.edge_inst) << 1).asSInt).asUInt
         val bj_addr = Mux(brupdate.b2.cfi_type === CFI_JALR, brupdate.b2.jalr_target, jal_br_target)
         val mispredict_target = Mux(brupdate.b2.pc_sel === PC_PLUS4, npc, bj_addr)
-        io.ifu.redirect_val     := true.B
-        io.ifu.redirect_pc      := mispredict_target
-        io.ifu.redirect_flush   := true.B
+        io.ifu.redirect_val := true.B
+        io.ifu.redirect_pc := mispredict_target
+        io.ifu.redirect_flush := true.B
         io.ifu.redirect_ftq_idx := brupdate.b2.uop.ftq_idx
         val use_same_ghist = (brupdate.b2.cfi_type === CFI_BR &&
                 !brupdate.b2.taken &&
@@ -257,30 +254,30 @@ class Core extends CoreModule
             true.B,
             io.ifu.get_pc(1).pc,
             ftq_entry.cfi_is_call && ftq_entry.cfi_idx.bits === cfi_idx,
-            ftq_entry.cfi_is_ret  && ftq_entry.cfi_idx.bits === cfi_idx)
+            ftq_entry.cfi_is_ret && ftq_entry.cfi_idx.bits === cfi_idx)
 
 
-        io.ifu.redirect_ghist   := Mux(
+        io.ifu.redirect_ghist := Mux(
             use_same_ghist,
             ftq_ghist,
             next_ghist)
         io.ifu.redirect_ghist.current_saw_branch_not_taken := use_same_ghist
-    } .elsewhen (rob.io.flush_frontend || brupdate.b1.mispredict_mask =/= 0.U) {
-        io.ifu.redirect_flush   := true.B
+    }.elsewhen(rob.io.flush_frontend || brupdate.b1.mispredict_mask =/= 0.U) {
+        io.ifu.redirect_flush := true.B
     }
 
     // Tell the FTQ it can deallocate entries by passing youngest ftq_idx.
-    val youngest_com_idx = (coreWidth-1).U - PriorityEncoder(rob.io.commit.valids.reverse)
-    io.ifu.commit.valid := rob.io.commit.valids.reduce(_|_) || rob.io.com_xcpt.valid
-    io.ifu.commit.bits  := Mux(rob.io.com_xcpt.valid,
+    val youngest_com_idx = (coreWidth - 1).U - PriorityEncoder(rob.io.commit.valids.reverse)
+    io.ifu.commit.valid := rob.io.commit.valids.reduce(_ | _) || rob.io.com_xcpt.valid
+    io.ifu.commit.bits := Mux(rob.io.com_xcpt.valid,
         rob.io.com_xcpt.bits.ftq_idx,
         rob.io.commit.uops(youngest_com_idx).ftq_idx)
 
-    assert(!(rob.io.commit.valids.reduce(_|_) && rob.io.com_xcpt.valid),
+    assert(!(rob.io.commit.valids.reduce(_ | _) && rob.io.com_xcpt.valid),
         "ROB can't commit and except in same cycle!")
 
     for (i <- 0 until memWidth) {
-        when (RegNext(io.lsu.exe(i).req.bits.sfence.valid)) {
+        when(RegNext(io.lsu.exe(i).req.bits.sfence.valid)) {
             io.ifu.sfence := RegNext(io.lsu.exe(i).req.bits.sfence)
         }
     }
@@ -313,12 +310,12 @@ class Core extends CoreModule
     // Decoders
 
     for (w <- 0 until coreWidth) {
-        dec_valids(w)                      := io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid &&
+        dec_valids(w) := io.ifu.fetchpacket.valid && dec_fbundle.uops(w).valid &&
                 !dec_finished_mask(w)
-        decode_units(w).io.enq.uop         := dec_fbundle.uops(w).bits
-        decode_units(w).io.status          := csr.io.status
-        decode_units(w).io.csr_decode      <> csr.io.decode(w)
-        decode_units(w).io.interrupt       := csr.io.interrupt
+        decode_units(w).io.enq.uop := dec_fbundle.uops(w).bits
+        decode_units(w).io.status := csr.io.status
+        decode_units(w).io.csr_decode <> csr.io.decode(w)
+        decode_units(w).io.interrupt := csr.io.interrupt
         decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
 
         dec_uops(w) := decode_units(w).io.deq.uop
@@ -327,7 +324,7 @@ class Core extends CoreModule
     //-------------------------------------------------------------
     // FTQ GetPC Port Arbitration
 
-    val jmp_pc_req  = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+    val jmp_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
     val xcpt_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
     val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
 
@@ -341,28 +338,28 @@ class Core extends CoreModule
 
     // Hookup FTQ
     io.ifu.get_pc(0).ftq_idx := ftq_arb.io.out.bits
-    ftq_arb.io.out.ready  := true.B
+    ftq_arb.io.out.ready := true.B
 
     // Branch Unit Requests (for JALs) (Should delay issue of JALs if this not ready)
     jmp_pc_req.valid := RegNext(iss_valids(jmp_unit_idx) && iss_uops(jmp_unit_idx).fu_code === FU_JMP)
-    jmp_pc_req.bits  := RegNext(iss_uops(jmp_unit_idx).ftq_idx)
+    jmp_pc_req.bits := RegNext(iss_uops(jmp_unit_idx).ftq_idx)
 
     jmp_unit.io.get_ftq_pc := DontCare
-    jmp_unit.io.get_ftq_pc.pc               := io.ifu.get_pc(0).pc
-    jmp_unit.io.get_ftq_pc.entry            := io.ifu.get_pc(0).entry
-    jmp_unit.io.get_ftq_pc.next_val         := io.ifu.get_pc(0).next_val
-    jmp_unit.io.get_ftq_pc.next_pc          := io.ifu.get_pc(0).next_pc
+    jmp_unit.io.get_ftq_pc.pc := io.ifu.get_pc(0).pc
+    jmp_unit.io.get_ftq_pc.entry := io.ifu.get_pc(0).entry
+    jmp_unit.io.get_ftq_pc.next_val := io.ifu.get_pc(0).next_val
+    jmp_unit.io.get_ftq_pc.next_pc := io.ifu.get_pc(0).next_pc
 
 
     // Frontend Exception Requests
     val xcpt_idx = PriorityEncoder(dec_xcpts)
-    xcpt_pc_req.valid    := dec_xcpts.reduce(_||_)
-    xcpt_pc_req.bits     := dec_uops(xcpt_idx).ftq_idx
+    xcpt_pc_req.valid := dec_xcpts.reduce(_ || _)
+    xcpt_pc_req.bits := dec_uops(xcpt_idx).ftq_idx
     //rob.io.xcpt_fetch_pc := RegEnable(io.ifu.get_pc.fetch_pc, dis_ready)
     rob.io.xcpt_fetch_pc := io.ifu.get_pc(0).pc
 
-    flush_pc_req.valid   := rob.io.flush.valid
-    flush_pc_req.bits    := rob.io.flush.bits.ftq_idx
+    flush_pc_req.valid := rob.io.flush.valid
+    flush_pc_req.bits := rob.io.flush.bits.ftq_idx
 
     // Mispredict requests (to get the correct target)
     io.ifu.get_pc(1).ftq_idx := oldest_mispredict_ftq_idx
@@ -371,14 +368,14 @@ class Core extends CoreModule
     //-------------------------------------------------------------
     // Decode/Rename1 pipeline logic
 
-    dec_xcpts := dec_uops zip dec_valids map {case (u,v) => u.exception && v}
-    val dec_xcpt_stall = dec_xcpts.reduce(_||_) && !xcpt_pc_req.ready
+    dec_xcpts := dec_uops zip dec_valids map { case (u, v) => u.exception && v }
+    val dec_xcpt_stall = dec_xcpts.reduce(_ || _) && !xcpt_pc_req.ready
     // stall fetch/dcode because we ran out of branch tags
     val branch_mask_full = Wire(Vec(coreWidth, Bool()))
 
     val dec_hazards = (0 until coreWidth).map(w =>
         dec_valids(w) &&
-                (  !dis_ready
+                (!dis_ready
                         || rob.io.commit.rollback
                         || dec_xcpt_stall
                         || branch_mask_full(w)
@@ -386,15 +383,15 @@ class Core extends CoreModule
                         || brupdate.b2.mispredict
                         || io.ifu.redirect_flush))
 
-    val dec_stalls = dec_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
+    val dec_stalls = dec_hazards.scanLeft(false.B)((s, h) => s || h).takeRight(coreWidth)
     dec_fire := (0 until coreWidth).map(w => dec_valids(w) && !dec_stalls(w))
 
     // all decoders are empty and ready for new instructions
     dec_ready := dec_fire.last
 
-    when (dec_ready || io.ifu.redirect_flush) {
+    when(dec_ready || io.ifu.redirect_flush) {
         dec_finished_mask := 0.U
-    } .otherwise {
+    }.otherwise {
         dec_finished_mask := dec_fire.asUInt | dec_finished_mask
     }
 
@@ -406,9 +403,9 @@ class Core extends CoreModule
 
     for (w <- 0 until coreWidth) {
         dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).allocate_brtag
-        dec_brmask_logic.io.will_fire(w) :=  dec_fire(w) &&
+        dec_brmask_logic.io.will_fire(w) := dec_fire(w) &&
                 dec_uops(w).allocate_brtag // ren, dis can back pressure us
-        dec_uops(w).br_tag  := dec_brmask_logic.io.br_tag(w)
+        dec_uops(w).br_tag := dec_brmask_logic.io.br_tag(w)
         dec_uops(w).br_mask := dec_brmask_logic.io.br_mask(w)
     }
 
@@ -452,9 +449,9 @@ class Core extends CoreModule
      * Won't have to do this anymore with a properly decoupled FP pipeline.
      */
     for (w <- 0 until coreWidth) {
-        val i_uop   = rename_stage.io.ren2_uops(w)
-        val f_uop   = if (usingFPU) fp_rename_stage.io.ren2_uops(w) else NullMicroOp
-        val p_uop   = if (enableSFBOpt) pred_rename_stage.io.ren2_uops(w) else NullMicroOp
+        val i_uop = rename_stage.io.ren2_uops(w)
+        val f_uop = if (usingFPU) fp_rename_stage.io.ren2_uops(w) else NullMicroOp
+        val p_uop = if (enableSFBOpt) pred_rename_stage.io.ren2_uops(w) else NullMicroOp
         val f_stall = if (usingFPU) fp_rename_stage.io.ren_stalls(w) else false.B
         val p_stall = if (enableSFBOpt) pred_rename_stage.io.ren_stalls(w) else false.B
 
@@ -464,8 +461,8 @@ class Core extends CoreModule
         dis_uops(w).prs2 := Mux(dis_uops(w).lrs2_rtype === RT_FLT, f_uop.prs2, i_uop.prs2)
         dis_uops(w).prs3 := f_uop.prs3
         dis_uops(w).ppred := p_uop.ppred
-        dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype  === RT_FLT, f_uop.pdst,
-            Mux(dis_uops(w).dst_rtype  === RT_FIX, i_uop.pdst,
+        dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype === RT_FLT, f_uop.pdst,
+            Mux(dis_uops(w).dst_rtype === RT_FIX, i_uop.pdst,
                 p_uop.pdst))
         dis_uops(w).stale_pdst := Mux(dis_uops(w).dst_rtype === RT_FLT, f_uop.stale_pdst, i_uop.stale_pdst)
 
@@ -488,14 +485,14 @@ class Core extends CoreModule
     //-------------------------------------------------------------
     // Rename2/Dispatch pipeline logic
 
-    val dis_prior_slot_valid = dis_valids.scanLeft(false.B) ((s,v) => s || v)
-    val dis_prior_slot_unique = (dis_uops zip dis_valids).scanLeft(false.B) {case (s,(u,v)) => s || v && u.is_unique}
+    val dis_prior_slot_valid = dis_valids.scanLeft(false.B)((s, v) => s || v)
+    val dis_prior_slot_unique = (dis_uops zip dis_valids).scanLeft(false.B) { case (s, (u, v)) => s || v && u.is_unique }
     val wait_for_empty_pipeline = (0 until coreWidth).map(w => (dis_uops(w).is_unique || custom_csrs.disableOOO) &&
             (!rob.io.empty || !io.lsu.fencei_rdy || dis_prior_slot_valid(w)))
 
     val dis_hazards = (0 until coreWidth).map(w =>
         dis_valids(w) &&
-                (  !rob.io.ready
+                (!rob.io.ready
                         || ren_stalls(w)
                         || io.lsu.ldq_full(w) && dis_uops(w).uses_ldq
                         || io.lsu.stq_full(w) && dis_uops(w).uses_stq
@@ -507,10 +504,10 @@ class Core extends CoreModule
                         || io.ifu.redirect_flush))
 
 
-    io.lsu.fence_dmem := (dis_valids zip wait_for_empty_pipeline).map {case (v,w) => v && w} .reduce(_||_)
+    io.lsu.fence_dmem := (dis_valids zip wait_for_empty_pipeline).map { case (v, w) => v && w }.reduce(_ || _)
 
-    val dis_stalls = dis_hazards.scanLeft(false.B) ((s,h) => s || h).takeRight(coreWidth)
-    dis_fire := dis_valids zip dis_stalls map {case (v,s) => v && !s}
+    val dis_stalls = dis_hazards.scanLeft(false.B)((s, h) => s || h).takeRight(coreWidth)
+    dis_fire := dis_valids zip dis_stalls map { case (v, s) => v && !s }
     dis_ready := !dis_stalls.last
 
     //-------------------------------------------------------------
@@ -526,16 +523,16 @@ class Core extends CoreModule
     // Rob Allocation Logic
 
     rob.io.enq_valids := dis_fire
-    rob.io.enq_uops   := dis_uops
+    rob.io.enq_uops := dis_uops
     rob.io.enq_partial_stall := dis_stalls.last // TODO come up with better ROB compacting scheme.
     rob.io.csr_stall := csr.io.csr_stall
 
     // Minor hack: ecall and breaks need to increment the FTQ deq ptr earlier than commit, since
     // they write their PC into the CSR the cycle before they commit.
     // Since these are also unique, increment the FTQ ptr when they are dispatched
-    when (RegNext(dis_fire.reduce(_||_) && dis_uops(PriorityEncoder(dis_fire)).is_sys_pc2epc)) {
+    when(RegNext(dis_fire.reduce(_ || _) && dis_uops(PriorityEncoder(dis_fire)).is_sys_pc2epc)) {
         io.ifu.commit.valid := true.B
-        io.ifu.commit.bits  := RegNext(dis_uops(PriorityEncoder(dis_valids)).ftq_idx)
+        io.ifu.commit.bits := RegNext(dis_uops(PriorityEncoder(dis_valids)).ftq_idx)
     }
 
     for (w <- 0 until coreWidth) {
@@ -557,15 +554,15 @@ class Core extends CoreModule
     // Get uops from rename2
     for (w <- 0 until coreWidth) {
         dispatcher.io.ren_uops(w).valid := dis_fire(w)
-        dispatcher.io.ren_uops(w).bits  := dis_uops(w)
+        dispatcher.io.ren_uops(w).bits := dis_uops(w)
     }
 
     var iu_idx = 0
     // Send dispatched uops to correct issue queues
     // Backpressure through dispatcher if necessary
     for (i <- 0 until issueParams.size) {
-            issue_units(iu_idx).io.dis_uops <> dispatcher.io.dis_uops(i)
-            iu_idx += 1
+        issue_units(iu_idx).io.dis_uops <> dispatcher.io.dis_uops(i)
+        iu_idx += 1
     }
 
 
@@ -575,23 +572,23 @@ class Core extends CoreModule
     //-------------------------------------------------------------
     //-------------------------------------------------------------
 
-    require (issue_units.map(_.issueWidth).sum == exe_units.length)
+    require(issue_units.map(_.issueWidth).sum == exe_units.length)
 
     var iss_wu_idx = 1
     var ren_wu_idx = 1
     // The 0th wakeup port goes to the ll_wbarb
     int_iss_wakeups(0).valid := ll_wbarb.io.out.fire && ll_wbarb.io.out.bits.uop.dst_rtype === RT_FIX
-    int_iss_wakeups(0).bits  := ll_wbarb.io.out.bits
+    int_iss_wakeups(0).bits := ll_wbarb.io.out.bits
 
     int_ren_wakeups(0).valid := ll_wbarb.io.out.fire && ll_wbarb.io.out.bits.uop.dst_rtype === RT_FIX
-    int_ren_wakeups(0).bits  := ll_wbarb.io.out.bits
+    int_ren_wakeups(0).bits := ll_wbarb.io.out.bits
 
     for (i <- 1 until memWidth) {
         int_iss_wakeups(i).valid := mem_resps(i).valid && mem_resps(i).bits.uop.dst_rtype === RT_FIX
-        int_iss_wakeups(i).bits  := mem_resps(i).bits
+        int_iss_wakeups(i).bits := mem_resps(i).bits
 
         int_ren_wakeups(i).valid := mem_resps(i).valid && mem_resps(i).bits.uop.dst_rtype === RT_FIX
-        int_ren_wakeups(i).bits  := mem_resps(i).bits
+        int_ren_wakeups(i).bits := mem_resps(i).bits
         iss_wu_idx += 1
         ren_wu_idx += 1
     }
@@ -609,7 +606,7 @@ class Core extends CoreModule
 
             // Fast Wakeup (uses just-issued uops that have known latencies)
             fast_wakeup.bits.uop := iss_uops(i)
-            fast_wakeup.valid    := iss_valids(i) &&
+            fast_wakeup.valid := iss_valids(i) &&
                     iss_uops(i).bypassable &&
                     iss_uops(i).dst_rtype === RT_FIX &&
                     iss_uops(i).ldst_val &&
@@ -617,7 +614,7 @@ class Core extends CoreModule
 
             // Slow Wakeup (uses write-port to register file)
             slow_wakeup.bits.uop := resp.bits.uop
-            slow_wakeup.valid    := resp.valid &&
+            slow_wakeup.valid := resp.valid &&
                     resp.bits.uop.rf_wen &&
                     !resp.bits.uop.bypassable &&
                     resp.bits.uop.dst_rtype === RT_FIX
@@ -641,12 +638,12 @@ class Core extends CoreModule
             }
         }
     }
-    require (iss_wu_idx == numIntIssueWakeupPorts)
-    require (ren_wu_idx == numIntRenameWakeupPorts)
-    require (iss_wu_idx == ren_wu_idx)
+    require(iss_wu_idx == numIntIssueWakeupPorts)
+    require(ren_wu_idx == numIntRenameWakeupPorts)
+    require(iss_wu_idx == ren_wu_idx)
 
     // jmp unit performs fast wakeup of the predicate bits
-    require (jmp_unit.bypassable)
+    require(jmp_unit.bypassable)
     pred_wakeup.valid := (iss_valids(jmp_unit_idx) &&
             iss_uops(jmp_unit_idx).is_sfb_br &&
             !(io.lsu.ld_miss && (iss_uops(jmp_unit_idx).iw_p1_poisoned || iss_uops(jmp_unit_idx).iw_p2_poisoned))
@@ -690,8 +687,12 @@ class Core extends CoreModule
     // If we see a large number of loads saturate the LSU, pause for a cycle to let a store drain
     val loads_saturating = (mem_iss_unit.io.iss_valids(0) && mem_iss_unit.io.iss_uops(0).uses_ldq)
     val saturating_loads_counter = RegInit(0.U(5.W))
-    when (loads_saturating) { saturating_loads_counter := saturating_loads_counter + 1.U }
-            .otherwise { saturating_loads_counter := 0.U }
+    when(loads_saturating) {
+        saturating_loads_counter := saturating_loads_counter + 1.U
+    }
+            .otherwise {
+                saturating_loads_counter := 0.U
+            }
     val pause_mem = RegNext(loads_saturating) && saturating_loads_counter === ~(0.U(5.W))
 
     var iss_idx = 0
@@ -710,12 +711,12 @@ class Core extends CoreModule
 
             if (exe_unit.hasMem) {
                 iss_valids(iss_idx) := mem_iss_unit.io.iss_valids(mem_iss_cnt)
-                iss_uops(iss_idx)   := mem_iss_unit.io.iss_uops(mem_iss_cnt)
+                iss_uops(iss_idx) := mem_iss_unit.io.iss_uops(mem_iss_cnt)
                 mem_iss_unit.io.fu_types(mem_iss_cnt) := Mux(pause_mem, 0.U, fu_types)
                 mem_iss_cnt += 1
             } else {
                 iss_valids(iss_idx) := int_iss_unit.io.iss_valids(int_iss_cnt)
-                iss_uops(iss_idx)   := int_iss_unit.io.iss_uops(int_iss_cnt)
+                iss_uops(iss_idx) := int_iss_unit.io.iss_uops(int_iss_cnt)
                 int_iss_unit.io.fu_types(int_iss_cnt) := fu_types
                 int_iss_cnt += 1
             }
@@ -728,7 +729,7 @@ class Core extends CoreModule
     issue_units.map(_.io.flush_pipeline := RegNext(rob.io.flush.valid))
 
     // Load-hit Misspeculations
-    require (mem_iss_unit.issueWidth <= 2)
+    require(mem_iss_unit.issueWidth <= 2)
     issue_units.map(_.io.ld_miss := io.lsu.ld_miss)
 
     mem_units.map(u => u.io.com_exception := RegNext(rob.io.flush.valid))
@@ -737,12 +738,12 @@ class Core extends CoreModule
     for {
         iu <- issue_units
         (issport, wakeup) <- iu.io.wakeup_ports zip int_iss_wakeups
-    }{
+    } {
         issport.valid := wakeup.valid
         issport.bits.pdst := wakeup.bits.uop.pdst
         issport.bits.poisoned := wakeup.bits.uop.iw_p1_poisoned || wakeup.bits.uop.iw_p2_poisoned
 
-        require (iu.io.wakeup_ports.length == int_iss_wakeups.length)
+        require(iu.io.wakeup_ports.length == int_iss_wakeups.length)
     }
 
     //-------------------------------------------------------------
@@ -766,7 +767,7 @@ class Core extends CoreModule
     iregister_read.io.iss_uops map { u => u.iw_p1_poisoned := false.B; u.iw_p2_poisoned := false.B }
 
     iregister_read.io.brupdate := brupdate
-    iregister_read.io.kill   := RegNext(rob.io.flush.valid)
+    iregister_read.io.kill := RegNext(rob.io.flush.valid)
 
     iregister_read.io.bypass := bypasses
     iregister_read.io.pred_bypass := pred_bypasses
@@ -783,21 +784,21 @@ class Core extends CoreModule
     val csr_rw_cmd = csr_exe_unit.io.iresp.bits.uop.ctrl.csr_cmd
     val wb_wdata = csr_exe_unit.io.iresp.bits.data
 
-    csr.io.rw.addr        := csr_exe_unit.io.iresp.bits.uop.csr_addr
-    csr.io.rw.cmd         := freechips.rocketchip.rocket.CSR.maskCmd(csr_exe_unit.io.iresp.valid, csr_rw_cmd)
-    csr.io.rw.wdata       := wb_wdata
+    csr.io.rw.addr := csr_exe_unit.io.iresp.bits.uop.csr_addr
+    csr.io.rw.cmd := freechips.rocketchip.rocket.CSR.maskCmd(csr_exe_unit.io.iresp.valid, csr_rw_cmd)
+    csr.io.rw.wdata := wb_wdata
 
     // Extra I/O
     // Delay retire/exception 1 cycle
-    csr.io.retire    := RegNext(PopCount(rob.io.commit.arch_valids.asUInt))
+    csr.io.retire := RegNext(PopCount(rob.io.commit.arch_valids.asUInt))
     csr.io.exception := RegNext(rob.io.com_xcpt.valid)
     // csr.io.pc used for setting EPC during exception or CSR.io.trace.
 
-    csr.io.pc        := (boom.util.AlignPCToBoundary(io.ifu.get_pc(0).com_pc, icBlockBytes)
+    csr.io.pc := (boom.util.AlignPCToBoundary(io.ifu.get_pc(0).com_pc, icBlockBytes)
             + RegNext(rob.io.com_xcpt.bits.pc_lob)
             - Mux(RegNext(rob.io.com_xcpt.bits.edge_inst), 2.U, 0.U))
     // Cause not valid for for CALL or BREAKPOINTs (CSRFile will override it).
-    csr.io.cause     := RegNext(rob.io.com_xcpt.bits.cause)
+    csr.io.cause := RegNext(rob.io.com_xcpt.bits.cause)
     csr.io.ungated_clock := clock
 
     val tval_valid = csr.io.exception &&
@@ -824,18 +825,17 @@ class Core extends CoreModule
             // Efficient means to compress 64-bit VA into vaddrBits+1 bits.
             // (VA is bad if VA(vaddrBits) != VA(vaddrBits-1)).
             val a = a0.asSInt >> vaddrBits
-            val msb = Mux(a === 0.S || a === -1.S, ea(vaddrBits), !ea(vaddrBits-1))
-            Cat(msb, ea(vaddrBits-1,0))
+            val msb = Mux(a === 0.S || a === -1.S, ea(vaddrBits), !ea(vaddrBits - 1))
+            Cat(msb, ea(vaddrBits - 1, 0))
         }
 
     // reading requires serializing the entire pipeline
     csr.io.fcsr_flags.valid := rob.io.commit.fflags.valid
-    csr.io.fcsr_flags.bits  := rob.io.commit.fflags.bits
+    csr.io.fcsr_flags.bits := rob.io.commit.fflags.bits
     csr.io.set_fs_dirty.get := rob.io.commit.fflags.valid
 
     exe_units.withFilter(_.hasFcsr).map(_.io.fcsr_rm := csr.io.fcsr_rm)
     io.fcsr_rm := csr.io.fcsr_rm
-
 
 
     csr.io.interrupts := io.interrupts
@@ -871,7 +871,7 @@ class Core extends CoreModule
             iss_idx += 1
         }
     }
-    require (bypass_idx == exe_units.numTotalBypassPorts)
+    require(bypass_idx == exe_units.numTotalBypassPorts)
     for (i <- 0 until jmp_unit.numBypassStages) {
         pred_bypasses(i) := jmp_unit.io.bypass(i)
     }
@@ -885,11 +885,11 @@ class Core extends CoreModule
     // enqueue basic load/store info in Decode
     for (w <- 0 until coreWidth) {
         io.lsu.dis_uops(w).valid := dis_fire(w)
-        io.lsu.dis_uops(w).bits  := dis_uops(w)
+        io.lsu.dis_uops(w).bits := dis_uops(w)
     }
 
     // tell LSU about committing loads and stores to clear entries
-    io.lsu.commit                  := rob.io.commit
+    io.lsu.commit := rob.io.commit
 
     // tell LSU that it should fire a load that waits for the rob to clear
     io.lsu.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
@@ -900,7 +900,7 @@ class Core extends CoreModule
     // Handle Branch Mispeculations
     io.lsu.brupdate := brupdate
     io.lsu.rob_head_idx := rob.io.rob_head_idx
-    io.lsu.rob_pnr_idx  := rob.io.rob_pnr_idx
+    io.lsu.rob_pnr_idx := rob.io.rob_pnr_idx
 
 
     //-------------------------------------------------------------
@@ -912,7 +912,7 @@ class Core extends CoreModule
     var w_cnt = 1
     iregfile.io.write_ports(0) := WritePort(ll_wbarb.io.out, ipregSz, xLen, RT_FIX)
     ll_wbarb.io.in(0) <> mem_resps(0)
-    assert (ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
+    assert(ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
     for (i <- 1 until memWidth) {
         iregfile.io.write_ports(w_cnt) := WritePort(mem_resps(i), ipregSz, xLen, RT_FIX)
         w_cnt += 1
@@ -926,9 +926,10 @@ class Core extends CoreModule
 
             def wbIsValid(rtype: UInt) =
                 wbresp.valid && wbresp.bits.uop.rf_wen && wbresp.bits.uop.dst_rtype === rtype
+
             val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N
 
-            iregfile.io.write_ports(w_cnt).valid     := wbIsValid(RT_FIX)
+            iregfile.io.write_ports(w_cnt).valid := wbIsValid(RT_FIX)
             iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
             wbresp.ready := true.B
             if (exe_units(i).hasCSR) {
@@ -937,24 +938,24 @@ class Core extends CoreModule
                 iregfile.io.write_ports(w_cnt).bits.data := wbdata
             }
 
-            assert (!wbIsValid(RT_FLT), "[fppipeline] An FP writeback is being attempted to the Int Regfile.")
+            assert(!wbIsValid(RT_FLT), "[fppipeline] An FP writeback is being attempted to the Int Regfile.")
 
-            assert (!(wbresp.valid &&
+            assert(!(wbresp.valid &&
                     !wbresp.bits.uop.rf_wen &&
                     wbresp.bits.uop.dst_rtype === RT_FIX),
                 "[fppipeline] An Int writeback is being attempted with rf_wen disabled.")
 
-            assert (!(wbresp.valid &&
+            assert(!(wbresp.valid &&
                     wbresp.bits.uop.rf_wen &&
                     wbresp.bits.uop.dst_rtype =/= RT_FIX),
-                "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units("+i+").iresp")
+                "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units(" + i + ").iresp")
             w_cnt += 1
         }
     }
     require(w_cnt == iregfile.io.write_ports.length)
 
     if (enableSFBOpt) {
-        pregfile.io.write_ports(0).valid     := jmp_unit.io.iresp.valid && jmp_unit.io.iresp.bits.uop.is_sfb_br
+        pregfile.io.write_ports(0).valid := jmp_unit.io.iresp.valid && jmp_unit.io.iresp.bits.uop.is_sfb_br
         pregfile.io.write_ports(0).bits.addr := jmp_unit.io.iresp.bits.uop.pdst
         pregfile.io.write_ports(0).bits.data := jmp_unit.io.iresp.bits.data
     }
@@ -970,25 +971,24 @@ class Core extends CoreModule
     // ---------
     // First connect the ll_wport
     val ll_uop = ll_wbarb.io.out.bits.uop
-    rob.io.wb_resps(0).valid  := ll_wbarb.io.out.valid && !(ll_uop.uses_stq && !ll_uop.is_amo)
-    rob.io.wb_resps(0).bits   <> ll_wbarb.io.out.bits
+    rob.io.wb_resps(0).valid := ll_wbarb.io.out.valid && !(ll_uop.uses_stq && !ll_uop.is_amo)
+    rob.io.wb_resps(0).bits <> ll_wbarb.io.out.bits
     var cnt = 1
     for (i <- 1 until memWidth) {
         val mem_uop = mem_resps(i).bits.uop
         rob.io.wb_resps(cnt).valid := mem_resps(i).valid && !(mem_uop.uses_stq && !mem_uop.is_amo)
-        rob.io.wb_resps(cnt).bits  := mem_resps(i).bits
+        rob.io.wb_resps(cnt).bits := mem_resps(i).bits
         cnt += 1
     }
     var f_cnt = 0 // rob fflags port index
     for (eu <- exe_units) {
-        if (eu.writesIrf)
-        {
-            val resp   = eu.io.iresp
+        if (eu.writesIrf) {
+            val resp = eu.io.iresp
             val wb_uop = resp.bits.uop
-            val data   = resp.bits.data
+            val data = resp.bits.data
 
             rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.uses_stq && !wb_uop.is_amo)
-            rob.io.wb_resps(cnt).bits  <> resp.bits
+            rob.io.wb_resps(cnt).bits <> resp.bits
             if (eu.hasCSR) {
                 rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N,
                     csr.io.rw.rdata,
@@ -1001,7 +1001,7 @@ class Core extends CoreModule
     }
 
     require(cnt == numIrfWritePorts)
-    require (cnt == rob.numWakeupPorts)
+    require(cnt == rob.numWakeupPorts)
 
     // branch resolution
     rob.io.brupdate <> brupdate
@@ -1010,17 +1010,17 @@ class Core extends CoreModule
 
     // Connect breakpoint info to memaddrcalcunit
     for (i <- 0 until memWidth) {
-        mem_units(i).io.status   := csr.io.status
-        mem_units(i).io.bp       := csr.io.bp
+        mem_units(i).io.status := csr.io.status
+        mem_units(i).io.bp := csr.io.bp
         mem_units(i).io.mcontext := csr.io.mcontext
         mem_units(i).io.scontext := csr.io.scontext
     }
 
     // LSU <> ROB
-    rob.io.lsu_clr_bsy    := io.lsu.clr_bsy
-    rob.io.lxcpt          <> io.lsu.lxcpt
+    rob.io.lsu_clr_bsy := io.lsu.clr_bsy
+    rob.io.lxcpt <> io.lsu.lxcpt
 
-    assert (!(csr.io.singleStep), "[core] single-step is unsupported.")
+    assert(!(csr.io.singleStep), "[core] single-step is unsupported.")
 
 
     //-------------------------------------------------------------
@@ -1033,16 +1033,16 @@ class Core extends CoreModule
         exe_units(w).io.req.bits.kill := RegNext(rob.io.flush.valid)
     }
 
-    assert (!(rob.io.com_xcpt.valid && !rob.io.flush.valid),
+    assert(!(rob.io.com_xcpt.valid && !rob.io.flush.valid),
         "[core] exception occurred, but pipeline flush signal not set!")
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
     // Page Table Walker
 
-//    io.ptw.ptbr       := csr.io.ptbr
-//    io.ptw.status     := csr.io.status
-//    io.ptw.pmp        := csr.io.pmp
-//    io.ptw.sfence     := io.ifu.sfence
-
+    //    io.ptw.ptbr       := csr.io.ptbr
+    //    io.ptw.status     := csr.io.status
+    //    io.ptw.pmp        := csr.io.pmp
+    //    io.ptw.sfence     := io.ifu.sfence
+}
 
