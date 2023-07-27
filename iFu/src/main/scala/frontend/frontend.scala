@@ -188,7 +188,9 @@ class FrontendIO extends CoreBundle {
 class Frontend extends CoreModule
 {
     val fetchWidth = frontendParams.fetchWidth
-
+    val numRasEntries = frontendParams.bpdParams.numRasEntries
+    val bankWidth = frontendParams.bankWidth
+    val nBanks = frontendParams.iCacheParams.nBanks
 
     val reset_addr = 0.U(vaddrBits)
     val io = IO(new FrontendIO)
@@ -402,7 +404,6 @@ class Frontend extends CoreModule
     f3.io.enq.bits.xcpt := s2_tlb_resp
     f3.io.enq.bits.fsrc := s2_fsrc
 //    f3.io.enq.bits.tsrc := s2_tsrc
-    val numRasEntries = frontendParams.bpdParams.numRasEntries
     //RAS输入在s2，输出在s3
     val ras_read_idx = RegInit(0.U(log2Ceil(numRasEntries).W))
     ras.io.read_idx := ras_read_idx
@@ -442,12 +443,12 @@ class Frontend extends CoreModule
     f3_fetch_bundle.br_mask := f3_br_mask.asUInt
     f3_fetch_bundle.pc      := f3_imemresp.pc
     f3_fetch_bundle.ftq_idx := 0.U      //之后会被赋值
-    f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf.inst
-    f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae.inst
+    f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf
+    f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae
     f3_fetch_bundle.fsrc := f3_imemresp.fsrc
 //    f3_fetch_bundle.tsrc := f3_imemresp.tsrc
     f3_fetch_bundle.shadowed_mask := f3_shadowed_mask
-
+    val lineBytes = frontendParams.iCacheParams.lineBytes
     var redirect_found = false.B
     for(b <- 0 until nBanks){
         val bank_data = f3_data((b+1)*bankWidth*coreInstrBits -1, b*bankWidth*coreInstrBits)
@@ -458,12 +459,12 @@ class Frontend extends CoreModule
             val i = (b * bankWidth) + w
 
             val valid = true.B
-            val bpu = Module(new BreakpointUnit(nBreakpoints))
-            bpu.io.status   := io.cpu.status
-            bpu.io.bp := io.cpu.bp
-            bpu.io.ea := DontCare
-            bpu.io.mcontext := io.cpu.mcontext
-            bpu.io.scontext := io.cpu.scontext
+//            val bpu = Module(new BreakpointUnit(nBreakpoints))
+//            bpu.io.status   := io.cpu.status
+//            bpu.io.bp := io.cpu.bp
+//            bpu.io.ea := DontCare
+//            bpu.io.mcontext := io.cpu.mcontext
+//            bpu.io.scontext := io.cpu.scontext
 
             val brsigs = Wire(new PreDecodeSignals)
             val inst = Wire(UInt(coreInstrBits.W))
@@ -489,7 +490,7 @@ class Frontend extends CoreModule
                     )
                 //i << 1是防止溢出，因为sfbOffset <= Cacheline
             val offset_from_aligned_pc = (
-                    (i<<1).U((log2Ceil(icBlockBytes)+1).W) + brsigs.sfbOffset.bits
+                    (i<<1).U((log2Ceil(lineBytes)+1).W) + brsigs.sfbOffset.bits
             )
             val lower_mask = Wire(UInt((2*fetchWidth).W))
             val upper_mask = Wire(UInt((2*fetchWidth).W))
@@ -574,7 +575,7 @@ class Frontend extends CoreModule
 
     ras.io.write_valid := false.B
     ras.io.write_addr   := f3_aligned_pc + ((f3_fetch_bundle.cfi_idx.bits << 1)) + 4
-    ras.io.write_idx    := WrapInc(f3_fetch_bundle.ghist.ras_idx,nRasEntries)
+    ras.io.write_idx    := WrapInc(f3_fetch_bundle.ghist.ras_idx,numRasEntries)
 
     val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist
     val f3_correct_f2_ghist = s2_ghist =/= f3_predicted_ghist
@@ -739,54 +740,7 @@ trait HasFrontendParameters
 
     val bankWidth = fetchWidth/nBanks
 
-    require(nBanks == 1 || nBanks == 2)
 
-
-
-    // How many "chunks"/interleavings make up a cache line?
-    val numChunks = icBlockBytes / bankBytes
-
-    // Which bank is the address pointing to?
-    def bank(addr: UInt) = if (nBanks == 2) addr(log2Ceil(bankBytes)) else 0.U
-    def isLastBankInBlock(addr: UInt) = {
-        (nBanks == 2).B && addr(icBlockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U
-    }
-    def mayNotBeDualBanked(addr: UInt) = {
-        require(nBanks == 2)
-        isLastBankInBlock(addr)
-    }
-
-    def blockAlign(addr: UInt) = ~(~addr | (icBlockBytes-1).U)
-    def bankAlign(addr: UInt) = ~(~addr | (bankBytes-1).U)
-
-    def fetchIdx(addr: UInt) = addr >> log2Ceil(fetchBytes)
-
-    def nextBank(addr: UInt)= bankAlign(addr) + bankBytes.U
-    def nextFetch(addr: UInt) = {
-
-        require(nBanks == 2)
-        bankAlign(addr) + Mux(mayNotBeDualBanked(addr), bankBytes.U, fetchBytes.U)
-    }
-
-    def fetchMask(addr: UInt) = {
-        val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstrBytes)-1, log2Ceil(coreInstrBytes))
-        if (nBanks == 1) {
-            ((1 << fetchWidth)-1).U << idx
-        } else {
-            val shamt = idx.extract(log2Ceil(fetchWidth)-2, 0)
-            val end_mask = Mux(mayNotBeDualBanked(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
-            ((1 << fetchWidth)-1).U << shamt & end_mask
-        }
-    }
-
-    def bankMask(addr: UInt) = {
-        val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstrBytes)-1, log2Ceil(coreInstrBytes))
-        if (nBanks == 1) {
-            1.U(1.W)
-        } else {
-            Mux(mayNotBeDualBanked(addr), 1.U(2.W), 3.U(2.W))
-        }
-    }
 }
 
 object WrapDec
