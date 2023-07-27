@@ -1,4 +1,4 @@
-package frontend
+package iFu.frontend
 import backend.decode.common.M_SZ
 import chisel3._
 import chisel3.util._

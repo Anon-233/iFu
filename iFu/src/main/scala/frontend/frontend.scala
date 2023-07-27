@@ -91,19 +91,25 @@ class GlobalHistory extends CoreBundle {
 
 class FetchResp extends CoreBundle {
     /*--------------------------*/
-    val p = frontendParams
+    val fetchWidth = frontendParams.fetchWidth
     /*--------------------------*/
     val pc      = UInt(vaddrBits.W)
-    val data    = UInt((p.fetchWidth * p.coreInstrBits).W)
-    val mask    = UInt((p.fetchWidth).W)
+    val data    = UInt((fetchWidth * coreInstrBits).W)
+    val mask    = UInt((fetchWidth).W)
     val xcpt    = new FrontendExceptions
     val ghist   = new GlobalHistory
     val fsrc    = UInt(BSRC_SZ.W)
 }
 
 //FetchBufferEntry
-class FetchBundle extends CoreBundle with HasFrontendParameters
+class FetchBundle extends CoreBundle
 {
+    val fetchWidth = frontendParams.fetchWidth
+    val fetchBytes = frontendParams.fetchBytes
+    val numFTQEntries = frontendParams.numFTQEntries
+    val nBanks     = frontendParams.iCacheParams.nBanks
+    val localHistoryLength = frontendParams.bpdParams.localHistoryLength
+
     val pc          = UInt(vaddrBits.W)
     val next_pc     = UInt(vaddrBits.W)
     val insts       = Vec(fetchWidth,Bits(coreInstrBits.W))
@@ -124,7 +130,7 @@ class FetchBundle extends CoreBundle with HasFrontendParameters
 
     val ras_top     = UInt(vaddrBits.W)
 
-    val ftq_idx     = UInt(log2Ceil(ftqSz).W)
+    val ftq_idx     = UInt(log2Ceil(numFTQEntries).W)
     val mask        = UInt(fetchWidth.W)
 
     val br_mask     = UInt(fetchWidth.W)
@@ -147,18 +153,17 @@ class FetchBundle extends CoreBundle with HasFrontendParameters
 //IO for the BOOM Frontend to/from the CPU
 class FrontendToCPUIO extends CoreModule
 {
+    val numFTQEntries = frontendParams.numFTQEntries
     val fetchpacket     = Flipped(new DecoupledIO(new FetchBufferResp))
 
     // 1 for xcpt/jalr/auipc/flush
     val get_pc      = Flipped(Vec(2,new GetPCFromFtqIO()))
-    val debug_ftq_idx = Output(Vec(coreWidth, UInt(log2Ceil(ftqSz).W)))
-    val debug_fetch_pc = Input(Vec(coreWidth, UInt(vaddrBits.W)))
 
     //Breakpoint info
-    val status      = Output(new MStatus)
-    val bp          = Output(Vec(nBreakpoints,new BP))
-    val mcontext    = Output(UInt(mcontextWidth.W))
-    val scontext          = Output(UInt(scontextWidth.W))
+//    val status      = Output(new MStatus)
+//    val bp          = Output(Vec(nBreakpoints,new BP))
+//    val mcontext    = Output(UInt(mcontextWidth.W))
+//    val scontext          = Output(UInt(scontextWidth.W))
 
     val sfence      = Valid(new SFenceReq)
     val brupdate    = Output(new BrUpdateInfo)
@@ -170,9 +175,8 @@ class FrontendToCPUIO extends CoreModule
     val redirect_ftq_idx= Output(UInt())
     val redirect_ghist  = Output(new GlobalHistory)
 
-    val commit          = Valid(UInt(ftqSz.W))
+    val commit          = Valid(UInt(numFTQEntries.W))
     val flush_icache    = Output(Bool())
-    val perf            = Input(new FrontendPerfEvents)
 }
 class FrontendIO extends CoreBundle {
     val cpu = Flipped(new FrontendToCPUIO())
@@ -185,20 +189,21 @@ class FrontendIO extends CoreBundle {
  */
 //TODO Frontend.273 bpd，RAS,icache的接口
 class Frontend extends CoreModule
-        with HasFrontendParameters
 {
+    val fetchWidth = frontendParams.fetchWidth
+
+
     val reset_addr = 0.U(vaddrBits)
     val io = IO(new FrontendIO)
     val io_reset_vector =reset_addr
-    implicit val edge = outer.masterNode.edges.out(0)
 
-    val bpd = Module(new BankedPredictor)
+    val bpd = Module(new BPD)
     bpd.io.f3fire := false.B
     val ras = Module(new RAS)
 
-    val icache = Module(new ICache())
+    val icache = Module(new ICache(frontendParams.iCacheParams))
     icache.io.invalidate := io.cpu.flush_icache
-    val tlb = Module(new TLB())
+    val tlb = Module(new TLB)
 //    io.cpu.perf.tlbMiss := io.ptw.req.fire
 //    io.cpu.perf.acquire := icache.io.perf.acquire
 
@@ -400,9 +405,9 @@ class Frontend extends CoreModule
     f3.io.enq.bits.xcpt := s2_tlb_resp
     f3.io.enq.bits.fsrc := s2_fsrc
 //    f3.io.enq.bits.tsrc := s2_tsrc
-
+    val numRasEntries = frontendParams.bpdParams.numRasEntries
     //RAS输入在s2，输出在s3
-    val ras_read_idx = RegInit(0.U(log2Ceil(nRasEntries).W))
+    val ras_read_idx = RegInit(0.U(log2Ceil(numRasEntries).W))
     ras.io.read_idx := ras_read_idx
     when(f3.io.enq.fire){
         ras_read_idx := f3.io.enq.bits.ghist.ras_idx

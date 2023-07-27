@@ -7,7 +7,7 @@ import common.Consts._
 class BPUParameters {
     val localHistoryLength: Int  = 0
     val globalHistoryLength: Int = 0
-    val nRasEntries: Int         = 0
+    val numRasEntries: Int       = 0
 }
 
 class ICacheParameters {

@@ -1,4 +1,4 @@
-package common
+package iFu.common
 
 import chisel3._
 import chisel3.util._
@@ -25,4 +25,4 @@ trait IQType {
     val IQT_MEM = 2.U(IQT_SZ.W)
 }
 
-object Consts with BSRC with CFIType with IQType {}
+object Consts extends BSRC with CFIType with IQType {}
