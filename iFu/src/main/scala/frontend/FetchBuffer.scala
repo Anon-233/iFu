@@ -71,7 +71,7 @@ class FetchBuffer extends CoreModule {
             inUops(i).pcLowBits := pc
             inUops(i).isSFB     := io.enq.bits.sfbs(i) || io.enq.bits.shadowed_mask(i) // is sfb_br or sfb_shadow
             inUops(i).ftqIdx    := io.enq.bits.ftq_idx
-            inUops(i).instr     := io.enq.bits.insts(i)
+            inUops(i).instr     := io.enq.bits.instrs(i)
             inUops(i).taken     := io.enq.bits.cfi_idx === i.U && io.enq.bits.cfi_idx.valid
 
             // TODO: exception handling
