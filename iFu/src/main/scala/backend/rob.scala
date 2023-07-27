@@ -7,7 +7,7 @@ import iFu.common._
 
 class RobIO(
     val numWakeupPorts: Int
-)(implicit p : Parameters) extends CoreBundle
+) extends CoreBundle
 {
 
     val enq_valids = Input(Vec(coreWidth,Bool()))
@@ -54,7 +54,7 @@ class RobIO(
 
 }
 
-class CommitSignals(implicit p:Parameters) extends CoreBundle
+class CommitSignals extends CoreBundle
 {
     val valids = Vec(retireWidth, Bool())
     val arch_valids = Vec(retireWidth,Bool())
@@ -68,7 +68,7 @@ class CommitSignals(implicit p:Parameters) extends CoreBundle
     val rollback = Bool()
 }
 
-class CommitExceptionSignals(implicit p: Parameters) extends CoreBundle
+class CommitExceptionSignals extends CoreBundle
 {
     val ftq_idx = UInt(log2Ceil(ftqSz).W)
     //val edge_inst = Bool()
@@ -88,7 +88,7 @@ object FlushTypes
     def xcpt = 1.U
     def eret = (2+1).U
     def refetch = 2.U
-    def nexst = 4.U
+    def next = 4.U
 
     def useCsrEvec(typ: UInt): Bool = typ(0)
     def useSamePC(typ: UInt): Bool = typ === refetch
@@ -106,7 +106,7 @@ object FlushTypes
 
 }
 
-class Exception(implicit p:Parameters) extends CoreBundle
+class Exception extends CoreBundle
 {
     val uop = new MicroOp()
     //TODO:update cause to loogarch
@@ -117,9 +117,9 @@ class Exception(implicit p:Parameters) extends CoreBundle
 
 class Rob(
     val numWakeupPorts: Int
-)(implicit p:Parameters) extends CoreModule
+) extends CoreModule
 {
-    val io = IO(new RobIo(numWakeupPorts))
+    val io = IO(new RobIO(numWakeupPorts))
 
     //state
     val stateReset :: stateNormal ::stateRollback ::stateWatiTillEmpty ::Nil = Enum(4)
@@ -162,11 +162,11 @@ class Rob(
     io.flush_frontend := rXcptVal
 
     //-----------------tool def---------------------
-    def GetRowIdx(robIdx : Uint) :UInt ={
+    def GetRowIdx(robIdx : UInt) :UInt ={
         if(coreWidth == 1) return robIdx
         else return robIdx >> log2Ceil(coreWidth).U
     }
-    def GetBankIdx(robIdx :Uint):Uint ={
+    def GetBankIdx(robIdx :UInt):UInt ={
         if (coreWidth ==1 ) return 0.U
         else {return robIdx(log2Ceil(coreWidth)-1,0).asUInt}
     }
@@ -187,7 +187,7 @@ class Rob(
 
         //------------------dispatch stage------------------
         //enqueue
-        when (io.enqValids(w)){
+        when (io.enq_valids(w)){
             robVal(robTail) := true.B
             robBsy(robTail) := !(io.enq_uops(w).is_fence || io.enq_uops(w).is_fencei)
             robUnsafe(robTail) := io.enq_uops(w).unsafe
@@ -254,7 +254,7 @@ class Rob(
         io.commit.rbk_valids(w) := rbkRow && robVal(comIdx)
         io.commit.rollback := (robState === stateRollback)
 
-        when(rbkROw){
+        when(rbkRow){
             robVal(comIdx) := false.B
             robException(comIdx) := false.B
         }
@@ -267,7 +267,7 @@ class Rob(
             when(IsKilledByBranch(io.brupdate,br_mask))
             {
                 robVal(i) :=false.B
-            } .elsewhen (robVal[i]){
+            } .elsewhen (robVal(i)){
                 robUop(i).br_mask := GetNewBrMask(io.brupdate,brMask)
             }
         }
@@ -356,7 +356,7 @@ class Rob(
         enqXcpts(i) := io.enq_valids(i) && io.enq_uops(i).exception
     }
 
-    when(!(io.flush.valid || exception_thrown) && robState =/= stateRollback){
+    when(!(io.flush.valid || exceptionThrown) && robState =/= stateRollback){
         when(io.lxcpt.valid){
             val newXcptUop = io.lxcpt.bits.uop
 
@@ -431,7 +431,6 @@ class Rob(
 
     io.rob_head_idx := robHeadIdx
     io.rob_tail_idx := robTailIdx
-    io.rob_pnr_idx := robPnrIdx
     io.empty := empty
     io.ready := (robState === stateNormal) && !full && !rXcptVal
 
@@ -468,7 +467,7 @@ class Rob(
     }
 
 
-    io.com_load_is_at_rob_head := RegNext(robHeadUsesLdq(PriorityEncoder(rob_head_vals.asUInt)) && !willCommit.reduce(_||_))
+    io.com_load_is_at_rob_head := RegNext(robHeadUsesLdq(PriorityEncoder(robHeadVals.asUInt)) && !willCommit.reduce(_||_))
 
 
 }
@@ -490,3 +489,12 @@ object WrapInc
       Mux(wrap, 0.U, value + 1.U)
   }
 }
+
+object Sext
+{
+    def apply(x: UInt, length: Int): UInt = {
+        if (x.getWidth == length) return x
+        else return Cat(Fill(length-x.getWidth, x(x.getWidth-1)), x)
+    }
+}
+
