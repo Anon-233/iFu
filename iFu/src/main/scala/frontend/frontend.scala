@@ -41,87 +41,8 @@ object Parameters{
     val CFI_JAL = 2.U(CFI_SZ.W) // JAL
     val CFI_JALR = 3.U(CFI_SZ.W) // JALR
 }
-trait HasFrontendParameters extends HasL1ICacheParameters
-{
-    // How many banks does the ICache use?
-    // How many bytes wide is a bank?
-    val bankBytes = fetchBytes/nBanks
-
-    val bankWidth = fetchWidth/nBanks
-
-    require(nBanks == 1 || nBanks == 2)
 
 
-
-    // How many "chunks"/interleavings make up a cache line?
-    val numChunks = icBlockBytes / bankBytes
-
-    // Which bank is the address pointing to?
-    def bank(addr: UInt) = if (nBanks == 2) addr(log2Ceil(bankBytes)) else 0.U
-    def isLastBankInBlock(addr: UInt) = {
-        (nBanks == 2).B && addr(icBlockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U
-    }
-    def mayNotBeDualBanked(addr: UInt) = {
-        require(nBanks == 2)
-        isLastBankInBlock(addr)
-    }
-
-    def blockAlign(addr: UInt) = ~(~addr | (icBlockBytes-1).U)
-    def bankAlign(addr: UInt) = ~(~addr | (bankBytes-1).U)
-
-    def fetchIdx(addr: UInt) = addr >> log2Ceil(fetchBytes)
-
-    def nextBank(addr: UInt)= bankAlign(addr) + bankBytes.U
-    def nextFetch(addr: UInt) = {
-
-        require(nBanks == 2)
-        bankAlign(addr) + Mux(mayNotBeDualBanked(addr), bankBytes.U, fetchBytes.U)
-    }
-
-    def fetchMask(addr: UInt) = {
-        val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstrBytes)-1, log2Ceil(coreInstrBytes))
-        if (nBanks == 1) {
-            ((1 << fetchWidth)-1).U << idx
-        } else {
-            val shamt = idx.extract(log2Ceil(fetchWidth)-2, 0)
-            val end_mask = Mux(mayNotBeDualBanked(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
-            ((1 << fetchWidth)-1).U << shamt & end_mask
-        }
-    }
-
-    def bankMask(addr: UInt) = {
-        val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstrBytes)-1, log2Ceil(coreInstrBytes))
-        if (nBanks == 1) {
-            1.U(1.W)
-        } else {
-            Mux(mayNotBeDualBanked(addr), 1.U(2.W), 3.U(2.W))
-        }
-    }
-}
-object WrapDec
-{
-    // "n" is the number of increments, so we wrap at n-1.
-    def apply(value: UInt, n: Int): UInt = {
-        if (isPow2(n)) {
-            (value - 1.U)(log2Ceil(n)-1,0)
-        } else {
-            val wrap = (value === 0.U)
-            Mux(wrap, (n-1).U, value - 1.U)
-        }
-    }
-}
-object WrapInc
-{
-    // "n" is the number of increments, so we wrap at n-1.
-    def apply(value: UInt, n: Int): UInt = {
-        if (isPow2(n)) {
-            (value + 1.U)(log2Ceil(n)-1,0)
-        } else {
-            val wrap = (value === (n-1).U)
-            Mux(wrap, 0.U, value + 1.U)
-        }
-    }
-}
 //为boom中的FrontendResp，由于只有frontend中用到这个类，直接根据实际作用来改名
 //实际上是S3寄存器，存储icache的输出
 class S3 extends CoreBundle{
@@ -276,7 +197,7 @@ class FrontendToCPUIO extends CoreModule
 }
 class FrontendIO extends CoreBundle {
     val cpu = Flipped(new FrontendToCPUIO())
-    val errors = new ICacheErrors
+//    val errors = new ICacheErrors
 }
 
 /**TODO
@@ -293,7 +214,7 @@ class Frontend extends CoreModule
     implicit val edge = outer.masterNode.edges.out(0)
 
     val bpd = Module(new BankedPredictor)
-    bpd.io.f3_fire := false.B
+    bpd.io.f3fire := false.B
     val ras = Module(new RAS)
 
     val icache = Module(new ICache())
@@ -827,4 +748,87 @@ class Frontend extends CoreModule
     ftq.io.debug_ftq_idx := io.cpu.debug_ftq_idx
     io.cpu.debug_fetch_pc := ftq.io.debug_fetch_pc
 
+}
+/*-----------------------------------------utils--------------------------------------*/
+trait HasFrontendParameters
+{
+    // How many banks does the ICache use?
+    // How many bytes wide is a bank?
+    val bankBytes = fetchBytes/nBanks
+
+    val bankWidth = fetchWidth/nBanks
+
+    require(nBanks == 1 || nBanks == 2)
+
+
+
+    // How many "chunks"/interleavings make up a cache line?
+    val numChunks = icBlockBytes / bankBytes
+
+    // Which bank is the address pointing to?
+    def bank(addr: UInt) = if (nBanks == 2) addr(log2Ceil(bankBytes)) else 0.U
+    def isLastBankInBlock(addr: UInt) = {
+        (nBanks == 2).B && addr(icBlockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U
+    }
+    def mayNotBeDualBanked(addr: UInt) = {
+        require(nBanks == 2)
+        isLastBankInBlock(addr)
+    }
+
+    def blockAlign(addr: UInt) = ~(~addr | (icBlockBytes-1).U)
+    def bankAlign(addr: UInt) = ~(~addr | (bankBytes-1).U)
+
+    def fetchIdx(addr: UInt) = addr >> log2Ceil(fetchBytes)
+
+    def nextBank(addr: UInt)= bankAlign(addr) + bankBytes.U
+    def nextFetch(addr: UInt) = {
+
+        require(nBanks == 2)
+        bankAlign(addr) + Mux(mayNotBeDualBanked(addr), bankBytes.U, fetchBytes.U)
+    }
+
+    def fetchMask(addr: UInt) = {
+        val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstrBytes)-1, log2Ceil(coreInstrBytes))
+        if (nBanks == 1) {
+            ((1 << fetchWidth)-1).U << idx
+        } else {
+            val shamt = idx.extract(log2Ceil(fetchWidth)-2, 0)
+            val end_mask = Mux(mayNotBeDualBanked(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
+            ((1 << fetchWidth)-1).U << shamt & end_mask
+        }
+    }
+
+    def bankMask(addr: UInt) = {
+        val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstrBytes)-1, log2Ceil(coreInstrBytes))
+        if (nBanks == 1) {
+            1.U(1.W)
+        } else {
+            Mux(mayNotBeDualBanked(addr), 1.U(2.W), 3.U(2.W))
+        }
+    }
+}
+
+object WrapDec
+{
+    // "n" is the number of increments, so we wrap at n-1.
+    def apply(value: UInt, n: Int): UInt = {
+        if (isPow2(n)) {
+            (value - 1.U)(log2Ceil(n)-1,0)
+        } else {
+            val wrap = (value === 0.U)
+            Mux(wrap, (n-1).U, value - 1.U)
+        }
+    }
+}
+object WrapInc
+{
+    // "n" is the number of increments, so we wrap at n-1.
+    def apply(value: UInt, n: Int): UInt = {
+        if (isPow2(n)) {
+            (value + 1.U)(log2Ceil(n)-1,0)
+        } else {
+            val wrap = (value === (n-1).U)
+            Mux(wrap, 0.U, value + 1.U)
+        }
+    }
 }
