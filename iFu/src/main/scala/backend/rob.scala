@@ -472,3 +472,21 @@ class Rob(
 
 
 }
+
+
+//------------------------------------------utils------------------------------
+object WrapDec
+{
+  def apply(value: UInt, n: Int): UInt = {
+      val wrap = (value === 0.U)
+      Mux(wrap, (n-1).U, value - 1.U)
+  }
+}
+
+object WrapInc
+{
+  def apply(value: UInt, n: Int): UInt = {
+      val wrap = (value === (n-1).U)
+      Mux(wrap, 0.U, value + 1.U)
+  }
+}
