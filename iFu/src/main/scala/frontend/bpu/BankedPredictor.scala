@@ -2,9 +2,52 @@ package iFu.frontend
 
 import chisel3._
 import chisel3.util._
+import iFu.common.CoreBundle
 
 
 
+//class BranchPredictionUpdate extends CoreBundle
+//{
+//    val fetchWidth = frontendParams.fetchWidth
+//    val localHistoryLength = frontendParams.bpdParams.localHistoryLength
+//    val nBanks      = frontendParams.iCacheParams.nBanks
+//
+//    // Indicates that this update is due to a speculated misprediction
+//    // Local predictors typically update themselves with speculative info
+//    // Global predictors only care about non-speculative updates
+//    val is_mispredict_update = Bool()
+//    val is_repair_update = Bool()
+//    val btb_mispredicts = UInt(fetchWidth.W)
+//    def is_btb_mispredict_update = btb_mispredicts =/= 0.U
+//    def is_commit_update = !(is_mispredict_update || is_repair_update || is_btb_mispredict_update)
+//
+//    val pc            = UInt(vaddrBits.W)
+//    // Mask of instructions which are branches.
+//    // If these are not cfi_idx, then they were predicted not taken
+//    val br_mask       = UInt(fetchWidth.W)
+//    // Which CFI was taken/mispredicted (if any)
+//    val cfi_idx       = Valid(UInt(log2Ceil(fetchWidth).W))
+//    // Was the cfi taken?
+//    val cfi_taken     = Bool()
+//    // Was the cfi mispredicted from the original prediction?
+//    val cfi_mispredicted = Bool()
+//    // Was the cfi a br?
+//    val cfi_is_br     = Bool()
+//    // Was the cfi a jal/jalr?
+//    val cfi_is_jal  = Bool()
+//    // Was the cfi a jalr
+//    val cfi_is_jalr = Bool()
+//    //val cfi_is_ret  = Bool()
+//
+//    val ghist = new GlobalHistory
+//    val lhist = Vec(nBanks, UInt(localHistoryLength.W))
+//
+//
+//    // What did this CFI jump to?
+//    val target        = UInt(vaddrBits.W)
+//
+//    val meta          = Vec(nBanks, UInt(bpdMaxMetaLength.W))
+//}
 
 
 
@@ -37,7 +80,7 @@ class BranchPredictionBundle extends Bundle with HasBPUParameters{
 
 // 这是全部的Bank的预测信息
 
-class UpdateInfo extends Bundle with HasBPUParameters{
+class BranchPredictionUpdate extends Bundle with HasBPUParameters{
      // Indicates that this update is due to a speculated misprediction
     // Local predictors typically update themselves with speculative info
     // Global predictors only care about non-speculative updates

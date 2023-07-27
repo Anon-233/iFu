@@ -1,11 +1,11 @@
 package iFu.frontend
 
+import backend.memSystem.BrUpdateInfo
 import chisel3._
 import chisel3.util._
-
 import iFu.common._
 import iFu.common.Consts._
-
+import iFu.util._
 import iFu.backend.{PreDecode, PreDecodeSignals}
 // import iFu.frontend.Parameters._
 
@@ -20,10 +20,10 @@ class FrontendExceptions extends Bundle {
     val ae = Bool()
 }
 
-class GlobalHistory extends CoreBundle {
+class GlobalHistory extends CoreBundle with FrontendUtils {
     /*--------------------------*/
     val globalHistoryLength = frontendParams.bpdParams.globalHistoryLength
-    val nRasEntries         = frontendParams.bpdParams.nRasEntries
+    val numRasEntries         = frontendParams.bpdParams.numRasEntries
     val fetchWidth          = frontendParams.fetchWidth
     val bankWidth           = frontendParams.bankWidth
     /*--------------------------*/
@@ -32,7 +32,7 @@ class GlobalHistory extends CoreBundle {
     val new_saw_branch_not_taken = Bool()
     val new_saw_branch_taken = Bool()
 
-    val ras_idx = UInt(log2Ceil(nRasEntries).W)
+    val ras_idx = UInt(log2Ceil(numRasEntries).W)
 
     def histories(bank: Int): UInt = {
         if (bank == 0) {
@@ -63,8 +63,9 @@ class GlobalHistory extends CoreBundle {
             MaskLower(cfi_idx_oh) & ~Mux(cfi_is_br && cfi_taken, cfi_idx_oh, 0.U(fetchWidth.W)),
             ~(0.U(fetchWidth.W))
         )
+
         val cfi_in_bank_0 = cfi_valid && cfi_taken && cfi_idx_fixed < bankWidth.U
-        val ignore_second_bank = cfi_in_bank_0 || mayNotBeDualBanked(addr)
+        val ignore_second_bank = cfi_in_bank_0 || isLastBankInBlock(addr)
 
         val first_bank_saw_not_taken = not_taken_branches(bankWidth - 1, 0) =/= 0.U || current_saw_branch_not_taken
         new_history.current_saw_branch_not_taken := false.B
@@ -82,8 +83,8 @@ class GlobalHistory extends CoreBundle {
         }
 
         new_history.ras_idx :=
-            Mux(cfi_valid && cfi_is_call,   WrapInc(ras_idx, nRasEntries),
-            Mux(cfi_valid && cfi_is_ret,    WrapDec(ras_idx, nRasEntries),
+            Mux(cfi_valid && cfi_is_call,   WrapInc(ras_idx, numRasEntries),
+            Mux(cfi_valid && cfi_is_ret,    WrapDec(ras_idx, numRasEntries),
                                             ras_idx))
         new_history
     }
@@ -112,7 +113,6 @@ class FetchBundle extends CoreBundle {
     val pc          = UInt(vaddrBits.W)
     val next_pc     = UInt(vaddrBits.W)
     val insts       = Vec(fetchWidth, Bits(coreInstrBits.W))
-    val exp_insts   = Vec(fetchWidth, Bits(coreInstrBits.W))
     val sfbs        = Vec(fetchWidth,Bool())
     val sfb_masks   = Vec(fetchWidth,UInt((2*fetchWidth).W))
     val sfb_dests   = Vec(fetchWidth,UInt((1+log2Ceil(fetchBytes)).W))
@@ -123,7 +123,6 @@ class FetchBundle extends CoreBundle {
     val cfi_type    = UInt(CFI_SZ.W)
     val cfi_is_call = Bool()
     val cfi_is_ret  = Bool()
-    val cfi_npc_plus4   = Bool()
 
     val ras_top     = UInt(vaddrBits.W)
 
@@ -138,17 +137,13 @@ class FetchBundle extends CoreBundle {
     val xcpt_pf_if  = Bool()    //I-TLB miss(instruction fetch fault)
     val xcpt_ae_if  = Bool()    //Access exception
 
-    val bp_debug_if_oh = Vec(fetchWidth,Bool())
-    val bp_xcpt_if_oh   = Vec(fetchWidth,Bool())
-
     val bpd_meta    =Vec(nBanks,UInt())
 
     val fsrc        = UInt(BSRC_SZ.W)
-    val tsrc        = UInt(BSRC_SZ.W)
 
 }
 //IO for the BOOM Frontend to/from the CPU
-class FrontendToCPUIO extends CoreModule
+class FrontendToCPUIO extends CoreBundle
 {
     val numFTQEntries = frontendParams.numFTQEntries
     val fetchpacket     = Flipped(new DecoupledIO(new FetchBufferResp))
@@ -185,7 +180,7 @@ class FrontendIO extends CoreBundle {
  * bpd的接口 .354 preds修改
  */
 //TODO Frontend.273 bpd，RAS,icache的接口
-class Frontend extends CoreModule
+class Frontend extends CoreModule with FrontendUtils
 {
     val fetchWidth = frontendParams.fetchWidth
     val numRasEntries = frontendParams.bpdParams.numRasEntries
@@ -196,7 +191,7 @@ class Frontend extends CoreModule
     val io = IO(new FrontendIO)
     val io_reset_vector =reset_addr
 
-    val bpd = Module(new BPD)
+    val bpd = Module(new BranchPredictor())
     bpd.io.f3fire := false.B
     val ras = Module(new RAS)
 
@@ -233,9 +228,9 @@ class Frontend extends CoreModule
     icache.io.req.valid     := s0_valid
     icache.io.req.bits.addr := s0_vpc
 
-    bpd.io.f0_req.valid     := s0_valid
-    bpd.io.f0_req.bits.pc   := s0_vpc
-    bpd.io.f0_req.bits.ghist:= s0_ghist
+    bpd.io.f0req.valid     := s0_valid
+    bpd.io.f0req.bits.pc   := s0_vpc
+    bpd.io.f0req.bits.ghist:= s0_ghist
     // --------------------------------------------------------
     // **** ICache Access (F1) ****
     //      Translate VPC
@@ -252,7 +247,7 @@ class Frontend extends CoreModule
     tlb.io.req.bits.cmd         := DontCare
     tlb.io.req.bits.vaddr       := s1_vpc
     tlb.io.req.bits.passthrough := false.B  //may be changed
-    tlb.io.req.bits.size        := log2Ceil(fetchWidth * coreInstrBytes)
+    tlb.io.req.bits.size        := log2Ceil(fetchWidth * frontendParams.instrBytes).U
 //    tlb.io.req.bits.v           := io.ptw.status.v
 //    tlb.io.req.bits.prv         := io.ptw.status.prv
     tlb.io.sfence               := RegNext(io.cpu.sfence)
@@ -272,21 +267,20 @@ class Frontend extends CoreModule
     val f1_mask = fetchMask(s1_vpc) //有效的bank位置（"b01"或者"b11"）
     //根据bpd的f1的结果进行重定向
     val f1_redirects = (0 until fetchWidth) map { i=>
-        s1_valid && f1_mask(i) && s1_bpd_resp.preds(i).predicted_pc.valid &&
-                (s1_bpd_resp.preds(i).is_jal ||
-                        s1_bpd_resp.preds(i).is_br && s1_bpd_resp.preds(i).taken)
-
+        s1_valid && f1_mask(i) && s1_bpd_resp.predInfos(i).predictedpc.valid &&
+                (s1_bpd_resp.predInfos(i).isJal ||
+                        s1_bpd_resp.predInfos(i).isBranch && s1_bpd_resp.predInfos(i).taken)
     }
     val f1_redirect_idx = PriorityEncoder(f1_redirects)
     val f1_do_redirect = f1_redirects.reduce(_||_)
-    val f1_targs = s1_bpd_resp.preds.map(_.predicted_pc.bits)
+    val f1_targs = s1_bpd_resp.predInfos.map(_.predictedpc.bits)
     val f1_predicted_target = Mux(f1_do_redirect,
         f1_targs(f1_redirect_idx),
         nextFetch(s1_vpc))
     val f1_predicted_ghist = s1_ghist.update(
-        s1_bpd_resp.preds.map(p => p.is_br && p.predicted_pc.valid).asUInt & f1_mask,
-        s1_bpd_resp.preds(f1_redirect_idx).taken && f1_do_redirect,
-        s1_bpd_resp.preds(f1_redirect_idx).is_br,
+        s1_bpd_resp.predInfos.map(p => p.isBranch && p.predictedpc.valid).asUInt & f1_mask,
+        s1_bpd_resp.predInfos(f1_redirect_idx).taken && f1_do_redirect,
+        s1_bpd_resp.predInfos(f1_redirect_idx).isBranch,
         f1_redirect_idx,
         f1_do_redirect,
         s1_vpc,
@@ -323,20 +317,20 @@ class Frontend extends CoreModule
     val f2_bpd_resp = bpd.io.resp.f2
     val f2_mask = fetchMask(s2_vpc)
     val f2_redirects = (0 until fetchWidth) map { i =>
-        s2_valid && f2_mask(i) && f2_bpd_resp.preds(i).predicted_pc.valid &&
-                (f2_bpd_resp.preds(i).is_jal ||
-                        (f2_bpd_resp.preds(i).is_br && f2_bpd_resp.preds(i).taken))
+        s2_valid && f2_mask(i) && f2_bpd_resp.predInfos(i).predictedpc.valid &&
+                (f2_bpd_resp.predInfos(i).isJal ||
+                        (f2_bpd_resp.predInfos(i).isBranch && f2_bpd_resp.predInfos(i).taken))
     }
     val f2_redirect_idx = PriorityEncoder(f2_redirects)
-    val f2_targs = f2_bpd_resp.preds.map(_.predicted_pc.bits)
+    val f2_targs = f2_bpd_resp.predInfos.map(_.predictedpc.bits)
     val f2_do_redirect = f2_redirects.reduce(_||_)
     val f2_predicted_target = Mux(f2_do_redirect,
         f2_targs(f2_redirect_idx),
         nextFetch(s2_vpc))
     val f2_predicted_ghist = s2_ghist.update(
-        f2_bpd_resp.preds.map(p => p.is_br && p.predicted_pc.valid).asUInt & f2_mask,
-        f2_bpd_resp.preds(f2_redirect_idx).taken && f2_do_redirect,
-        f2_bpd_resp.preds(f2_redirect_idx).is_br,
+        f2_bpd_resp.predInfos.map(p => p.isBranch && p.predictedpc.valid).asUInt & f2_mask,
+        f2_bpd_resp.predInfos(f2_redirect_idx).taken && f2_do_redirect,
+        f2_bpd_resp.predInfos(f2_redirect_idx).isBranch,
         f2_redirect_idx,
         f2_do_redirect,
         s2_vpc,
@@ -415,7 +409,7 @@ class Frontend extends CoreModule
     f3_bpd_resp.io.enq.valid := f3.io.deq.valid && RegNext(f3.io.enq.ready)
     f3_bpd_resp.io.enq.bits := bpd.io.resp.f3
     when (f3_bpd_resp.io.enq.fire){
-        bpd.io.f3_fire := true.B
+        bpd.io.f3fire := true.B
     }
 
     f3.io.deq.ready := f4_ready
@@ -428,8 +422,8 @@ class Frontend extends CoreModule
     val f3_is_last_bank_in_block = isLastBankInBlock(f3_aligned_pc)
 //    val f3_is_rvc   = Wire(Vec(fetchWidth,Bool())) 后面代码删去RVC相关的部分
     val f3_redirects       = Wire(Vec(fetchWidth,Bool()))
-    val f3_targs            = Wire(fetchWidth,UInt(vaddrBits.W))
-    val f3_cfi_types        = Wire(fetchWidth,UInt(CFI_SZ.W))
+    val f3_targs            = Wire(Vec(fetchWidth,UInt(vaddrBits.W)))
+    val f3_cfi_types        = Wire(Vec(fetchWidth, UInt(CFI_SZ.W)))
     val f3_shadowed_mask    = Wire(Vec(fetchWidth,Bool()))
     val f3_fetch_bundle     = Wire(new FetchBundle)
     val f3_mask             = Wire(Vec(fetchWidth,Bool()))
@@ -475,23 +469,24 @@ class Frontend extends CoreModule
 
             bank_insts(w)               := inst
             f3_fetch_bundle.insts(i)    := inst
-            bpu.io.pc                   := pc
             brsigs                      := bpd_decoder.io.out
             inst  := bank_data(w*coreInstrBits+coreInstrBits-1,w*coreInstrBits)
             bank_mask(w)    := f3.io.deq.valid && f3_imemresp.mask(i) && valid && !redirect_found
             f3_mask(i)      := f3.io.deq.valid && f3_imemresp.mask(i) && valid && !redirect_found
             f3_targs(i)     := Mux(brsigs.cfiType === CFI_JALR,     //JALR预测的结果会错，而Br指令只有方向会错
-                f3_bpd_resp.io.deq.bits.preds(i).predicted_pc.bits,
+                f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits,
                 brsigs.target)
             //TODO JAL结果的判断能提前吗？由于ICache，不能
             f3_btb_mispredicts(i) := (brsigs.cfiType === CFI_JAL && valid &&
-                    f3_bpd_resp.io.deq.bits.preds(i).predicted_pc.valid &&
-                    (f3_bpd_resp.io.deq.bits.preds(i).predicted_pc =/= brsigs.target)
+                    f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.valid &&
+                    (f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc =/= brsigs.target)
                     )
                 //i << 1是防止溢出，因为sfbOffset <= Cacheline
             val offset_from_aligned_pc = (
                     (i<<1).U((log2Ceil(lineBytes)+1).W) + brsigs.sfbOffset.bits
             )
+            val fetchBytes = frontendParams.fetchBytes
+
             val lower_mask = Wire(UInt((2*fetchWidth).W))
             val upper_mask = Wire(UInt((2*fetchWidth).W))
             lower_mask := UIntToOH(i.U)
@@ -501,6 +496,7 @@ class Frontend extends CoreModule
              * 判断是否是sfb指令，如果是Cacheline的最后一个bank，那么最多只能取3个bank（跨Cacheline）
              * 正常情况，可以取4个bank
              */
+            val bankBytes  = frontendParams.iCacheParams.bankBytes
             f3_fetch_bundle.sfbs(i) := (
                     f3_mask(i) &&
                             brsigs.sfbOffset.valid &&
@@ -513,7 +509,7 @@ class Frontend extends CoreModule
              * bank有效
              * 是shadowable的或者该位置指令无效
              */
-            f3_fetch_bundle.shadowable_mask(i) := (!(f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if || bpu.io.debug_if || bpu.io.xcpt_if) &&
+            f3_fetch_bundle.shadowable_mask(i) := (!(f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if ) &&
                     f3_bank_mask(b) &&
                     (brsigs.shadowable || !f3_mask(i)))
             f3_fetch_bundle.sfb_dests(i) := offset_from_aligned_pc
@@ -525,7 +521,7 @@ class Frontend extends CoreModule
              */
             f3_redirects(i)     := f3_mask(i) && (
                     brsigs.cfiType === CFI_JAL || brsigs.cfiType === CFI_JALR ||
-                            (brsigs.cfiType === CFI_BR && f3_bpd_resp.io.deq.preds(i).taken)
+                            (brsigs.cfiType === CFI_BR && f3_bpd_resp.io.deq.bits.predInfos(i).taken)
             )
 
             f3_br_mask(i)   := f3_mask(i) && brsigs.cfiType === CFI_BR
@@ -533,8 +529,6 @@ class Frontend extends CoreModule
             f3_call_mask(i) := brsigs.isCall
             f3_ret_mask(i)  := brsigs.isRet
 
-            f3_fetch_bundle.bp_debug_if_oh(i)   := bpu.io.debug_if
-            f3_fetch_bundle.bp_xcpt_if_oh(i)    := bpu.io.xcpt_if
 
             redirect_found = redirect_found || f3_redirects(i)
         }
@@ -604,11 +598,11 @@ class Frontend extends CoreModule
     }
     //当f3发现btb预测错误时，建一个队列来存储bpd更新
     val f4_btb_corrections = Module(new Queue(new BranchPredictionUpdate,2))
-    f4_btb_corrections.io.enq.valid := f3.io.deq.fire && f3_btb_mispredicts.reduce(_||_) && enableBTBFastRepair.B
+    f4_btb_corrections.io.enq.valid := f3.io.deq.fire && f3_btb_mispredicts.reduce(_||_)
     f4_btb_corrections.io.enq.bits  := DontCare
-    f4_btb_corrections.io.enq.bits.is_mispredict_update := false.B
-    f4_btb_corrections.io.enq.bits.is_repair_update     := false.B
-    f4_btb_corrections.io.enq.bits.btb_mispredicts      := f3_btb_mispredicts.asUInt
+    f4_btb_corrections.io.enq.bits.isMispredictUpdate := false.B
+    f4_btb_corrections.io.enq.bits.isRepairUpdate     := false.B
+    f4_btb_corrections.io.enq.bits.btbMispredicts      := f3_btb_mispredicts.asUInt
     f4_btb_corrections.io.enq.bits.pc                   := f3_fetch_bundle.pc
     f4_btb_corrections.io.enq.bits.ghist                := f3_fetch_bundle.ghist
     f4_btb_corrections.io.enq.bits.lhist                := f3_fetch_bundle.lhist
@@ -675,26 +669,26 @@ class Frontend extends CoreModule
     ftq.io.enq.bits         := f4.io.deq.bits
 
     val bpd_update_arbiter = Module(new Arbiter(new BranchPredictionUpdate,2))
-    bpd_update_arbiter.io.in(0).valid := ftq.io.bpdupdate.valid
-    bpd_update_arbiter.io.in(0).bits  := ftq.io.bpdupdate.bits
+    bpd_update_arbiter.io.in(0).valid := ftq.io.bpdUpdate.valid
+    bpd_update_arbiter.io.in(0).bits  := ftq.io.bpdUpdate.bits
     assert(bpd_update_arbiter.io.in(0).ready)
     bpd_update_arbiter.io.in(1) <> f4_btb_corrections.io.deq
     bpd.io.update := bpd_update_arbiter.io.out
     bpd_update_arbiter.io.out.ready := true.B
     //ftq更新ras
-    when(ftq.io.ras_update && enableRasTopRepair.B){
+    when(ftq.io.rasUpdate){
         ras.io.write_valid  := true.B
-        ras.io.write_idx    := ftq.io.ras_update_idx
-        ras.io.write_addr   := ftq.io.ras_update_pc
+        ras.io.write_idx    := ftq.io.rasUpdateIdx
+        ras.io.write_addr   := ftq.io.rasUpdatepc
     }
     // -------------------------------------------------------
     // **** To Core (F5) ****
     // -------------------------------------------------------
 
     io.cpu.fetchpacket <> fb.io.deq
-    io.cpu.get_pc <> ftq.io.get_ftq_pc
+    io.cpu.get_pc <> ftq.io.getFtqpc
     ftq.io.deq  := io.cpu.commit
-    ftq.io.brupdate := io.cpu.brupdate
+    ftq.io.brUpdate := io.cpu.brupdate
 
     ftq.io.redirect.valid   := io.cpu.redirect_val
     ftq.io.redirect.bits    := io.cpu.redirect_ftq_idx
@@ -727,22 +721,10 @@ class Frontend extends CoreModule
         ftq.io.redirect.valid := io.cpu.redirect_val
         ftq.io.redirect.bits := io.cpu.redirect_ftq_idx
     }
-    ftq.io.debug_ftq_idx := io.cpu.debug_ftq_idx
-    io.cpu.debug_fetch_pc := ftq.io.debug_fetch_pc
+
 
 }
 /*-----------------------------------------utils--------------------------------------*/
-trait HasFrontendParameters
-{
-    // How many banks does the ICache use?
-    // How many bytes wide is a bank?
-    val bankBytes = fetchBytes/nBanks
-
-    val bankWidth = fetchWidth/nBanks
-
-
-}
-
 object WrapDec
 {
     // "n" is the number of increments, so we wrap at n-1.

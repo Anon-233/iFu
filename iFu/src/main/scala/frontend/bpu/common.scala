@@ -23,56 +23,6 @@ trait HasBPUParameters {
 
     val CFI_SZ = 2
     val BSRC_SZ = 2
-    
-    def fetchIdx(addr: UInt) = addr >> log2Ceil(fetchBytes)
-    def WrapInc(x: UInt, max: UInt) = Mux(x === max, 0.U, x + 1.U)
-
-        
-    def WrapDec(value: UInt, n: Int): UInt = {
-        // "n" is the number of increments, so we wrap at n-1.
-        if (isPow2(n)) {
-        (value - 1.U)(log2Ceil(n)-1,0)
-        } else {
-        val wrap = (value === 0.U)
-        Mux(wrap, (n-1).U, value - 1.U)
-        }
-    }
-
-    def MaskLower(in: UInt) = {
-        val n = in.getWidth
-        (0 until n).map(i => in >> i.U).reduce(_|_)
-    }
-    def bank(addr: UInt) = if (nBanks == 2) addr(log2Ceil(bankBytes)) else 0.U
-    def isLastBankInBlock(addr: UInt) = {
-        (nBanks == 2).B && addr(blockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U
-    }
-    def mayNotBeDualBanked(addr: UInt) = {
-        require(nBanks == 2)
-        isLastBankInBlock(addr)
-    }
-
-    def bankAlign(addr: UInt) = ~(~addr | (bankBytes-1).U)
-
-
-    def nextBank(addr: UInt) = bankAlign(addr) + bankBytes.U
-    def nextFetch(addr: UInt) = {
-
-        require(nBanks == 2)
-        bankAlign(addr) + Mux(mayNotBeDualBanked(addr), bankBytes.U, fetchBytes.U)
-    }
-
-    def fetchMask(addr: UInt) = {
-        val idx = addr(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
-        
-        val shamt = idx(log2Ceil(fetchWidth)-2, 0)
-        val end_mask = Mux(mayNotBeDualBanked(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
-        ((1 << fetchWidth)-1).U << shamt & end_mask
-    }
-
-    def bankMask(addr: UInt) = {
-        val idx = addr(log2Ceil(fetchWidth)+log2Ceil(coreInstBytes)-1, log2Ceil(coreInstBytes))
-        Mux(mayNotBeDualBanked(addr), 1.U(2.W), 3.U(2.W))
-    }
 }
 
 trait HasLoopParameters extends HasBPUParameters {

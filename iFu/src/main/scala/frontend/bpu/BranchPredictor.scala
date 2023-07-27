@@ -4,13 +4,19 @@ import chisel3._
 import chisel3.util._
 
 
+class BranchPredictionRequest(implicit p: Parameters) extends BoomBundle()(p)
+{
+  val pc    = UInt(vaddrBitsExtended.W)
+  val ghist = new GlobalHistory
+}
+
 class BranchPredictor(implicit p: Parameters) extends Module()(p)
  with HasBPUParameters
 {
   val io = IO(new Bundle {
 
     // Requests and responses
-    val f0req = Input(Valid(new BranchPredictionRequest))
+    val f0req = Flipped(Valid(new BranchPredictionRequest))
 
     val resp = Output(new Bundle {
       val f1 = new BranchPredictionBundle

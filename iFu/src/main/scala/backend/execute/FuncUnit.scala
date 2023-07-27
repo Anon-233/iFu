@@ -46,26 +46,6 @@ class FuncUnitResp extends CoreBundle {
     // val sfence = // TODO
 }
 
-class BrUpdateMasks extends CoreBundle {
-    val resolveMask = UInt(maxBrCount.W)
-    val mispredictMask = UInt(maxBrCount.W)
-}
-
-class BrResolutionInfo extends CoreBundle {
-    val uop = new MicroOp()
-    val valid = Bool()
-    val mispredict = Bool()
-    val taken = Bool()
-    val cfiType = UInt(CFI_SZ.W)
-    val pcSel = UInt(2.W)
-    val jalrTarget = UInt(xLen.W)
-    val targetOffset = SInt() // ???
-}
-
-class BrUpdateInfo extends CoreBundle  {
-    val b1 = new BrUpdateMasks()
-    val b2 = new BrResolutionInfo()
-}
 
 abstract class FuncUnit(
     val isPiplined: Boolean,

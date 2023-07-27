@@ -1,6 +1,7 @@
 package backend.memSystem
 import chisel3._
 import chisel3.util._
+import iFu.common.CoreBundle
 
 
 class MicroOp extends Bundle
@@ -161,20 +162,27 @@ trait HasDcacheParameters {
 
 }
 
-
-
-
-
-class BrUpdateInfo extends Bundle{
-  val b1 = new BrUpdateInfo1
+class BrUpdateMasks extends CoreBundle {
+    val resolveMask = UInt(maxBrCount.W)
+    val mispredictMask = UInt(maxBrCount.W)
 }
 
-class BrUpdateInfo1 extends Bundle {
-  val mispredict = Bool()
-  val mispredict_mask = UInt(40.W)
+class BrResolutionInfo extends CoreBundle {
+    val CFI_SZ = 2
+    val uop = new MicroOp()
+    val valid = Bool()
+    val mispredict = Bool()
+    val taken = Bool()
+    val cfiType = UInt(CFI_SZ.W)
+    val pcSel = UInt(2.W)
+    val jalrTarget = UInt(xLen.W)
+    val targetOffset = SInt() // ???
 }
 
-
+class BrUpdateInfo extends CoreBundle  {
+    val b1 = new BrUpdateMasks()
+    val b2 = new BrResolutionInfo()
+}
 
 
 
