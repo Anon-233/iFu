@@ -1,136 +1,118 @@
 package iFu.frontend
 
-import Chisel.RegNext
-import iFu.common._
 import chisel3._
 import chisel3.util._
-import frontend.{SFenceReq, TLB, TLBResp}
+
+import iFu.common._
+import iFu.common.Consts._
+
 import iFu.backend.{PreDecode, PreDecodeSignals}
-import iFu.frontend.Parameters._
-import iFu.frontend.{FetchBufferResp, ICache}
+// import iFu.frontend.Parameters._
+
 //TODO 重命名FrontEndExceptions,GlobalHistory,如果之后RAS增加计数器，Histories的update函数需要更改，
 //TODO FetchBundle重命名为FetchBufferEntry
 //TODO 检查valid信号 569行
 //TODO HasFrontEndparameters的函数只适用与ICache
-import chisel3.util._
-object Parameters{
-    val fetchWidth = 8
-    val bankWidth = 4
 
-    val globalHistoryLength = 16
-    val nRasEntries = 32
-    val fetchBytes = fetchWidth * 4
-
-    val nBanks = 2
-    val icBlockBytes = 64
-    val icBlockOffBits = icBlockBytes * 8
-
-    val ftqSz = 40 //numFTQEntries
-    val localHistoryLength = 16
-
-
-    val BSRC_SZ = 2
-    val BSRC_1 = 0.U(BSRC_SZ.W) // 1-cycle branch pred
-    val BSRC_2 = 1.U(BSRC_SZ.W) // 2-cycle branch pred
-    val BSRC_3 = 2.U(BSRC_SZ.W) // 3-cycle branch pred
-    val BSRC_C = 3.U(BSRC_SZ.W) // core branch resolution
-
-    val CFI_SZ = 2
-    val CFI_X = 0.U(CFI_SZ.W) // Not a CFI instruction
-    val CFI_BR = 1.U(CFI_SZ.W) // Branch
-    val CFI_JAL = 2.U(CFI_SZ.W) // JAL
-    val CFI_JALR = 3.U(CFI_SZ.W) // JALR
-}
-
-
-//为boom中的FrontendResp，由于只有frontend中用到这个类，直接根据实际作用来改名
-//实际上是S3寄存器，存储icache的输出
-class S3 extends CoreBundle{
-    val pc      = UInt(vaddrBits.W)
-    val data   = UInt((fetchWidth * coreInstrBits).W)
-    val mask    = UInt(fetchWidth.W)
-    val xcpt    = new FrontendExceptions
-    val ghist   = new GlobalHistory
-    val fsrc    = UInt(BSRC_SZ.W)
-}
 class FrontendExceptions extends Bundle {
-    val pf = new Bundle {
-        val inst = Bool()
-    }
-    val gf = new Bundle {
-        val inst = Bool()
-    }
-    val ae = new Bundle {
-        val inst = Bool()
-    }
+    val pf = Bool()
+    val gf = Bool()
+    val ae = Bool()
 }
-class GlobalHistory extends CoreBundle with HasBPUParameters {
-    val old_history = UInt(globalHistoryLength.W)
+
+class GlobalHistory extends CoreBundle {
+    /*--------------------------*/
+    val globalHistoryLength = frontendParams.bpdParams.globalHistoryLength
+    val nRasEntries         = frontendParams.bpdParams.nRasEntries
+    val fetchWidth          = frontendParams.fetchWidth
+    val bankWidth           = frontendParams.bankWidth
+    /*--------------------------*/
+    val old_history = UInt((globalHistoryLength).W)
     val current_saw_branch_not_taken = Bool()
     val new_saw_branch_not_taken = Bool()
     val new_saw_branch_taken = Bool()
+
     val ras_idx = UInt(log2Ceil(nRasEntries).W)
 
-    def histories(bank: Int) = {
+    def histories(bank: Int): UInt = {
         if (bank == 0) {
             old_history
         } else {
-            Mux(new_saw_branch_taken, old_history << 1 | 1.U,
-                Mux(new_saw_branch_not_taken, old_history << 1,
-                    old_history))
+            Mux(new_saw_branch_taken,       old_history << 1 | 1.U,
+            Mux(new_saw_branch_not_taken,   old_history << 1,
+                                            old_history))
         }
     }
 
     def ===(other: GlobalHistory): Bool = {
         ((old_history === other.old_history) &&
-                (new_saw_branch_not_taken === other.new_saw_branch_not_taken) &&
-                (new_saw_branch_taken === other.new_saw_branch_taken)
-                )
+         (new_saw_branch_not_taken === other.new_saw_branch_not_taken) &&
+         (new_saw_branch_taken === other.new_saw_branch_taken))
     }
 
     def =/=(other: GlobalHistory): Bool = !(this === other)
 
-    def update(branches: UInt, cfi_taken: Bool, cfi_is_br: Bool, cfi_idx: UInt,
-               cfi_valid: Bool, addr: UInt,
-               cfi_is_call: Bool, cfi_is_ret: Bool): GlobalHistory = {
+    def update(
+        branches: UInt, cfi_taken: Bool, cfi_is_br: Bool, cfi_idx: UInt,
+        cfi_valid: Bool, addr: UInt, cfi_is_call: Bool, cfi_is_ret: Bool
+    ): GlobalHistory = {
         val cfi_idx_fixed = cfi_idx(log2Ceil(fetchWidth) - 1, 0)
         val cfi_idx_oh = UIntToOH(cfi_idx_fixed)
         val new_history = Wire(new GlobalHistory)
         val not_taken_branches = branches & Mux(cfi_valid,
             MaskLower(cfi_idx_oh) & ~Mux(cfi_is_br && cfi_taken, cfi_idx_oh, 0.U(fetchWidth.W)),
-            ~(0.U(fetchWidth.W)))
+            ~(0.U(fetchWidth.W))
+        )
         val cfi_in_bank_0 = cfi_valid && cfi_taken && cfi_idx_fixed < bankWidth.U
         val ignore_second_bank = cfi_in_bank_0 || mayNotBeDualBanked(addr)
 
         val first_bank_saw_not_taken = not_taken_branches(bankWidth - 1, 0) =/= 0.U || current_saw_branch_not_taken
         new_history.current_saw_branch_not_taken := false.B
-        when(ignore_second_bank) {
+        when (ignore_second_bank) {
             new_history.old_history := histories(1)
             new_history.new_saw_branch_not_taken := first_bank_saw_not_taken
             new_history.new_saw_branch_taken := cfi_is_br && cfi_in_bank_0
-        }.otherwise {
-            new_history.old_history := Mux(cfi_is_br && cfi_in_bank_0, histories(1) << 1 | 1.U,
-                Mux(first_bank_saw_not_taken, histories(1) << 1,
-                    histories(1)))
+        } .otherwise {
+            new_history.old_history :=
+                Mux(cfi_is_br && cfi_in_bank_0, histories(1) << 1 | 1.U,
+                Mux(first_bank_saw_not_taken,   histories(1) << 1,
+                                                histories(1)))
             new_history.new_saw_branch_not_taken := not_taken_branches(fetchWidth - 1, bankWidth)
             new_history.new_saw_branch_taken := cfi_valid && cfi_is_br && !cfi_in_bank_0
         }
 
-        new_history.ras_idx := Mux(cfi_valid && cfi_is_call, WrapInc(ras_idx, nRasEntries),
-            Mux(cfi_valid && cfi_is_ret, WrapDec(ras_idx, nRasEntries), ras_idx))
+        new_history.ras_idx :=
+            Mux(cfi_valid && cfi_is_call,   WrapInc(ras_idx, nRasEntries),
+            Mux(cfi_valid && cfi_is_ret,    WrapDec(ras_idx, nRasEntries),
+                                            ras_idx))
         new_history
     }
 }
 
-//FetchBufferEntry
-class FetchBundle extends CoreBundle with HasFrontendParameters
-{
+class FetchResp extends CoreBundle {
+    /*--------------------------*/
+    val fetchWidth = frontendParams.fetchWidth
+    /*--------------------------*/
+    val pc      = UInt(vaddrBits.W)
+    val data    = UInt((fetchWidth * coreInstrBits).W)
+    val mask    = UInt((fetchWidth).W)
+    val xcpt    = new FrontendExceptions
+    val ghist   = new GlobalHistory
+    val fsrc    = UInt(BSRC_SZ.W)
+}
+
+class FetchBundle extends CoreBundle {
+    /*--------------------------*/
+    val fetchWidth         = frontendParams.fetchWidth
+    val fetchBytes         = frontendParams.fetchBytes
+    val numFTQEntries      = frontendParams.numFTQEntries
+    val nBanks             = frontendParams.iCacheParams.nBanks
+    val localHistoryLength = frontendParams.bpdParams.localHistoryLength
+    /*--------------------------*/
     val pc          = UInt(vaddrBits.W)
     val next_pc     = UInt(vaddrBits.W)
-    val insts       = Vec(fetchWidth,Bits(coreInstrBits.W))
-    val exp_insts   = Vec(fetchWidth,Bits(coreInstrBits.W))
-    //Information for sfb
-    // NOTE: This IS NOT equivalent to uop.pc_lob, that gets calculated in the FB
+    val insts       = Vec(fetchWidth, Bits(coreInstrBits.W))
+    val exp_insts   = Vec(fetchWidth, Bits(coreInstrBits.W))
     val sfbs        = Vec(fetchWidth,Bool())
     val sfb_masks   = Vec(fetchWidth,UInt((2*fetchWidth).W))
     val sfb_dests   = Vec(fetchWidth,UInt((1+log2Ceil(fetchBytes)).W))
@@ -145,7 +127,7 @@ class FetchBundle extends CoreBundle with HasFrontendParameters
 
     val ras_top     = UInt(vaddrBits.W)
 
-    val ftq_idx     = UInt(log2Ceil(ftqSz).W)
+    val ftq_idx     = UInt(log2Ceil(numFTQEntries).W)
     val mask        = UInt(fetchWidth.W)
 
     val br_mask     = UInt(fetchWidth.W)
@@ -168,18 +150,17 @@ class FetchBundle extends CoreBundle with HasFrontendParameters
 //IO for the BOOM Frontend to/from the CPU
 class FrontendToCPUIO extends CoreModule
 {
+    val numFTQEntries = frontendParams.numFTQEntries
     val fetchpacket     = Flipped(new DecoupledIO(new FetchBufferResp))
 
     // 1 for xcpt/jalr/auipc/flush
     val get_pc      = Flipped(Vec(2,new GetPCFromFtqIO()))
-    val debug_ftq_idx = Output(Vec(coreWidth, UInt(log2Ceil(ftqSz).W)))
-    val debug_fetch_pc = Input(Vec(coreWidth, UInt(vaddrBits.W)))
 
     //Breakpoint info
-    val status      = Output(new MStatus)
-    val bp          = Output(Vec(nBreakpoints,new BP))
-    val mcontext    = Output(UInt(mcontextWidth.W))
-    val scontext          = Output(UInt(scontextWidth.W))
+//    val status      = Output(new MStatus)
+//    val bp          = Output(Vec(nBreakpoints,new BP))
+//    val mcontext    = Output(UInt(mcontextWidth.W))
+//    val scontext          = Output(UInt(scontextWidth.W))
 
     val sfence      = Valid(new SFenceReq)
     val brupdate    = Output(new BrUpdateInfo)
@@ -191,9 +172,8 @@ class FrontendToCPUIO extends CoreModule
     val redirect_ftq_idx= Output(UInt())
     val redirect_ghist  = Output(new GlobalHistory)
 
-    val commit          = Valid(UInt(ftqSz.W))
+    val commit          = Valid(UInt(numFTQEntries.W))
     val flush_icache    = Output(Bool())
-    val perf            = Input(new FrontendPerfEvents)
 }
 class FrontendIO extends CoreBundle {
     val cpu = Flipped(new FrontendToCPUIO())
@@ -206,20 +186,23 @@ class FrontendIO extends CoreBundle {
  */
 //TODO Frontend.273 bpd，RAS,icache的接口
 class Frontend extends CoreModule
-        with HasFrontendParameters
 {
+    val fetchWidth = frontendParams.fetchWidth
+    val numRasEntries = frontendParams.bpdParams.numRasEntries
+    val bankWidth = frontendParams.bankWidth
+    val nBanks = frontendParams.iCacheParams.nBanks
+
     val reset_addr = 0.U(vaddrBits)
     val io = IO(new FrontendIO)
     val io_reset_vector =reset_addr
-    implicit val edge = outer.masterNode.edges.out(0)
 
-    val bpd = Module(new BankedPredictor)
+    val bpd = Module(new BPD)
     bpd.io.f3fire := false.B
     val ras = Module(new RAS)
 
-    val icache = Module(new ICache())
+    val icache = Module(new ICache(frontendParams.iCacheParams))
     icache.io.invalidate := io.cpu.flush_icache
-    val tlb = Module(new TLB())
+    val tlb = Module(new TLB)
 //    io.cpu.perf.tlbMiss := io.ptw.req.fire
 //    io.cpu.perf.acquire := icache.io.perf.acquire
 
@@ -395,7 +378,7 @@ class Frontend extends CoreModule
     // --------------------------------------------------------
     val f3_clear = WireInit(false.B)
     val f3 = withReset(reset.asBool || f3_clear){
-        Module(new Queue(new S3,1,pipe = true, flow=false))
+        Module(new Queue(new FetchResp,1,pipe = true, flow=false))
     }
     //f3_bpd_resp的输入是f3的数据，输出也是f3的数据（flow）。
     val f3_bpd_resp = withReset(reset.asBool || f3_clear){
@@ -421,9 +404,8 @@ class Frontend extends CoreModule
     f3.io.enq.bits.xcpt := s2_tlb_resp
     f3.io.enq.bits.fsrc := s2_fsrc
 //    f3.io.enq.bits.tsrc := s2_tsrc
-
     //RAS输入在s2，输出在s3
-    val ras_read_idx = RegInit(0.U(log2Ceil(nRasEntries).W))
+    val ras_read_idx = RegInit(0.U(log2Ceil(numRasEntries).W))
     ras.io.read_idx := ras_read_idx
     when(f3.io.enq.fire){
         ras_read_idx := f3.io.enq.bits.ghist.ras_idx
@@ -461,12 +443,12 @@ class Frontend extends CoreModule
     f3_fetch_bundle.br_mask := f3_br_mask.asUInt
     f3_fetch_bundle.pc      := f3_imemresp.pc
     f3_fetch_bundle.ftq_idx := 0.U      //之后会被赋值
-    f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf.inst
-    f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae.inst
+    f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf
+    f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae
     f3_fetch_bundle.fsrc := f3_imemresp.fsrc
 //    f3_fetch_bundle.tsrc := f3_imemresp.tsrc
     f3_fetch_bundle.shadowed_mask := f3_shadowed_mask
-
+    val lineBytes = frontendParams.iCacheParams.lineBytes
     var redirect_found = false.B
     for(b <- 0 until nBanks){
         val bank_data = f3_data((b+1)*bankWidth*coreInstrBits -1, b*bankWidth*coreInstrBits)
@@ -477,12 +459,12 @@ class Frontend extends CoreModule
             val i = (b * bankWidth) + w
 
             val valid = true.B
-            val bpu = Module(new BreakpointUnit(nBreakpoints))
-            bpu.io.status   := io.cpu.status
-            bpu.io.bp := io.cpu.bp
-            bpu.io.ea := DontCare
-            bpu.io.mcontext := io.cpu.mcontext
-            bpu.io.scontext := io.cpu.scontext
+//            val bpu = Module(new BreakpointUnit(nBreakpoints))
+//            bpu.io.status   := io.cpu.status
+//            bpu.io.bp := io.cpu.bp
+//            bpu.io.ea := DontCare
+//            bpu.io.mcontext := io.cpu.mcontext
+//            bpu.io.scontext := io.cpu.scontext
 
             val brsigs = Wire(new PreDecodeSignals)
             val inst = Wire(UInt(coreInstrBits.W))
@@ -508,7 +490,7 @@ class Frontend extends CoreModule
                     )
                 //i << 1是防止溢出，因为sfbOffset <= Cacheline
             val offset_from_aligned_pc = (
-                    (i<<1).U((log2Ceil(icBlockBytes)+1).W) + brsigs.sfbOffset.bits
+                    (i<<1).U((log2Ceil(lineBytes)+1).W) + brsigs.sfbOffset.bits
             )
             val lower_mask = Wire(UInt((2*fetchWidth).W))
             val upper_mask = Wire(UInt((2*fetchWidth).W))
@@ -593,7 +575,7 @@ class Frontend extends CoreModule
 
     ras.io.write_valid := false.B
     ras.io.write_addr   := f3_aligned_pc + ((f3_fetch_bundle.cfi_idx.bits << 1)) + 4
-    ras.io.write_idx    := WrapInc(f3_fetch_bundle.ghist.ras_idx,nRasEntries)
+    ras.io.write_idx    := WrapInc(f3_fetch_bundle.ghist.ras_idx,numRasEntries)
 
     val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist
     val f3_correct_f2_ghist = s2_ghist =/= f3_predicted_ghist
@@ -758,54 +740,7 @@ trait HasFrontendParameters
 
     val bankWidth = fetchWidth/nBanks
 
-    require(nBanks == 1 || nBanks == 2)
 
-
-
-    // How many "chunks"/interleavings make up a cache line?
-    val numChunks = icBlockBytes / bankBytes
-
-    // Which bank is the address pointing to?
-    def bank(addr: UInt) = if (nBanks == 2) addr(log2Ceil(bankBytes)) else 0.U
-    def isLastBankInBlock(addr: UInt) = {
-        (nBanks == 2).B && addr(icBlockOffBits-1, log2Ceil(bankBytes)) === (numChunks-1).U
-    }
-    def mayNotBeDualBanked(addr: UInt) = {
-        require(nBanks == 2)
-        isLastBankInBlock(addr)
-    }
-
-    def blockAlign(addr: UInt) = ~(~addr | (icBlockBytes-1).U)
-    def bankAlign(addr: UInt) = ~(~addr | (bankBytes-1).U)
-
-    def fetchIdx(addr: UInt) = addr >> log2Ceil(fetchBytes)
-
-    def nextBank(addr: UInt)= bankAlign(addr) + bankBytes.U
-    def nextFetch(addr: UInt) = {
-
-        require(nBanks == 2)
-        bankAlign(addr) + Mux(mayNotBeDualBanked(addr), bankBytes.U, fetchBytes.U)
-    }
-
-    def fetchMask(addr: UInt) = {
-        val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstrBytes)-1, log2Ceil(coreInstrBytes))
-        if (nBanks == 1) {
-            ((1 << fetchWidth)-1).U << idx
-        } else {
-            val shamt = idx.extract(log2Ceil(fetchWidth)-2, 0)
-            val end_mask = Mux(mayNotBeDualBanked(addr), Fill(fetchWidth/2, 1.U), Fill(fetchWidth, 1.U))
-            ((1 << fetchWidth)-1).U << shamt & end_mask
-        }
-    }
-
-    def bankMask(addr: UInt) = {
-        val idx = addr.extract(log2Ceil(fetchWidth)+log2Ceil(coreInstrBytes)-1, log2Ceil(coreInstrBytes))
-        if (nBanks == 1) {
-            1.U(1.W)
-        } else {
-            Mux(mayNotBeDualBanked(addr), 1.U(2.W), 3.U(2.W))
-        }
-    }
 }
 
 object WrapDec
