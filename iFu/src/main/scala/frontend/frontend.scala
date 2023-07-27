@@ -23,9 +23,9 @@ class FrontendExceptions extends Bundle {
 class GlobalHistory extends CoreBundle {
     /*--------------------------*/
     val globalHistoryLength = frontendParams.bpdParams.globalHistoryLength
-    val nRasEntries = frontendParams.bpdParams.nRasEntries
-    val fetchWidth = frontendParams.fetchWidth
-    val bankWidth = frontendParams.bankWidth
+    val nRasEntries         = frontendParams.bpdParams.nRasEntries
+    val fetchWidth          = frontendParams.fetchWidth
+    val bankWidth           = frontendParams.bankWidth
     /*--------------------------*/
     val old_history = UInt((globalHistoryLength).W)
     val current_saw_branch_not_taken = Bool()
@@ -101,21 +101,18 @@ class FetchResp extends CoreBundle {
     val fsrc    = UInt(BSRC_SZ.W)
 }
 
-//FetchBufferEntry
-class FetchBundle extends CoreBundle
-{
-    val fetchWidth = frontendParams.fetchWidth
-    val fetchBytes = frontendParams.fetchBytes
-    val numFTQEntries = frontendParams.numFTQEntries
-    val nBanks     = frontendParams.iCacheParams.nBanks
+class FetchBundle extends CoreBundle {
+    /*--------------------------*/
+    val fetchWidth         = frontendParams.fetchWidth
+    val fetchBytes         = frontendParams.fetchBytes
+    val numFTQEntries      = frontendParams.numFTQEntries
+    val nBanks             = frontendParams.iCacheParams.nBanks
     val localHistoryLength = frontendParams.bpdParams.localHistoryLength
-
+    /*--------------------------*/
     val pc          = UInt(vaddrBits.W)
     val next_pc     = UInt(vaddrBits.W)
-    val insts       = Vec(fetchWidth,Bits(coreInstrBits.W))
-    val exp_insts   = Vec(fetchWidth,Bits(coreInstrBits.W))
-    //Information for sfb
-    // NOTE: This IS NOT equivalent to uop.pc_lob, that gets calculated in the FB
+    val insts       = Vec(fetchWidth, Bits(coreInstrBits.W))
+    val exp_insts   = Vec(fetchWidth, Bits(coreInstrBits.W))
     val sfbs        = Vec(fetchWidth,Bool())
     val sfb_masks   = Vec(fetchWidth,UInt((2*fetchWidth).W))
     val sfb_dests   = Vec(fetchWidth,UInt((1+log2Ceil(fetchBytes)).W))
