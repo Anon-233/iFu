@@ -90,11 +90,11 @@ object FlushTypes
     def refetch = 2.U
     def nexst = 4.U
 
-    def useCsrEvec(typ:UInt): Bool = typ(0)
+    def useCsrEvec(typ: UInt): Bool = typ(0)
     def useSamePC(typ: UInt): Bool = typ === refetch
-    def usePCplus4(typ:UInt): Bool = typ ===next
+    def usePCplus4(typ: UInt): Bool = typ === next
 
-    def getType(valid:Bool, i_xcpt:Bool, i_eret:Bool, i_refetch:Bool):UInt = {
+    def getType(valid: Bool, i_xcpt: Bool, i_eret: Bool, i_refetch: Bool):UInt = {
         val ret = 
             Mux(!valid,none,
             Mux(i_eret,eret,
@@ -138,7 +138,7 @@ class Rob(
     //val robPnrLsb = RegInit(0.U((1 max log2Ceil(coreWidth)).W))
     //val robPnrIdx = if(coreWidth ==1) robPnr else Cat(robPnr,robPnrLsb)
 
-    val comIdx = Mux(robState = stateRollback,robTail,robHead)
+    val comIdx = Mux(robState === stateRollback,robTail,robHead)
 
     val maybeFull = RegInit(false.B)
     val full = Wire(Bool())
@@ -163,12 +163,12 @@ class Rob(
 
     //-----------------tool def---------------------
     def GetRowIdx(robIdx : Uint) :UInt ={
-        if(coreWidth ==1) return robIdx
+        if(coreWidth == 1) return robIdx
         else return robIdx >> log2Ceil(coreWidth).U
     }
     def GetBankIdx(robIdx :Uint):Uint ={
         if (coreWidth ==1 ) return 0.U
-        else return robIdx(log2Ceil(coreWidth)-1,0).asUInt
+        else {return robIdx(log2Ceil(coreWidth)-1,0).asUInt}
     }
 
     //---------------------------------------------
@@ -188,7 +188,7 @@ class Rob(
         //------------------dispatch stage------------------
         //enqueue
         when (io.enqValids(w)){
-            robVal(robTail) := True.B
+            robVal(robTail) := true.B
             robBsy(robTail) := !(io.enq_uops(w).is_fence || io.enq_uops(w).is_fencei)
             robUnsafe(robTail) := io.enq_uops(w).unsafe
             robException(robTail) := io.enq_uops(w).exception
@@ -205,7 +205,7 @@ class Rob(
             when(wbResp.valid && MatchBank(GetBankIdx(wbUop.rob_idx))){
                 robBsy(rowIdx) := false.B
                 robUnsafe(rowIdx) := false.B
-                robPredicated := wbResp.bits.predicated
+                robPredicated(rowIdx) := wbResp.bits.predicated
             }
         }
 
@@ -220,7 +220,7 @@ class Rob(
         }
         for (clr <- io.lsu_clr_unsafe){
             when(clr.valid && MatchBank(GetBankIdx(clr.bits))){
-                val cidx = GetBankIdx(clr.bits)
+                val cidx = GetRowIdx(clr.bits)
                 robUnsafe(cidx) := false.B
             }
         }
@@ -236,6 +236,8 @@ class Rob(
         canThrowException(w) := robVal(robHead) && robException(robHead)
 
         //---------------output:commit------------
+        canCommit(w) := robVal(robHead) && !(robBsy(robHead)) && !io.csr_stall
+
         io.commit.valids(w) := willCommit(w)
         io.commit.arch_valids(w) := willCommit(w) && !robPredicated(comIdx)
         io.commit.uops(w) := robUop(comIdx)
@@ -270,6 +272,11 @@ class Rob(
             }
         }
 
+        when(io.brupdate.b2.mispredict &&
+        MatchBank(GetBankIdx(io.brupdate.b2.uop.rob_idx))){
+            robUop(GetRowIdx(io.brupdate.b2.uop.rob_idx)).taken := io.brupdate.b2.taken
+        }
+
 
 
         //------------------commit--------------------------
@@ -283,7 +290,7 @@ class Rob(
         robHeadUsesLdq(w) := robUop(robHead).uses_ldq
         robHeadUsesStq(w) := robUop(robHead).uses_stq
 
-        for( i<- until numRobRows){
+        for( i<- 0 until numRobRows){
             robUnsafeMasked((i<<log2Ceil(coreWidth)) + w) := robVal(i) && (robUnsafe(i) || robException(i))
 
         }
@@ -307,9 +314,9 @@ class Rob(
     exceptionThrown := willThrowException
     val isMiniException = io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING
     io.com_xcpt.valid := exceptionThrown && !isMiniException
-    io.com_xcpt.bits.cause := r_xcpt_uop.exc_cause
+    io.com_xcpt.bits.cause := rXcptUop.exc_cause
 
-    io.com_xcpt.bits.badvaddr := Sext(r_xcpt_badvaddr, xLen)
+    io.com_xcpt.bits.badvaddr := Sext(rXcptBadvaddr, xLen)
     val insnSysPc2epc = robHeadVals.reduce(_||_) && PriorityMux(robHeadvals,io.commit.uops.map{u => u.is_sys_pc2epc})
     
     val refetchInst = exceptionThrown || insnSysPc2epc
@@ -323,7 +330,7 @@ class Rob(
     //------------------flush-------------------
 
     val flushCommitMask = Range(0,coreWidth).map{i => io.commit.valids(i) && io.commit.uops(i).flush_on_commit}
-    val flushCommit = flushCommitMask.reduce(_||_)
+    val flushCommit = flushCommitMask.reduce(_|_)
     val flushVal = exceptionThrown || flushCommit
 
     val flushUop = Mux(exceptionThrown,comXcptUop,Mux1H(flushCommitMask,io.commit.uops))
@@ -360,7 +367,7 @@ class Rob(
                 rXcptBadvaddr := io.lxcpt.bits.badvaddr
             }
         } .elsewhen (!rXcptVal && enqXcpts.reduce(_|_)){
-            val idx = enqXcpts.indexWhere{i:Bool =>i}
+            val idx = enqXcpts.indexWhere{i: Bool => i}
 
             rXcptVal := true.B
             nextXcptUop := io.enq_uop(idx)
@@ -439,6 +446,7 @@ class Rob(
                 robState := stateRollback
             } .otherwise{
                 for (w <-0 until coreWidth){
+                    //进入rob的指令一旦检测到is_unque就暂停rob
                     when(io.enq_valids(w) && io.enq_uops(w).is_unique){
                         robState := stateWatiTillEmpty
                     }
