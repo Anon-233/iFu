@@ -7,7 +7,6 @@ import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
 import iFu.backend.{PreDecode, PreDecodeSignals}
-// import iFu.frontend.Parameters._
 
 //TODO 重命名FrontEndExceptions,GlobalHistory,如果之后RAS增加计数器，Histories的update函数需要更改，
 //TODO FetchBundle重命名为FetchBufferEntry
