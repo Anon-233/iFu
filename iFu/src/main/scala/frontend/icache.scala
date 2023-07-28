@@ -4,9 +4,7 @@ import chisel3._
 import chisel3.util._
 import chisel3.util.random.LFSR
 import iFu.common._
-import iFu.common.HasCoreParameters
-
-import scala.collection.mutable.{ListBuffer}
+import iFu.frontend.FrontendUtils._
 
 
 object DescribedSRAM {
@@ -73,11 +71,7 @@ class ICache(val iParams : ICacheParameters
 
         val cbusResp = Input(new CbusResp)
         val cbusReq = Output(new CbusReq)
-
-
     })
-
-    def bank(addr: UInt) =  addr(log2Ceil(iParams.bankBytes))
 
     val wordBits = frontendParams.fetchBytes * 8
 
