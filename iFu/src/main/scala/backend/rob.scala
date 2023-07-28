@@ -207,8 +207,8 @@ class Rob(
     val rob_debug_inst_mem   = SyncReadMem(numRobRows, Vec(coreWidth, UInt(32.W)))
     val rob_debug_inst_wmask = WireInit(VecInit(0.U(coreWidth.W).asBools))
     val rob_debug_inst_wdata = Wire(Vec(coreWidth, UInt(32.W)))
-    rob_debug_inst_mem.write(rob_tail, rob_debug_inst_wdata, rob_debug_inst_wmask)
-    val rob_debug_inst_rdata = rob_debug_inst_mem.read(rob_head, will_commit.reduce(_||_))
+    rob_debug_inst_mem.write(robTail, rob_debug_inst_wdata, rob_debug_inst_wmask)
+    val rob_debug_inst_rdata = rob_debug_inst_mem.read(robHead, willCommit.reduce(_||_))
 
     //---------------------------------------------
 
@@ -312,7 +312,7 @@ class Rob(
         for(i <- 0 until numRobRows){
             var brMask = robUop(i).br_mask
 
-            when(IsKilledByBranch(io.brupdate,br_mask))
+            when(IsKilledByBranch(io.brupdate,brMask))
             {
                 robVal(i) :=false.B
                 rob_uop(i.U).debug_inst := BUBBLE
@@ -345,11 +345,11 @@ class Rob(
 
         }
 
-        when (will_commit(w)) {
-            rob_uop(rob_head).debug_inst := BUBBLE
-            } .elsewhen (rbk_row)
+        when (willCommit(w)) {
+            robUop(robHead).debug_inst := BUBBLE
+            } .elsewhen (rbkRow)
             {
-            rob_uop(rob_tail).debug_inst := BUBBLE
+            robUop(robTail).debug_inst := BUBBLE
             }
 
         for (i <- 0 until numWakeupPorts) {
@@ -360,16 +360,16 @@ class Rob(
             val temp_uop = rob_uop(GetRowIdx(rob_idx))
 
             assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
-                    !rob_val(GetRowIdx(rob_idx))),
+                    !robVal(GetRowIdx(rob_idx))),
                     "[rob] writeback (" + i + ") occurred to an invalid ROB entry.")
             assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
-                    !rob_bsy(GetRowIdx(rob_idx))),
+                    !robBsy(GetRowIdx(rob_idx))),
                     "[rob] writeback (" + i + ") occurred to a not-busy ROB entry.")
             assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
                     temp_uop.ldst_val && temp_uop.pdst =/= io.wb_resps(i).bits.uop.pdst),
                     "[rob] writeback (" + i + ") occurred to the wrong pdst.")
             }
-        io.commit.debug_wdata(w) := rob_debug_wdata(rob_head)
+        io.commit.debug_wdata(w) := rob_debug_wdata(robHead)
 
         //rob_pnr_unsafe(w) := rob_val(rob_pnr) && (rob_unsafe(rob_pnr) || rob_exception(rob_pnr))
 
@@ -457,13 +457,13 @@ class Rob(
         rXcptVal := false.B
     }
 
-    assert (!(exception_thrown && !r_xcpt_val),
+    assert (!(exceptionThrown && !rXcptVal),
     "ROB trying to throw an exception, but it doesn't have a valid xcpt_cause")
 
-    assert (!(empty && r_xcpt_val),
+    assert (!(empty && rXcptVal),
     "ROB is empty, but believes it has an outstanding exception.")
 
-    assert (!(will_throw_exception && (GetRowIdx(r_xcpt_uop.rob_idx) =/= rob_head)),
+    assert (!(willThrowException && (GetRowIdx(rXcptUop.rob_idx) =/= robHead)),
     "ROB is throwing an exception, but the stored exception information's " +
     "rob_idx does not match the rob_head")
 
