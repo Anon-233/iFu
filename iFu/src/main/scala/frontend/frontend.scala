@@ -275,10 +275,8 @@ class Frontend extends CoreModule with FrontendUtils {
 
     icache.io.s1_paddr  := s1_ppc
     icache.io.s1_kill   := tlb.io.resp.miss || f1_clear
-
-    val f1_mask = fetchMask(s1_vpc) // 有效的bank位置 "b01" or "b11"
-
-    // 根据bpd的f1的结果进行重定向
+    
+    val f1_mask = fetchMask(s1_vpc)
     val f1_redirects = (0 until fetchWidth).map{ i=>
         s1_valid && f1_mask(i) && s1_bpd_resp.predInfos(i).predictedpc.valid &&
         (s1_bpd_resp.predInfos(i).isJal ||
@@ -434,120 +432,111 @@ class Frontend extends CoreModule with FrontendUtils {
 
     f3_bpd_resp.io.enq.valid := f3.io.deq.valid && RegNext(f3.io.enq.ready)
     f3_bpd_resp.io.enq.bits := bpd.io.resp.f3
-    when (f3_bpd_resp.io.enq.fire){
-        bpd.io.f3fire := true.B
-    } .otherwise {
-        bpd.io.f3fire := false.B
-    }
+
+    bpd.io.f3fire := f3_bpd_resp.io.enq.fire
 
     f3.io.deq.ready := f4_ready
     f3_bpd_resp.io.deq.ready := f4_ready
 
-    val f3_imemresp = f3.io.deq.bits
-    val f3_bank_mask    = bankMask(f3_imemresp.pc)
-    val f3_data         = f3_imemresp.data
-    val f3_aligned_pc   = bankAlign(f3_imemresp.pc)
+    val f3_fetchResp             = f3.io.deq.bits
+    val f3_bank_mask             = bankMask(f3_fetchResp.pc)
+    val f3_data                  = f3_fetchResp.data
+    val f3_aligned_pc            = bankAlign(f3_fetchResp.pc)
     val f3_is_last_bank_in_block = isLastBankInBlock(f3_aligned_pc)
-//    val f3_is_rvc   = Wire(Vec(fetchWidth,Bool())) 后面代码删去RVC相关的部分
-    val f3_redirects       = Wire(Vec(fetchWidth,Bool()))
-    val f3_targs            = Wire(Vec(fetchWidth,UInt(vaddrBits.W)))
-    val f3_cfi_types        = Wire(Vec(fetchWidth, UInt(CFI_SZ.W)))
-    val f3_shadowed_mask    = Wire(Vec(fetchWidth,Bool()))
-    val f3_fetch_bundle     = Wire(new FetchBundle)
-    val f3_mask             = Wire(Vec(fetchWidth,Bool()))
-    val f3_br_mask          = Wire(Vec(fetchWidth,Bool()))
-    val f3_call_mask        = Wire(Vec(fetchWidth,Bool()))
-    val f3_ret_mask         = Wire(Vec(fetchWidth,Bool()))
-    val f3_btb_mispredicts  = Wire(Vec(fetchWidth,Bool()))
+    val f3_redirects             = Wire(Vec(fetchWidth, Bool()))
+    val f3_tgts                  = Wire(Vec(fetchWidth, UInt(vaddrBits.W)))
+    val f3_cfi_types             = Wire(Vec(fetchWidth, UInt(CFI_SZ.W)))
+    val f3_shadowed_mask         = Wire(Vec(fetchWidth, Bool()))
+    val f3_fetch_bundle          = Wire(new FetchBundle)
+    val f3_mask                  = Wire(Vec(fetchWidth, Bool()))
+    val f3_br_mask               = Wire(Vec(fetchWidth, Bool()))
+    val f3_call_mask             = Wire(Vec(fetchWidth, Bool()))
+    val f3_ret_mask              = Wire(Vec(fetchWidth, Bool()))
+    val f3_btb_mispredicts       = Wire(Vec(fetchWidth, Bool()))
 
     //连线，将信号整合到f3_fetch_bundle里面
-    f3_fetch_bundle.mask := f3_mask.asUInt
-    f3_fetch_bundle.br_mask := f3_br_mask.asUInt
-    f3_fetch_bundle.pc      := f3_imemresp.pc
-    f3_fetch_bundle.ftq_idx := 0.U      //之后会被赋值
-    f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf
-    f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae
-    // f3_fetch_bundle.fsrc := f3_imemresp.fsrc
-    // f3_fetch_bundle.tsrc := f3_imemresp.tsrc
+    f3_fetch_bundle.mask          := f3_mask.asUInt
+    f3_fetch_bundle.br_mask       := f3_br_mask.asUInt
+    f3_fetch_bundle.pc            := f3_fetchResp.pc
+    f3_fetch_bundle.ftq_idx       := 0.U      //之后会被赋值
+    f3_fetch_bundle.xcpt_pf_if    := f3_fetchResp.xcpt.pf
+    f3_fetch_bundle.xcpt_ae_if    := f3_fetchResp.xcpt.ae
+    // f3_fetch_bundle.fsrc          := f3_fetchResp.fsrc
+    // f3_fetch_bundle.tsrc          := f3_fetchResp.tsrc
     f3_fetch_bundle.shadowed_mask := f3_shadowed_mask
     
     var redirect_found = false.B
     for(b <- 0 until nBanks){
-        val bank_data = f3_data((b+1)*bankWidth*coreInstrBits -1, b*bankWidth*coreInstrBits)
-        val bank_mask = Wire(Vec(bankWidth,Bool))
-        val bank_instrs = Wire(Vec(bankWidth,UInt(coreInstrBits.W)))
+        val bank_data = f3_data((b + 1) * bankWidth * coreInstrBits - 1, b * bankWidth * coreInstrBits)
+        for(w <- 0 until bankWidth) {
 
-        for(w <-0 until bankWidth){
-            val i = (b * bankWidth) + w
-
-            val valid = true.B
             // val bpu = Module(new BreakpointUnit(nBreakpoints))
             // bpu.io.status   := io.cpu.status
             // bpu.io.bp := io.cpu.bp
             // bpu.io.ea := DontCare
             // bpu.io.mcontext := io.cpu.mcontext
             // bpu.io.scontext := io.cpu.scontext
-
-            val brsigs = Wire(new PreDecodeSignals)
-            val inst = Wire(UInt(coreInstrBits.W))
+            
+            val i = (b * bankWidth) + w
             val pc = (f3_aligned_pc + (i << log2Ceil(coreInstrBits)).U)
-            val bpd_decoder = Module(new PreDecode)
-            bpd_decoder.io.inst := inst
-            bpd_decoder.io.pc   := pc
+            val instr = bank_data(w * coreInstrBits + coreInstrBits - 1,w * coreInstrBits)
 
-            bank_instrs(w)               := inst
-            f3_fetch_bundle.instrs(i)    := inst
-            brsigs                      := bpd_decoder.io.out
-            inst  := bank_data(w*coreInstrBits+coreInstrBits-1,w*coreInstrBits)
-            bank_mask(w)    := f3.io.deq.valid && f3_imemresp.mask(i) && valid && !redirect_found
-            f3_mask(i)      := f3.io.deq.valid && f3_imemresp.mask(i) && valid && !redirect_found
-            f3_targs(i)     := Mux(brsigs.cfiType === CFI_JALR,     //JALR预测的结果会错，而Br指令只有方向会错
-                f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits,
-                brsigs.target)
-            //TODO JAL结果的判断能提前吗？由于ICache，不能
-            f3_btb_mispredicts(i) := (brsigs.cfiType === CFI_JAL && valid &&
-                    f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.valid &&
-                    (f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc =/= brsigs.target)
-                    )
-                //i << 1是防止溢出，因为sfbOffset <= Cacheline
-            val offset_from_aligned_pc = (
-                    (i<<1).U((log2Ceil(lineBytes)+1).W) + brsigs.sfbOffset.bits
+            val bpd_decoder = Module(new PreDecode)
+            bpd_decoder.io.pc := pc
+            bpd_decoder.io.instr := instr
+            val brsigs = bpd_decoder.io.out
+
+            f3_fetch_bundle.instrs(i) := instr
+            f3_mask(i) := f3.io.deq.valid && f3_fetchResp.mask(i) && !redirect_found
+
+            f3_tgts(i) := Mux(
+                brsigs.cfiType === CFI_JALR,
+                    f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits, // <- maybe wrong
+                    brsigs.target   // <- right
+            )
+            f3_btb_mispredicts(i) := (
+                brsigs.cfiType === CFI_JAL &&
+                f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.valid &&
+                (f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc =/= brsigs.target)
             )
 
-            val lower_mask = Wire(UInt((2*fetchWidth).W))
-            val upper_mask = Wire(UInt((2*fetchWidth).W))
+            // i << 1是防止溢出，因为sfbOffset <= Cacheline
+            val offset_from_aligned_pc = (
+                (i << 1).U((log2Ceil(lineBytes) + 1).W) + brsigs.sfbOffset.bits
+            )
+            val lower_mask = Wire(UInt((2 * fetchWidth).W))
+            val upper_mask = Wire(UInt((2 * fetchWidth).W))
             lower_mask := UIntToOH(i.U)
-            upper_mask := UIntToOH(offset_from_aligned_pc(log2Ceil(fetchBytes)+1,1)) << Mux(f3_is_last_bank_in_block, bankWidth.U, 0.U)
+            upper_mask := UIntToOH(offset_from_aligned_pc(log2Ceil(fetchBytes) + 1,1)) << Mux(f3_is_last_bank_in_block, bankWidth.U, 0.U)
 
             /**
              * 判断是否是sfb指令，如果是Cacheline的最后一个bank，那么最多只能取3个bank（跨Cacheline）
              * 正常情况，可以取4个bank
              */
             f3_fetch_bundle.sfbs(i) := (
-                    f3_mask(i) &&
-                            brsigs.sfbOffset.valid &&
-                            (offset_from_aligned_pc <= Mux(f3_is_last_bank_in_block,(fetchBytes + bankBytes).U,(2*fetchBytes).U))
+                f3_mask(i) && brsigs.sfbOffset.valid &&
+                (offset_from_aligned_pc <= Mux(f3_is_last_bank_in_block, (fetchBytes + bankBytes).U,(2 * fetchBytes).U))
             )
-            f3_fetch_bundle.sfb_masks(i)    := ~MaskLower(lower_mask) & ~MaskUpper(upper_mask)
-
+            f3_fetch_bundle.sfb_masks(i) := ~MaskLower(lower_mask) & ~MaskUpper(upper_mask)
             /**
              * 没有发生异常
              * bank有效
              * 是shadowable的或者该位置指令无效
              */
-            f3_fetch_bundle.shadowable_mask(i) := (!(f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if ) &&
-                    f3_bank_mask(b) &&
-                    (brsigs.shadowable || !f3_mask(i)))
+            f3_fetch_bundle.shadowable_mask(i) := (
+                !(f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if ) &&
+                f3_bank_mask(b) && (brsigs.shadowable || !f3_mask(i))   // TODO: do we need f3_mask(i) here?
+            )
             f3_fetch_bundle.sfb_dests(i) := offset_from_aligned_pc
 
             /**
                 s3阶段重定向的条件
-                1.是jal/jalr指令
-                2.是条件分支指令并被预测跳转(sfb不被预测)
+                1. 是jal/jalr指令
+                2. 是条件分支指令并被预测跳转(sfb不被预测)
              */
-            f3_redirects(i)     := f3_mask(i) && (
-                    brsigs.cfiType === CFI_JAL || brsigs.cfiType === CFI_JALR ||
-                            (brsigs.cfiType === CFI_BR && f3_bpd_resp.io.deq.bits.predInfos(i).taken)
+            f3_redirects(i) := f3_mask(i) && (
+                brsigs.cfiType === CFI_JAL || brsigs.cfiType === CFI_JALR ||
+                (brsigs.cfiType === CFI_BR && f3_bpd_resp.io.deq.bits.predInfos(i).taken)
             )
 
             f3_br_mask(i)   := f3_mask(i) && brsigs.cfiType === CFI_BR
@@ -555,10 +544,8 @@ class Frontend extends CoreModule with FrontendUtils {
             f3_call_mask(i) := brsigs.isCall
             f3_ret_mask(i)  := brsigs.isRet
 
-
             redirect_found = redirect_found || f3_redirects(i)
         }
-
     }
     f3_fetch_bundle.cfi_type      := f3_cfi_types(f3_fetch_bundle.cfi_idx.bits)
     f3_fetch_bundle.cfi_is_call := f3_call_mask(f3_fetch_bundle.cfi_idx.bits)
@@ -576,7 +563,7 @@ class Frontend extends CoreModule with FrontendUtils {
     val f3_predicted_target = Mux(f3_redirects.reduce(_||_),
         Mux(f3_fetch_bundle.cfi_is_ret,
             ras.io.read_addr,
-            f3_targs(PriorityEncoder(f3_redirects))
+            f3_tgts(PriorityEncoder(f3_redirects))
         ),
         nextFetch(f3_fetch_bundle.pc)
     )
@@ -621,17 +608,19 @@ class Frontend extends CoreModule with FrontendUtils {
             // f3_fetch_bundle.fsrc := BSRC_3
         }
     }
-    //当f3发现btb预测错误时，建一个队列来存储bpd更新
+
+    // 当f3发现btb预测错误时，建一个队列来存储bpd更新
     val f4_btb_corrections = Module(new Queue(new BranchPredictionUpdate,2))
+
     f4_btb_corrections.io.enq.valid := f3.io.deq.fire && f3_btb_mispredicts.reduce(_||_)
     f4_btb_corrections.io.enq.bits  := DontCare
     f4_btb_corrections.io.enq.bits.isMispredictUpdate := false.B
     f4_btb_corrections.io.enq.bits.isRepairUpdate     := false.B
-    f4_btb_corrections.io.enq.bits.btbMispredicts      := f3_btb_mispredicts.asUInt
-    f4_btb_corrections.io.enq.bits.pc                   := f3_fetch_bundle.pc
-    f4_btb_corrections.io.enq.bits.ghist                := f3_fetch_bundle.ghist
-    f4_btb_corrections.io.enq.bits.lhist                := f3_fetch_bundle.lhist
-    f4_btb_corrections.io.enq.bits.meta                 := f3_fetch_bundle.bpd_meta
+    f4_btb_corrections.io.enq.bits.btbMispredicts     := f3_btb_mispredicts.asUInt
+    f4_btb_corrections.io.enq.bits.pc                 := f3_fetch_bundle.pc
+    f4_btb_corrections.io.enq.bits.ghist              := f3_fetch_bundle.ghist
+    f4_btb_corrections.io.enq.bits.lhist              := f3_fetch_bundle.lhist
+    f4_btb_corrections.io.enq.bits.meta               := f3_fetch_bundle.bpd_meta
 
     // -------------------------------------------------------
     // **** F4 ****
@@ -642,31 +631,29 @@ class Frontend extends CoreModule with FrontendUtils {
     }
 
     //下面将要处理sfbs
-    val f4_shadowable_masks = VecInit((0 until fetchWidth) map { i =>
+    val f4_shadowable_masks = VecInit((0 until fetchWidth).map{ i =>
         f4.io.deq.bits.shadowable_mask.asUInt |
-                ~f4.io.deq.bits.sfb_masks(i)(fetchWidth-1,0)
+        ~f4.io.deq.bits.sfb_masks(i)(fetchWidth - 1,0)    // the instructions which not in sfb shadow
     })
-    val f3_shadowable_masks = VecInit((0 until fetchWidth) map { i =>
+    val f3_shadowable_masks = VecInit((0 until fetchWidth).map{ i =>
         Mux(f4.io.enq.valid, f4.io.enq.bits.shadowable_mask.asUInt, 0.U) |
-                ~f4.io.deq.bits.sfb_masks(i)(2 * fetchWidth - 1, fetchWidth)
+        ~f4.io.deq.bits.sfb_masks(i)(2 * fetchWidth - 1, fetchWidth)
     })
-    val f4_sfbs = VecInit((0 until fetchWidth) map {i =>
-        ((~f4_shadowable_masks(i) === 0.U) &&
-                (~f3_shadowable_masks(i) === 0.U) &&
-                f4.io.deq.bits.sfbs(i) &&
-                !(f4.io.deq.bits.cfi_idx.valid && f4.io.deq.bits.cfi_idx.bits === i.U)   //TODO 边界检查？
-                )
-    })
+    val f4_sfbs = VecInit((0 until fetchWidth) map {i => (
+        (~f4_shadowable_masks(i) === 0.U) && (~f3_shadowable_masks(i) === 0.U) &&
+        f4.io.deq.bits.sfbs(i) &&
+        !(f4.io.deq.bits.cfi_idx.valid && f4.io.deq.bits.cfi_idx.bits === i.U)
+    )})
     val f4_sfb_valid    = f4_sfbs.reduce(_||_) && f4.io.deq.valid
     val f4_sfb_idx      = PriorityEncoder(f4_sfbs)
     val f4_sfb_mask     = f4.io.deq.bits.sfb_masks(f4_sfb_idx)
 
-    //如果f4阶段有sfb指令，要等待下一次fetch
-    val f4_delay        = (
-            f4.io.deq.bits.sfbs.reduce(_||_) &&
-                    !f4.io.deq.bits.cfi_idx.valid &&
-                    !f4.io.enq.valid &&
-                    !(f4.io.deq.bits.xcpt_pf_if ||f4.io.deq.bits.xcpt_ae_if)
+    // 如果f4阶段有sfb指令，要等待下一次fetch
+    val f4_delay = (
+        f4.io.deq.bits.sfbs.reduce(_||_) &&
+        !f4.io.deq.bits.cfi_idx.valid &&
+        !f4.io.enq.valid &&
+        !(f4.io.deq.bits.xcpt_pf_if ||f4.io.deq.bits.xcpt_ae_if)
     )
     when (f4_sfb_valid){
         f3_shadowed_mask := f4_sfb_mask(2*fetchWidth-1,fetchWidth).asBools

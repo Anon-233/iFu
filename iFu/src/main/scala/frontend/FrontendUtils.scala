@@ -37,7 +37,6 @@ trait FrontendUtils{
     }
 
     def bankMask(addr: UInt):UInt = {
-        val idx = addr(log2Ceil(fetchWidth) + log2Ceil(instrBytes) - 1, log2Ceil(instrBytes))
-        Mux(isLastBankInBlock(addr), 1.U(2.W), 3.U(2.W))
+        Mux(isLastBankInBlock(addr), "b01".U(2.W), "b11".U(2.W))
     }
 }

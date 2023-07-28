@@ -81,7 +81,7 @@ class PreDecodeSignals extends CoreBundle with PreDecodeConsts{
 }
 class PreDecode extends CoreModule with PreDecodeConsts {
     val io = IO(new Bundle{
-        val inst    = Input(UInt(32.W))
+        val instr   = Input(UInt(32.W))
         val pc      = Input(UInt(vaddrBits.W))
         val out     = Output(new PreDecodeSignals)
     })
