@@ -7,6 +7,7 @@ import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
 import iFu.backend.{PreDecode, PreDecodeSignals}
+import iFu.frontend.FrontendUtils._
 
 //TODO 重命名FrontEndExceptions,GlobalHistory,如果之后RAS增加计数器，Histories的update函数需要更改，
 //TODO FetchBundle重命名为FetchBufferEntry
@@ -19,7 +20,7 @@ class FrontendExceptions extends Bundle {
     val ae = new TLBExceptions
 }
 
-class GlobalHistory extends CoreBundle with FrontendUtils {
+class GlobalHistory extends CoreBundle{
     /*--------------------------*/
     val globalHistoryLength = frontendParams.bpdParams.globalHistoryLength
     val numRasEntries       = frontendParams.bpdParams.numRasEntries
@@ -184,7 +185,7 @@ class FrontendIO extends CoreBundle {
  */
 //TODO Frontend.273 bpd，RAS,icache的接口
 
-class Frontend extends CoreModule with FrontendUtils {
+class Frontend extends CoreModule{
     /*--------------------------*/
     val fetchWidth    = frontendParams.fetchWidth
     val numRasEntries = frontendParams.bpdParams.numRasEntries
