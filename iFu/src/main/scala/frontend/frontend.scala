@@ -111,7 +111,7 @@ class FetchBundle extends CoreBundle {
     val localHistoryLength = frontendParams.bpdParams.localHistoryLength
     /*--------------------------*/
     val pc              = UInt(vaddrBits.W) // fetch PC, possibly unaligned.
-    // val next_pc         = UInt(vaddrBits.W) // maybe not used?
+    val next_pc         = UInt(vaddrBits.W) // maybe not used?
     val instrs          = Vec(fetchWidth, Bits(coreInstrBits.W))
     val sfbs            = Vec(fetchWidth, Bool())
     val sfb_masks       = Vec(fetchWidth, UInt((2 * fetchWidth).W))
@@ -200,7 +200,7 @@ class Frontend extends CoreModule with FrontendUtils {
 
     // Module definition
     val bpd    = Module(new BranchPredictor())
-    val ras    = Module(new RAS)
+    val ras    = Module(new Ras)
     val icache = Module(new ICache(frontendParams.iCacheParams))
     val tlb    = Module(new TLB)
     val fb     = Module(new FetchBuffer)
@@ -221,10 +221,9 @@ class Frontend extends CoreModule with FrontendUtils {
     val s0_valid              = WireInit(false.B)
     val s0_is_replay          = WireInit(false.B)
     val s0_is_sfence          = WireInit(false.B)
-    val s0_replay_tlb_resp        = Wire(new TLBResp)
+    val s0_replay_tlb_resp    = Wire(new TLBResp)
     val s0_replay_bpd_resp    = Wire(new BranchPredictionBundle)
     val s0_replay_ppc         = Wire(UInt(vaddrBits.W))
-
 
     when (RegNext(reset.asBool) && !reset.asBool) { // the first cycle after reset
         s0_valid    := true.B
@@ -453,17 +452,6 @@ class Frontend extends CoreModule with FrontendUtils {
     val f3_call_mask             = Wire(Vec(fetchWidth, Bool()))
     val f3_ret_mask              = Wire(Vec(fetchWidth, Bool()))
     val f3_btb_mispredicts       = Wire(Vec(fetchWidth, Bool()))
-
-    //连线，将信号整合到f3_fetch_bundle里面
-    f3_fetch_bundle.mask          := f3_mask.asUInt
-    f3_fetch_bundle.br_mask       := f3_br_mask.asUInt
-    f3_fetch_bundle.pc            := f3_fetchResp.pc
-    f3_fetch_bundle.ftq_idx       := 0.U      //之后会被赋值
-    f3_fetch_bundle.xcpt_pf_if    := f3_fetchResp.xcpt.pf
-    f3_fetch_bundle.xcpt_ae_if    := f3_fetchResp.xcpt.ae
-    // f3_fetch_bundle.fsrc          := f3_fetchResp.fsrc
-    // f3_fetch_bundle.tsrc          := f3_fetchResp.tsrc
-    f3_fetch_bundle.shadowed_mask := f3_shadowed_mask
     
     var redirect_found = false.B
     for(b <- 0 until nBanks){
@@ -538,7 +526,6 @@ class Frontend extends CoreModule with FrontendUtils {
                 brsigs.cfiType === CFI_JAL || brsigs.cfiType === CFI_JALR ||
                 (brsigs.cfiType === CFI_BR && f3_bpd_resp.io.deq.bits.predInfos(i).taken)
             )
-
             f3_br_mask(i)   := f3_mask(i) && brsigs.cfiType === CFI_BR
             f3_cfi_types(i) := brsigs.cfiType
             f3_call_mask(i) := brsigs.isCall
@@ -547,28 +534,33 @@ class Frontend extends CoreModule with FrontendUtils {
             redirect_found = redirect_found || f3_redirects(i)
         }
     }
+    f3_fetch_bundle.mask          := f3_mask.asUInt
+    f3_fetch_bundle.br_mask       := f3_br_mask.asUInt
+    f3_fetch_bundle.pc            := f3_fetchResp.pc
+    f3_fetch_bundle.ftq_idx       := 0.U    // TODO: DontCare?
+    f3_fetch_bundle.xcpt_pf_if    := f3_fetchResp.xcpt.pf
+    f3_fetch_bundle.xcpt_ae_if    := f3_fetchResp.xcpt.ae
+    // f3_fetch_bundle.fsrc          := f3_fetchResp.fsrc
+    // f3_fetch_bundle.tsrc          := f3_fetchResp.tsrc
+    f3_fetch_bundle.shadowed_mask := f3_shadowed_mask
+
+    f3_fetch_bundle.cfi_idx.valid := f3_redirects.reduce(_||_)
+    f3_fetch_bundle.cfi_idx.bits  := PriorityEncoder(f3_redirects)
     f3_fetch_bundle.cfi_type      := f3_cfi_types(f3_fetch_bundle.cfi_idx.bits)
-    f3_fetch_bundle.cfi_is_call := f3_call_mask(f3_fetch_bundle.cfi_idx.bits)
-    f3_fetch_bundle.cfi_is_ret := f3_ret_mask(f3_fetch_bundle.cfi_idx.bits)
-
-    f3_fetch_bundle.ghist := f3.io.deq.bits.ghist
-    f3_fetch_bundle.lhist := f3_bpd_resp.io.deq.bits.lhist
-    f3_fetch_bundle.bpd_meta := f3_bpd_resp.io.deq.bits.meta
-
-    f3_fetch_bundle.cfi_idx.valid := f3_redirects.reduce(_ || _)
-    f3_fetch_bundle.cfi_idx.bits := PriorityEncoder(f3_redirects)
-
-    f3_fetch_bundle.ras_top := ras.io.read_addr
+    f3_fetch_bundle.cfi_is_call   := f3_call_mask(f3_fetch_bundle.cfi_idx.bits)
+    f3_fetch_bundle.cfi_is_ret    := f3_ret_mask(f3_fetch_bundle.cfi_idx.bits)
+    f3_fetch_bundle.ghist         := f3.io.deq.bits.ghist
+    f3_fetch_bundle.lhist         := f3_bpd_resp.io.deq.bits.lhist
+    f3_fetch_bundle.bpd_meta      := f3_bpd_resp.io.deq.bits.meta
+    f3_fetch_bundle.ras_top       := ras.io.read_addr
 
     val f3_predicted_target = Mux(f3_redirects.reduce(_||_),
-        Mux(f3_fetch_bundle.cfi_is_ret,
-            ras.io.read_addr,
-            f3_tgts(PriorityEncoder(f3_redirects))
-        ),
+        Mux(f3_fetch_bundle.cfi_is_ret, ras.io.read_addr,
+            f3_tgts(PriorityEncoder(f3_redirects))),
         nextFetch(f3_fetch_bundle.pc)
     )
 
-    f3_fetch_bundle.next_pc     := f3_predicted_target
+    f3_fetch_bundle.next_pc := f3_predicted_target
     val f3_predicted_ghist = f3_fetch_bundle.ghist.update(
         f3_fetch_bundle.br_mask,
         f3_fetch_bundle.cfi_idx.valid,
@@ -581,39 +573,42 @@ class Frontend extends CoreModule with FrontendUtils {
     )
 
     ras.io.write_valid := false.B
-    ras.io.write_addr   := f3_aligned_pc + ((f3_fetch_bundle.cfi_idx.bits << 1)) + 4.U
-    ras.io.write_idx    := WrapInc(f3_fetch_bundle.ghist.ras_idx,numRasEntries)
+    ras.io.write_addr  := f3_aligned_pc + ((f3_fetch_bundle.cfi_idx.bits << 2)) + 4.U
+    ras.io.write_idx   := WrapInc(f3_fetch_bundle.ghist.ras_idx, numRasEntries)
 
     val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist
     val f3_correct_f2_ghist = s2_ghist =/= f3_predicted_ghist
 
-    when(f3.io.deq.valid && f4_ready){
+    when (f3.io.deq.valid && f4_ready) {
         when(f3_fetch_bundle.cfi_is_call && f3_fetch_bundle.cfi_idx.valid){
             ras.io.write_valid := true.B
         }
-        when (s2_valid && s2_vpc === f3_predicted_target&& !f3_correct_f2_ghist){
+
+        when (s2_valid && s2_vpc === f3_predicted_target&& !f3_correct_f2_ghist) {
             f3.io.enq.bits.ghist := f3_predicted_ghist
-        } .elsewhen(!s2_valid && s1_valid && s1_vpc === f3_predicted_target && !f3_correct_f1_ghist){
+        } .elsewhen (!s2_valid && s1_valid && s1_vpc === f3_predicted_target && !f3_correct_f1_ghist) {
             s2_ghist := f3_predicted_ghist
-        } .elsewhen((s2_valid && (s2_vpc =/= f3_predicted_target|| f3_correct_f2_ghist)) ||
-                (!s2_valid && s1_valid && (s1_vpc =/= f3_predicted_target || f3_correct_f1_ghist))||
-                (!s2_valid && !s1_valid)){
-            f2_clear := true.B
-            f1_clear := true.B
-            s0_valid    := !(f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if)
-            s0_vpc      := f3_predicted_target
-            s0_is_replay:= false.B
-            s0_ghist    := f3_predicted_ghist
-            // s0_tsrc     := BSRC_3
+        } .elsewhen (
+            (s2_valid && (s2_vpc =/= f3_predicted_target || f3_correct_f2_ghist)) ||
+            (!s2_valid && s1_valid && (s1_vpc =/= f3_predicted_target || f3_correct_f1_ghist)) ||
+            (!s2_valid && !s1_valid)
+        ) {
+            f2_clear     := true.B
+            f1_clear     := true.B
+            s0_valid     := !(f3_fetch_bundle.xcpt_pf_if || f3_fetch_bundle.xcpt_ae_if)
+            s0_vpc       := f3_predicted_target
+            s0_is_replay := false.B
+            s0_ghist     := f3_predicted_ghist
+            // s0_tsrc      := BSRC_3
             // f3_fetch_bundle.fsrc := BSRC_3
         }
     }
 
     // 当f3发现btb预测错误时，建一个队列来存储bpd更新
-    val f4_btb_corrections = Module(new Queue(new BranchPredictionUpdate,2))
+    val f4_btb_corrections = Module(new Queue(new BranchPredictionUpdate, 2))
 
-    f4_btb_corrections.io.enq.valid := f3.io.deq.fire && f3_btb_mispredicts.reduce(_||_)
-    f4_btb_corrections.io.enq.bits  := DontCare
+    f4_btb_corrections.io.enq.valid                   := f3.io.deq.fire && f3_btb_mispredicts.reduce(_||_)
+    f4_btb_corrections.io.enq.bits                    := DontCare
     f4_btb_corrections.io.enq.bits.isMispredictUpdate := false.B
     f4_btb_corrections.io.enq.bits.isRepairUpdate     := false.B
     f4_btb_corrections.io.enq.bits.btbMispredicts     := f3_btb_mispredicts.asUInt
@@ -625,12 +620,13 @@ class Frontend extends CoreModule with FrontendUtils {
     // -------------------------------------------------------
     // **** F4 ****
     // -------------------------------------------------------
+
     val f4_clear = WireInit(false.B)
     val f4 = withReset(reset.asBool || f4_clear) {
-        Module(new Queue(new FetchBundle,1,pipe=true,flow=false))
+        Module(new Queue(new FetchBundle, 1, pipe = true, flow = false))
     }
 
-    //下面将要处理sfbs
+    // 下面将要处理sfbs
     val f4_shadowable_masks = VecInit((0 until fetchWidth).map{ i =>
         f4.io.deq.bits.shadowable_mask.asUInt |
         ~f4.io.deq.bits.sfb_masks(i)(fetchWidth - 1,0)    // the instructions which not in sfb shadow
@@ -644,67 +640,71 @@ class Frontend extends CoreModule with FrontendUtils {
         f4.io.deq.bits.sfbs(i) &&
         !(f4.io.deq.bits.cfi_idx.valid && f4.io.deq.bits.cfi_idx.bits === i.U)
     )})
-    val f4_sfb_valid    = f4_sfbs.reduce(_||_) && f4.io.deq.valid
+    val f4_sfb_valid    = f4.io.deq.valid && f4_sfbs.reduce(_||_)
     val f4_sfb_idx      = PriorityEncoder(f4_sfbs)
     val f4_sfb_mask     = f4.io.deq.bits.sfb_masks(f4_sfb_idx)
-
     // 如果f4阶段有sfb指令，要等待下一次fetch
     val f4_delay = (
         f4.io.deq.bits.sfbs.reduce(_||_) &&
         !f4.io.deq.bits.cfi_idx.valid &&
         !f4.io.enq.valid &&
-        !(f4.io.deq.bits.xcpt_pf_if ||f4.io.deq.bits.xcpt_ae_if)
+        !(f4.io.deq.bits.xcpt_pf_if || f4.io.deq.bits.xcpt_ae_if)
     )
     when (f4_sfb_valid){
-        f3_shadowed_mask := f4_sfb_mask(2*fetchWidth-1,fetchWidth).asBools
+        f3_shadowed_mask := f4_sfb_mask(2 * fetchWidth - 1,fetchWidth).asBools
     }.otherwise{
         f3_shadowed_mask := VecInit(0.U(fetchWidth.W).asBools)
     }
 
-    f4_ready := f4.io.enq.ready
+    f4_ready        := f4.io.enq.ready
     f4.io.enq.valid := f3.io.deq.valid && !f3_clear
     f4.io.enq.bits  := f3_fetch_bundle
     f4.io.deq.ready := fb.io.enq.ready && ftq.io.enq.ready && !f4_delay
 
-    fb.io.enq.valid := f4.io.deq.valid && ftq.io.enq.ready && !f4_delay
-    fb.io.enq.bits  := f4.io.deq.bits
-    fb.io.enq.bits.ftqIdx  := ftq.io.enqIdx
-    fb.io.enq.bits.sfbs     := Mux(f4_sfb_valid,UIntToOH(f4_sfb_idx),0.U(fetchWidth.W)).asBools
+    fb.io.enq.valid             := f4.io.deq.valid && ftq.io.enq.ready && !f4_delay
+    fb.io.enq.bits              := f4.io.deq.bits
+    fb.io.enq.bits.ftqIdx       := ftq.io.enqIdx
+    fb.io.enq.bits.sfbs         := Mux(f4_sfb_valid, UIntToOH(f4_sfb_idx), 0.U(fetchWidth.W)).asBools
     fb.io.enq.bits.shadowedMask := (
-            Mux(f4_sfb_valid,f4_sfb_mask(fetchWidth-1,0),0.U(fetchWidth.W)) |
-                    f4.io.deq.bits.shadowed_mask.asUInt
+        Mux(f4_sfb_valid, f4_sfb_mask(fetchWidth - 1,0), 0.U(fetchWidth.W)) |
+        f4.io.deq.bits.shadowed_mask.asUInt
     ).asBools
 
-    ftq.io.enq.valid        := f4.io.deq.valid && fb.io.enq.ready && !f4_delay
-    ftq.io.enq.bits         := f4.io.deq.bits
+    ftq.io.enq.valid := f4.io.deq.valid && fb.io.enq.ready && !f4_delay
+    ftq.io.enq.bits  := f4.io.deq.bits
 
-    val bpd_update_arbiter = Module(new Arbiter(new BranchPredictionUpdate,2))
+    val bpd_update_arbiter = Module(new Arbiter(new BranchPredictionUpdate, 2))
+    assert(bpd_update_arbiter.io.in(0).ready)
+    bpd_update_arbiter.io.out.ready := true.B
+
     bpd_update_arbiter.io.in(0).valid := ftq.io.bpdUpdate.valid
     bpd_update_arbiter.io.in(0).bits  := ftq.io.bpdUpdate.bits
-    assert(bpd_update_arbiter.io.in(0).ready)
     bpd_update_arbiter.io.in(1) <> f4_btb_corrections.io.deq
+
     bpd.io.update := bpd_update_arbiter.io.out
-    bpd_update_arbiter.io.out.ready := true.B
+
     //ftq更新ras
     when(ftq.io.rasUpdate){
         ras.io.write_valid  := true.B
         ras.io.write_idx    := ftq.io.rasUpdateIdx
         ras.io.write_addr   := ftq.io.rasUpdatepc
     }
+
     // -------------------------------------------------------
     // **** To Core (F5) ****
     // -------------------------------------------------------
 
     io.cpu.fetchPacket <> fb.io.deq
-    io.cpu.getFtqPc <> ftq.io.getFtqPc
-    ftq.io.deq  := io.cpu.commit
-    ftq.io.brUpdate := io.cpu.brupdate
+    io.cpu.getFtqPc    <> ftq.io.getFtqPc
 
-    ftq.io.redirect.valid   := io.cpu.redirect_val
-    ftq.io.redirect.bits    := io.cpu.redirect_ftq_idx
+    ftq.io.deq            := io.cpu.commit
+    ftq.io.brUpdate       := io.cpu.brupdate
+    ftq.io.redirect.valid := io.cpu.redirect_val
+    ftq.io.redirect.bits  := io.cpu.redirect_ftq_idx
+    
     fb.io.clear := false.B
 
-    when(io.cpu.sfence.valid){
+    when (io.cpu.sfence.valid) {
         fb.io.clear  := true.B
         f4_clear     := true.B
         f3_clear     := true.B
@@ -715,7 +715,7 @@ class Frontend extends CoreModule with FrontendUtils {
         s0_vpc       := io.cpu.sfence.bits.addr
         s0_is_replay := false.B
         s0_is_sfence := true.B
-    }.elsewhen(io.cpu.redirect_flush){
+    } .elsewhen(io.cpu.redirect_flush) {
         fb.io.clear := true.B
         f4_clear    := true.B
         f3_clear    := true.B
@@ -731,6 +731,4 @@ class Frontend extends CoreModule with FrontendUtils {
         ftq.io.redirect.valid := io.cpu.redirect_val
         ftq.io.redirect.bits := io.cpu.redirect_ftq_idx
     }
-
-
 }

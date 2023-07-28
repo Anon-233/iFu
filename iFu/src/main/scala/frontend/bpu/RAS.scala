@@ -5,7 +5,7 @@ import chisel3.util._
 
 import iFu.common._
 
-class RAS extends CoreModule {
+class Ras extends CoreModule {
     val nRasEntries = frontendParams.bpdParams.nRasEntries
 
     val io = IO(new Bundle {
