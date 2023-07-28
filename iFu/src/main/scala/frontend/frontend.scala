@@ -205,8 +205,6 @@ class Frontend extends CoreModule with FrontendUtils {
     val tlb    = Module(new TLB)
     val fb     = Module(new FetchBuffer)
     val ftq    = Module(new FetchTargetQueue)
-
-    bpd.io.f3fire := false.B    // TODO: add the default value to the "else" branch
     
     icache.io.invalidate := io.cpu.flush_icache
     
@@ -215,7 +213,7 @@ class Frontend extends CoreModule with FrontendUtils {
     //      Send request to ICache
     // --------------------------------------------------------
 
-    // note: s0 stage is not a real stage, so the below values are wire instead of reg
+    // note: s0 stage is not a real stage, so the below values are Wire instead of Reg
     // in fact, the s0 stage is hidden within the s1 stage
     val s0_vpc                = WireInit(0.U(vaddrBits.W))
     val s0_ghist              = WireInit((0.U).asTypeOf(new GlobalHistory))
@@ -225,39 +223,41 @@ class Frontend extends CoreModule with FrontendUtils {
     val s0_is_sfence          = WireInit(false.B)
     val s0_replay_resp        = Wire(new TLBResp)
     val s0_replay_bpd_resp    = Wire(new BranchPredictionBundle)
-    val s0_replay_ppc         = Wire(UInt(vaddrBits.W))    // ??? size?
-    val s0_s1_use_f3_bpd_resp = WireInit(false.B)
+    val s0_replay_ppc         = Wire(UInt(vaddrBits.W))
 
 
-    when (RegNext(reset.asBool) && !reset.asBool) {
+    when (RegNext(reset.asBool) && !reset.asBool) { // the first cycle after reset
         s0_valid    := true.B
         s0_vpc      := resetPC.U(vaddrBits.W)
-        s0_ghist    := (0.U).asTypeOf(new GlobalHistory)
+        s0_ghist    := (0.U).asTypeOf(new GlobalHistory)    // TODO: cold boot
         s0_tsrc     := BSRC_C
     }
-    //icache的端口连接，只在这一处
+
     icache.io.req.valid     := s0_valid
     icache.io.req.bits.addr := s0_vpc
 
     bpd.io.f0req.valid      := s0_valid
     bpd.io.f0req.bits.pc    := s0_vpc
     bpd.io.f0req.bits.ghist := s0_ghist
+    
     // --------------------------------------------------------
     // **** ICache Access (F1) ****
     //      Translate VPC
     // --------------------------------------------------------
 
-    val s1_vpc      = RegNext(s0_vpc)
-    val s1_valid    = RegNext(s0_valid,false.B)
-    val s1_ghist    = RegNext(s0_ghist)
-    val s1_is_replay= RegNext(s0_is_replay)
-    val s1_is_sfence= RegNext(s0_is_sfence)
-    val f1_clear    = WireInit(false.B)
-    val s1_tsrc     = RegNext(s0_tsrc)
+    val s1_vpc       = RegNext(s0_vpc)
+    val s1_valid     = RegNext(s0_valid,false.B)
+    val s1_ghist     = RegNext(s0_ghist)
+    val s1_is_replay = RegNext(s0_is_replay)
+    val s1_is_sfence = RegNext(s0_is_sfence)
+    val s1_tsrc      = RegNext(s0_tsrc)
+    
+    val f1_clear     = WireInit(false.B)
+
     tlb.io.req.valid            := (s1_valid && !s1_is_replay && !f1_clear) || s1_is_sfence
     tlb.io.req.bits.cmd         := DontCare
     tlb.io.req.bits.vaddr       := s1_vpc
-    tlb.io.req.bits.passthrough := false.B  //may be changed
+    tlb.io.req.bits.passthrough := false.B  // may be changed
     tlb.io.req.bits.size        := log2Ceil(fetchWidth * instrBytes).U
     // tlb.io.req.bits.v           := io.ptw.status.v
     // tlb.io.req.bits.prv         := io.ptw.status.prv
@@ -356,7 +356,6 @@ class Frontend extends CoreModule with FrontendUtils {
         s0_is_replay := s2_valid && icache.io.resp.valid
         // When this is not a replay (it queried the BPDs, we should use f3 resp in the replaying s1)
         //会传给bpd，当s2_is_replay时，用bpd f3的预测结果来传给s1
-        s0_s1_use_f3_bpd_resp := !s2_is_replay
         s0_ghist := s2_ghist
         s0_tsrc := s2_tsrc
         f1_clear := true.B
@@ -421,6 +420,8 @@ class Frontend extends CoreModule with FrontendUtils {
     f3_bpd_resp.io.enq.bits := bpd.io.resp.f3
     when (f3_bpd_resp.io.enq.fire){
         bpd.io.f3fire := true.B
+    } .otherwise {
+        bpd.io.f3fire := false.B
     }
 
     f3.io.deq.ready := f4_ready
