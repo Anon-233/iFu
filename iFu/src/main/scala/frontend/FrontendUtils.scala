@@ -39,4 +39,6 @@ trait FrontendUtils {
     def bankMask(addr: UInt):UInt = {
         Mux(isLastBankInBlock(addr), "b01".U(2.W), "b11".U(2.W))
     }
+
+
 }

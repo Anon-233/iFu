@@ -3,19 +3,25 @@ package iFu.frontend
 import chisel3._
 import chisel3.util._
 import iFu.common._
+import iFu.util.MaskUpper
 
 class FetchBufferResp() extends CoreBundle {
     val uops = Vec(coreWidth,Valid(new MicroOp))
 }
 
-class FetchBuffer extends CoreModule {
+class FetchBuffer extends CoreModule with FrontendUtils {
     val io = IO(new CoreBundle{
         val clear = Input(Bool())
         val enq = Flipped(Decoupled(new FetchBundle()))     // Input
         val deq = new DecoupledIO(new FetchBufferResp())    // Output
     })
+    //------------------------------------
+    val numFetchBufferEntries = frontendParams.numFetchBufferEntries
+    val nBanks = frontendParams.iCacheParams.nBanks
+    val bankWidth = frontendParams.bankWidth
+    //------------------------------------
 
-    val numEnt = frontendParams.numFBEntries
+    val numEnt = numFetchBufferEntries
     require(numEnt % coreWidth == 0, "FetchBuffer size must be divisible by coreWidth")
     val numRow = numEnt / coreWidth     // dequeue 1 row of uops at a time
 
@@ -60,8 +66,8 @@ class FetchBuffer extends CoreModule {
     val inUops = Wire(Vec(frontendParams.fetchWidth, new MicroOp()))
 
     for(b <- 0 until nBanks){
-        for (w <- 0 until frontendParams.iCacheParams.bankWidth){
-            val i = (b * frontendParams.iCacheParams.bankWidth) + w     // the index of the uop
+        for (w <- 0 until bankWidth){
+            val i = (b * bankWidth) + w     // the index of the uop
 
             val pc = (bankAlign(io.enq.bits.pc) + (i << 1).U)     // the low bit of the pc of the uop
 
