@@ -11,21 +11,21 @@ trait FrontendUtils{
     val numChunks = iCacheParams.lineBytes / iCacheParams.bankBytes
 
     // Which bank is the address pointing to?
-    def bank(addr: UInt) = addr(log2Ceil(iCacheParams.bankBytes))
+    def bank(addr: UInt):UInt = addr(log2Ceil(iCacheParams.bankBytes))
 
-    def isLastBankInBlock(addr: UInt) = {
+    def isLastBankInBlock(addr: UInt):Bool = {
         addr(iCacheParams.offsetBits - 1, log2Ceil(iCacheParams.bankBytes)) === (numChunks - 1).U
     }
 
-    def blockAlign(addr: UInt) = ~(~addr | (iCacheParams.lineBytes - 1).U)
+    def blockAlign(addr: UInt): UInt = ~(~addr | (iCacheParams.lineBytes - 1).U)
 
-    def bankAlign(addr: UInt) = ~(~addr | (iCacheParams.bankBytes - 1).U)
+    def bankAlign(addr: UInt):UInt = ~(~addr | (iCacheParams.bankBytes - 1).U)
 
-    def packetBasePC(addr: UInt) = addr >> log2Ceil(fetchBytes)
+    def packetBasePC(addr: UInt):UInt = addr >> log2Ceil(fetchBytes)
 
-    def nextBank(addr: UInt) = bankAlign(addr) + iCacheParams.bankBytes.U
+    def nextBank(addr: UInt):UInt = bankAlign(addr) + iCacheParams.bankBytes.U
 
-    def nextFetch(addr: UInt) = {
+    def nextFetch(addr: UInt):UInt = {
         bankAlign(addr) + Mux(isLastBankInBlock(addr), iCacheParams.bankBytes.U, fetchBytes.U)
     }
 
@@ -37,7 +37,7 @@ trait FrontendUtils{
 
     }
 
-    def bankMask(addr: UInt) = {
+    def bankMask(addr: UInt):UInt = {
         val idx = addr(log2Ceil(fetchWidth) + log2Ceil(instrBytes) - 1, log2Ceil(instrBytes))
         Mux(isLastBankInBlock(addr), 1.U(2.W), 3.U(2.W))
 

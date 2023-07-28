@@ -33,7 +33,7 @@ object WrapDec
 }
 object MaskUpper
 {
-    def apply(in: UInt) = { //假设第i位初次为1，则(n-1,i)为1
+    def apply(in: UInt):UInt = { //假设第i位初次为1，则(n-1,i)为1
         val n = in.getWidth
         (0 until n).map(i => (in << i.U)(n-1,0)).reduce(_|_)
     }

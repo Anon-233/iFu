@@ -37,6 +37,7 @@ class FrontendParameters{
 
 
 trait HasCoreParameters {
+    val resetPC: Int = 0x1c000000
     val xLen: Int = 32
     val vaddrBits: Int = xLen
     val paddrBits: Int = xLen

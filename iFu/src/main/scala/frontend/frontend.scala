@@ -206,10 +206,6 @@ class Frontend extends CoreModule with FrontendUtils {
     val fb     = Module(new FetchBuffer)
     val ftq    = Module(new FetchTargetQueue)
 
-
-    val reset_addr = 0.U(vaddrBits) // TODO: add a reset vector to the config file
-    val io_reset_vector = reset_addr
-
     bpd.io.f3fire := false.B    // TODO: add the default value to the "else" branch
     
     icache.io.invalidate := io.cpu.flush_icache
@@ -229,13 +225,13 @@ class Frontend extends CoreModule with FrontendUtils {
     val s0_is_sfence          = WireInit(false.B)
     val s0_replay_resp        = Wire(new TLBResp)
     val s0_replay_bpd_resp    = Wire(new BranchPredictionBundle)
-    val s0_replay_ppc         = Wire(UInt())    // ??? size?
+    val s0_replay_ppc         = Wire(UInt(vaddrBits.W))    // ??? size?
     val s0_s1_use_f3_bpd_resp = WireInit(false.B)
 
 
     when (RegNext(reset.asBool) && !reset.asBool) {
         s0_valid    := true.B
-        s0_vpc      := io_reset_vector
+        s0_vpc      := resetPC.U(vaddrBits.W)
         s0_ghist    := (0.U).asTypeOf(new GlobalHistory)
         s0_tsrc     := BSRC_C
     }
