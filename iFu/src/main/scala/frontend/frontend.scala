@@ -695,7 +695,7 @@ class Frontend extends CoreModule with FrontendUtils {
     // -------------------------------------------------------
 
     io.cpu.fetchPacket <> fb.io.deq
-    io.cpu.getFtqPc    <> ftq.io.getFtqPc
+    io.cpu.getFtqPc    <> ftq.io.getFtqpc
 
     ftq.io.deq            := io.cpu.commit
     ftq.io.brUpdate       := io.cpu.brupdate
