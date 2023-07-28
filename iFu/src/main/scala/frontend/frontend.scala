@@ -78,8 +78,8 @@ class GlobalHistory extends CoreBundle with FrontendUtils {
                 Mux(cfi_is_br && cfi_in_bank_0, histories(1) << 1 | 1.U,
                 Mux(first_bank_saw_not_taken,   histories(1) << 1,
                                                 histories(1)))
-            new_history.new_saw_branch_not_taken := not_taken_branches(fetchWidth - 1, bankWidth)
-            new_history.new_saw_branch_taken := cfi_valid && cfi_is_br && !cfi_in_bank_0
+            new_history.new_saw_branch_not_taken := not_taken_branches(fetchWidth - 1, bankWidth) =/= 0.U
+            new_history.new_saw_branch_taken := cfi_valid && cfi_taken && cfi_is_br && !cfi_in_bank_0
         }
 
         new_history.ras_idx :=
@@ -284,7 +284,7 @@ class Frontend extends CoreModule with FrontendUtils {
     val f1_redirects = (0 until fetchWidth) map { i=>
         s1_valid && f1_mask(i) && s1_bpd_resp.predInfos(i).predictedpc.valid &&
                 (s1_bpd_resp.predInfos(i).isJal ||
-                        s1_bpd_resp.predInfos(i).isBranch && s1_bpd_resp.predInfos(i).taken)
+                        (s1_bpd_resp.predInfos(i).isBranch && s1_bpd_resp.predInfos(i).taken))
     }
     val f1_redirect_idx = PriorityEncoder(f1_redirects)
     val f1_do_redirect = f1_redirects.reduce(_||_)
@@ -477,12 +477,12 @@ class Frontend extends CoreModule with FrontendUtils {
 
             val brsigs = Wire(new PreDecodeSignals)
             val inst = Wire(UInt(coreInstrBits.W))
-            val pc = f3_aligned_pc + (i << log2Ceil(coreInstrBits))
+            val pc = (f3_aligned_pc + (i << log2Ceil(coreInstrBits)).U)
             val bpd_decoder = Module(new PreDecode)
             bpd_decoder.io.inst := inst
             bpd_decoder.io.pc   := pc
 
-            bank_insrts(w)               := inst
+            bank_instrs(w)               := inst
             f3_fetch_bundle.instrs(i)    := inst
             brsigs                      := bpd_decoder.io.out
             inst  := bank_data(w*coreInstrBits+coreInstrBits-1,w*coreInstrBits)
@@ -581,7 +581,7 @@ class Frontend extends CoreModule with FrontendUtils {
     )
 
     ras.io.write_valid := false.B
-    ras.io.write_addr   := f3_aligned_pc + ((f3_fetch_bundle.cfi_idx.bits << 1)) + 4
+    ras.io.write_addr   := f3_aligned_pc + ((f3_fetch_bundle.cfi_idx.bits << 1)) + 4.U
     ras.io.write_idx    := WrapInc(f3_fetch_bundle.ghist.ras_idx,numRasEntries)
 
     val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist
