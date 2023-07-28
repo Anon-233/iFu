@@ -164,7 +164,7 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
     bankedPredictors(i).io.update.bits.isRepairUpdate     := io.update.bits.isRepairUpdate
 
     bankedPredictors(i).io.update.bits.meta             := io.update.bits.meta(i)
-    bankedPredictors(i).io.update.bits.lhist            := io.update.bits.lhist(i)
+    bankedPredictors(i).io.update.bits.lhist            := io.update.bits.lHist(i)
     bankedPredictors(i).io.update.bits.cfiIdx.bits     := io.update.bits.cfiIdx.bits
     bankedPredictors(i).io.update.bits.cfiTaken        := io.update.bits.cfiTaken
     bankedPredictors(i).io.update.bits.cfiMispredicted := io.update.bits.cfiMispredicted
@@ -175,7 +175,7 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
 
     bankedLhistProviders(i).io.update.mispredict := io.update.bits.isMispredictUpdate
     bankedLhistProviders(i).io.update.repair     := io.update.bits.isRepairUpdate
-    bankedLhistProviders(i).io.update.lhist      := io.update.bits.lhist(i)
+    bankedLhistProviders(i).io.update.lhist      := io.update.bits.lHist(i)
   }
 
  {
@@ -208,8 +208,8 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
       bankedPredictors(0).io.update.bits.cfiIdx.valid := io.update.bits.cfiIdx.valid && io.update.bits.cfiIdx.bits < bankWidth.U
       bankedPredictors(1).io.update.bits.cfiIdx.valid := io.update.bits.cfiIdx.valid && io.update.bits.cfiIdx.bits >= bankWidth.U
 
-      bankedPredictors(0).io.update.bits.ghist := io.update.bits.ghist.histories(0)
-      bankedPredictors(1).io.update.bits.ghist := io.update.bits.ghist.histories(1)
+      bankedPredictors(0).io.update.bits.ghist := io.update.bits.gHist.histories(0)
+      bankedPredictors(1).io.update.bits.ghist := io.update.bits.gHist.histories(1)
     } .otherwise {
       val b0UpdateValid = io.update.valid && !mayNotBeDualBanked(io.update.bits.pc) &&
         (!io.update.bits.cfiIdx.valid || io.update.bits.cfiIdx.bits >= bankWidth.U)
@@ -235,8 +235,8 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
       bankedPredictors(1).io.update.bits.cfiIdx.valid := io.update.bits.cfiIdx.valid && io.update.bits.cfiIdx.bits < bankWidth.U
       bankedPredictors(0).io.update.bits.cfiIdx.valid := io.update.bits.cfiIdx.valid && io.update.bits.cfiIdx.bits >= bankWidth.U
 
-      bankedPredictors(1).io.update.bits.ghist := io.update.bits.ghist.histories(0)
-      bankedPredictors(0).io.update.bits.ghist := io.update.bits.ghist.histories(1)
+      bankedPredictors(1).io.update.bits.ghist := io.update.bits.gHist.histories(0)
+      bankedPredictors(0).io.update.bits.ghist := io.update.bits.gHist.histories(1)
     }
 
   }

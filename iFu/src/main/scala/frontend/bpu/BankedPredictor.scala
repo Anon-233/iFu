@@ -108,8 +108,8 @@ class BranchPredictionUpdate extends Bundle with HasBPUParameters{
     val cfiIsJalr = Bool()
     //val cfi_is_ret  = Bool()
 
-    // val ghist = new GlobalHistory
-    val lhist = Vec(nBanks, UInt(localHistoryLength.W))
+    val gHist = new GlobalHistory
+    val lHist = Vec(nBanks, UInt(localHistoryLength.W))
 
     // What did this CFI jump to?
     val target        = UInt(vaddrBits.W)

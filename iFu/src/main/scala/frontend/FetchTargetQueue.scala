@@ -3,7 +3,15 @@ package iFu.frontend
 import chisel3._
 import chisel3.util._
 
+import iFu.common._
+import iFu.common.Consts._
+import iFu.util._
+import backend.memSystem.BrUpdateInfo
+import iFu.frontend.FrontendUtils._
 class FTQBundle extends CoreBundle {
+    val fetchWidth      = frontendParams.fetchWidth
+    val numRasEntries   = frontendParams.bpdParams.numRasEntries
+
     val cfiIdx          = Valid(UInt(log2Ceil(fetchWidth).W))
     val cfiTaken        = Bool()
     val cfiMispredicted = Bool()
@@ -14,13 +22,16 @@ class FTQBundle extends CoreBundle {
     val cfiIsRet        = Bool()
 
     val rasTop          = UInt(vaddrBits.W)
-    val rasIdx          = UInt(log2Ceil(nRasEntries).W)
+    val rasIdx          = UInt(log2Ceil(numRasEntries).W)
 
     val startBank       = UInt(1.W)
 }
 
 class GetPCFromFtqIO extends CoreBundle {
-    val ftqIdx  = Input(UInt(log2Ceil(ftqSz).W))
+
+    val numFTQEntries = frontendParams.numFTQEntries
+
+    val ftqIdx  = Input(UInt(log2Ceil(numFTQEntries).W))
 
     val entry   = Output(new FTQBundle)
     val gHist   = Output(new GlobalHistory)
@@ -35,8 +46,13 @@ class GetPCFromFtqIO extends CoreBundle {
 
 class FetchTargetQueue extends CoreModule {
     /*--------------------------*/
-    val numEntries = frontendParams.numFTQEntries
-    private val idxSz = log2Ceil(numEntries)
+    val numFTQEntries = frontendParams.numFTQEntries
+    val numRasEntries = frontendParams.bpdParams.numRasEntries
+    val nBanks        = frontendParams.iCacheParams.nBanks
+    val localHistoryLength = frontendParams.bpdParams.localHistoryLength
+    val bankBytes     = frontendParams.iCacheParams.bankBytes
+    val fetchWidth    = frontendParams.fetchWidth
+    private val idxSz = log2Ceil(numRasEntries)
     /*--------------------------*/
 
     val io = IO(new Bundle {
@@ -60,7 +76,7 @@ class FetchTargetQueue extends CoreModule {
 
         // 控制ras更新的信息
         val rasUpdate    = Output(Bool())
-        val rasUpdateIdx = Output(UInt(log2Ceil(nRasEntries).W))
+        val rasUpdateIdx = Output(UInt(log2Ceil(numRasEntries).W))
         val rasUpdatepc  = Output(UInt(vaddrBits.W))
     })
 
@@ -70,15 +86,15 @@ class FetchTargetQueue extends CoreModule {
 
     // 标记队列是否已满
     val full = (
-        (WrapInc(enqPtr, numEntries) === bpdPtr) ||
-        (WrapInc(WrapInc(enqPtr, numEntries), numEntries) === bpdPtr)
+        (WrapInc(enqPtr, numFTQEntries) === bpdPtr) ||
+        (WrapInc(WrapInc(enqPtr, numFTQEntries), numFTQEntries) === bpdPtr)
     )   // why need at least 2 empty entries?
 
-    val pcs   = Reg(Vec(numEntries, UInt(vaddrBits.W)))
-    val meta  = SyncReadMem(numEntries, Vec(nBanks, UInt(bpdMaxMetaLength.W)))
-    val ram   = Reg(Vec(numEntries, new FTQBundle))
-    val gHist = Seq.fill(nBanks) { SyncReadMem(numEntries, new GlobalHistory) }
-    val lHist = SyncReadMem(numEntries, Vec(nBanks, UInt(localHistoryLength.W)))
+    val pcs   = Reg(Vec(numFTQEntries, UInt(vaddrBits.W)))
+    val meta  = SyncReadMem(numFTQEntries, Vec(nBanks, new PredictionMeta))
+    val ram   = Reg(Vec(numFTQEntries, new FTQBundle))
+    val gHist = Seq.fill(nBanks) { SyncReadMem(numFTQEntries, new GlobalHistory) }
+    val lHist = SyncReadMem(numFTQEntries, Vec(nBanks, UInt(localHistoryLength.W)))
 
     val previousgHist = RegInit((0.U).asTypeOf(new GlobalHistory))
     val previousEntry = RegInit((0.U).asTypeOf(new FTQBundle))
@@ -116,7 +132,7 @@ class FetchTargetQueue extends CoreModule {
         )
 
         // 进行写入操作
-        lHist.map(l => l.write(enqPtr, io.enq.bits.lHist))
+        lHist.write(enqPtr, io.enq.bits.lHist)
         gHist.map(g => g.write(enqPtr, newgHist))
         meta.write(enqPtr, io.enq.bits.bpdMeta)
         ram(enqPtr) := newEntry
@@ -126,7 +142,7 @@ class FetchTargetQueue extends CoreModule {
         previousEntry := newEntry
         previousgHist := newgHist
 
-        enqPtr := WrapInc(enqPtr, numEntries)
+        enqPtr := WrapInc(enqPtr, numFTQEntries)
     }
     io.enqIdx := enqPtr
 
@@ -135,7 +151,7 @@ class FetchTargetQueue extends CoreModule {
     // 接下来的代码是为了准备 bpdUpdate 的信息，这包括 RAS 和 BPD
     val rasUpdate    = WireInit(false.B)
     val rasUpdatepc  = WireInit(0.U(vaddrBits.W))
-    val rasUpdateIdx = WireInit(0.U(log2Ceil(nRasEntries).W))
+    val rasUpdateIdx = WireInit(0.U(log2Ceil(numRasEntries).W))
 
     io.rasUpdate    := RegNext(rasUpdate)
     io.rasUpdatepc  := RegNext(rasUpdatepc)
@@ -143,9 +159,9 @@ class FetchTargetQueue extends CoreModule {
 
     val bpdUpdateMispredict = RegInit(false.B)
     val bpdUpdateRepair     = RegInit(false.B)
-    val bpdRepairIdx        = Reg(UInt(log2Ceil(ftqSz).W))
+    val bpdRepairIdx        = Reg(UInt(log2Ceil(numFTQEntries).W))
     val bpdRepairpc         = Reg(UInt(vaddrBits.W))
-    val bpdEndIdx           = Reg(UInt(log2Ceil(ftqSz).W))
+    val bpdEndIdx           = Reg(UInt(log2Ceil(numFTQEntries).W))
     val bpdEntry            = RegNext(ram(bpdIdx))
 
     val bpdIdx    = Mux(io.redirect.valid,                      io.redirect.bits,
@@ -155,7 +171,7 @@ class FetchTargetQueue extends CoreModule {
     val bpdlHist  = lHist.read(bpdIdx, true.B)
     val bpdMeta   = meta.read(bpdIdx, true.B)
     val bpdpc     = RegNext(pcs(bpdIdx))
-    val bpdTarget = RegNext(pcs(WrapInc(bpdIdx, numEntries)))
+    val bpdTarget = RegNext(pcs(WrapInc(bpdIdx, numFTQEntries)))
 
     // 如果发生了EX阶段分支预测错误，同一个周期传回来几个信号，包括io.redirect.valid和io.brUpdate.b2.mispredict
     // 这里有点像状态机,首先是重定向->分支预测错误->分支预测错误修复->分支预测错误修复完成
@@ -166,19 +182,19 @@ class FetchTargetQueue extends CoreModule {
         bpdUpdateRepair     := false.B
     } .elsewhen (RegNext(io.brUpdate.b2.mispredict)) {
         bpdUpdateMispredict := true.B
-        bpdRepairIdx        := RegNext(io.brUpdate.b2.uop.ftqIdx)
+        bpdRepairIdx        := RegNext(io.brUpdate.b2.uop.ftq_idx)
         bpdEndIdx           := RegNext(enqPtr)
     } .elsewhen (bpdUpdateMispredict) {
         bpdUpdateMispredict := false.B
         bpdUpdateRepair     := true.B
-        bpdRepairIdx        := WrapInc(bpdRepairIdx, numEntries)
+        bpdRepairIdx        := WrapInc(bpdRepairIdx, numFTQEntries)
     } .elsewhen (bpdUpdateRepair && RegNext(bpdUpdateMispredict)) {
         bpdRepairpc         := bpdpc
-        bpdRepairIdx        := WrapInc(bpdRepairIdx, numEntries)
+        bpdRepairIdx        := WrapInc(bpdRepairIdx, numFTQEntries)
     } .elsewhen (bpdUpdateRepair) {
-        bpdRepairIdx        := WrapInc(bpdRepairIdx, numEntries)
+        bpdRepairIdx        := WrapInc(bpdRepairIdx, numFTQEntries)
         when (
-            WrapInc(bpdRepairIdx, numEntries) === bpdEndIdx ||
+            WrapInc(bpdRepairIdx, numFTQEntries) === bpdEndIdx ||
             bpdpc === bpdRepairpc
         ) {
             bpdUpdateRepair := false.B
@@ -189,7 +205,7 @@ class FetchTargetQueue extends CoreModule {
     val doRepairUpdate     = bpdUpdateRepair
     val doCommitUpdate     = (
         !bpdUpdateMispredict && !bpdUpdateRepair && bpdPtr =/= deqPtr &&
-        enqPtr =/= WrapInc(bpdPtr, numEntries) && !io.brUpdate.b2.mispredict &&
+        enqPtr =/= WrapInc(bpdPtr, numFTQEntries) && !io.brUpdate.b2.mispredict &&
         !io.redirect.valid && !RegNext(io.redirect.valid)
     )
 
@@ -233,7 +249,7 @@ class FetchTargetQueue extends CoreModule {
     }
 
     when (doCommitUpdate) {
-        bpdPtr := WrapInc(bpdPtr, numEntries)
+        bpdPtr := WrapInc(bpdPtr, numFTQEntries)
     }
 
     io.enq.ready := RegNext(!full || doCommitUpdate)
@@ -243,11 +259,11 @@ class FetchTargetQueue extends CoreModule {
     val redirectNewEntry = WireInit(redirectEntry)
 
     when (io.redirect.valid) {
-        enqPtr := WrapInc(io.redirect.bits, numEntries)
+        enqPtr := WrapInc(io.redirect.bits, numFTQEntries)
         when (io.brUpdate.b2.mispredict) {
             val newCfiIdx = (
                 io.brUpdate.b2.uop.pc_lob ^
-                Mux(redirectEntry.startBank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)
+                Mux(redirectEntry.startBank === 1.U, (1.U << log2Ceil(bankBytes)).asUInt, 0.U)
             )(log2Ceil(fetchWidth) + 1, 2)
             redirectNewEntry.cfiIdx.valid    := true.B
             redirectNewEntry.cfiIdx.bits     := newCfiIdx
@@ -274,7 +290,7 @@ class FetchTargetQueue extends CoreModule {
 
     for (i <- 0 until 2) {
         val idx = io.getFtqpc(i).ftqIdx
-        val nextIdx = WrapInc(idx, numEntries)
+        val nextIdx = WrapInc(idx, numFTQEntries)
         val nextIsEnq = (nextIdx === enqPtr) && io.enq.fire
         val nextpc = Mux(nextIsEnq, io.enq.bits.pc, pcs(nextIdx))
         val getEntry = ram(idx)

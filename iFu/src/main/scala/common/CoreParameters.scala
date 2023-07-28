@@ -8,6 +8,7 @@ class BPUParameters {
     val localHistoryLength: Int  = 0
     val globalHistoryLength: Int = 0
     val numRasEntries: Int       = 0
+    val bpdMaxMetaLength: Int    = 0
 }
 
 class ICacheParameters {
