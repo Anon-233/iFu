@@ -59,7 +59,6 @@ class ICacheReq extends CoreBundle{
 class ICache(val iParams : ICacheParameters
     //val staticIdForMetadataUseOnly: Int
 ) extends CoreModule
-with HasCoreParameters
 {
 
     val io = IO(new CoreBundle{

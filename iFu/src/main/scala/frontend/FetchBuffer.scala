@@ -4,12 +4,13 @@ import chisel3._
 import chisel3.util._
 import iFu.common._
 import iFu.util.MaskUpper
+import iFu.frontend.FrontendUtils._
 
 class FetchBufferResp() extends CoreBundle {
     val uops = Vec(coreWidth,Valid(new MicroOp))
 }
 
-class FetchBuffer extends CoreModule with FrontendUtils {
+class FetchBuffer extends CoreModule {
     val io = IO(new CoreBundle{
         val clear = Input(Bool())
         val enq = Flipped(Decoupled(new FetchBundle()))     // Input
