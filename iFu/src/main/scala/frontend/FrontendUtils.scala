@@ -40,5 +40,5 @@ trait FrontendUtils {
         Mux(isLastBankInBlock(addr), "b01".U(2.W), "b11".U(2.W))
     }
 
-
+    
 }

@@ -132,6 +132,7 @@ class FetchBuffer extends CoreModule with FrontendUtils {
 
     val deqValid = (~MaskUpper(slotWillHitTail)).asBools    // the positions before the tail are valid
 
+    
     (io.deq.bits.uops zip deqValid).map { case (d, valid) => d.valid := valid }  // connect the valid signal using the map function
     (io.deq.bits.uops zip Mux1H(head, lram)).map {case (d, uop) => d.bits := uop}
     io.deq.valid := deqValid.reduce(_||_)
