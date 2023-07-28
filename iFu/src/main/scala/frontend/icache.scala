@@ -48,7 +48,6 @@ class CbusResp extends Bundle{
 class ICacheResp extends CoreBundle
 {
     val data = UInt((frontendParams.fetchBytes*8).W)
-    val replay = Bool()
 }
 
 
@@ -76,9 +75,6 @@ with HasCoreParameters
         val cbusResp = Input(new CbusResp)
         val cbusReq = Output(new CbusReq)
 
-        val perf = Output(new Bundle{
-            val acquire = Bool()
-        })
 
     })
 
@@ -105,7 +101,7 @@ with HasCoreParameters
     val s2Miss = s2Valid && !s2Hit && !RegNext(refillValid)
     val refillPaddr = RegEnable(io.s1_paddr , s1Valid && !(refillValid || s2Miss))
     val refillTag = refillPaddr(iParams.tagBits + iParams.untagBits-1,iParams.untagBits)
-    val refillIdx = refillPaddr(iParams.untagBits-1,iParams.blockOffBits)
+    val refillIdx = refillPaddr(iParams.untagBits-1,iParams.offsetBits)
     val refillOneBeat = io.cbusReq.valid && io.cbusResp.ready
         //tl_out.d.fire && edge_out.hasData(tl_out.d.bits)
 
@@ -125,7 +121,7 @@ with HasCoreParameters
     val replWay = LFSR(16,refillFire)(log2Ceil(iParams.nWays)-1,0)
 
     val tagArray = SyncReadMem(iParams.nSets,Vec(iParams.nWays,UInt(iParams.tagBits.W)))
-    val tagRData = tagArray.read(s0Vaddr(iParams.untagBits-1,iParams.blockOffBits),!refillDone && s0Valid)
+    val tagRData = tagArray.read(s0Vaddr(iParams.untagBits-1,iParams.offsetBits),!refillDone && s0Valid)
     when(refillDone){
         tagArray.write(refillIdx,VecInit(Seq.fill(iParams.nWays)(refillTag)),Seq.tabulate(iParams.nWays)(replWay === _.U))
     }
@@ -145,7 +141,7 @@ with HasCoreParameters
     val s1Bankid = Wire(Bool())
 
     for(i <- 0 until iParams.nWays){
-        val s1Idx = io.s1_paddr(iParams.untagBits-1,iParams.blockOffBits)
+        val s1Idx = io.s1_paddr(iParams.untagBits-1,iParams.offsetBits)
         val s1Tag = io.s1_paddr(iParams.tagBits + iParams.untagBits -1,iParams.untagBits)
         val s1Vb = vbArray(Cat(i.U,s1Idx))
         val tag = tagRData(i)
@@ -165,7 +161,7 @@ with HasCoreParameters
                 name = s"dataArrayB0Way_${x}",
                 desc = "ICache Data Array",
                 size = ramDepth,
-                data = UInt((wordBits/nBanks).W)
+                data = UInt((wordBits/iParams.nBanks).W)
             )
         } ++
         (0 until iParams.nWays).map{
@@ -173,7 +169,7 @@ with HasCoreParameters
                 name = s"dataArrayB1Way_${x}",
                 desc = "ICache Data Array",
                 size = ramDepth,
-                data = UInt((wordBits/nBanks).W)
+                data = UInt((wordBits/iParams.nBanks).W)
             )
         }
 
@@ -184,16 +180,16 @@ with HasCoreParameters
 
     def b0Row(addr: UInt) =
         if (refillsToOneBank){
-            addr(iParams.untagBits-1,iParams.blockOffBits - log2Ceil(iParams.refillCycles)+1) + bank(addr)
+            addr(iParams.untagBits-1,iParams.offsetBits - log2Ceil(iParams.refillCycles)+1) + bank(addr)
         } else {
-            addr(iParams.untagBits-1, iParams.blockOffBits-log2Ceil(iParams.refillCycles)) + bank(addr)
+            addr(iParams.untagBits-1, iParams.offsetBits-log2Ceil(iParams.refillCycles)) + bank(addr)
         }
 
     def b1Row(addr: UInt) =
         if (refillsToOneBank) {
-            addr(iParams.untagBits-1, iParams.blockOffBits-log2Ceil(iParams.refillCycles)+1)
+            addr(iParams.untagBits-1, iParams.offsetBits-log2Ceil(iParams.refillCycles)+1)
         } else {
-            addr(iParams.untagBits-1, iParams.blockOffBits-log2Ceil(iParams.refillCycles))
+            addr(iParams.untagBits-1, iParams.offsetBits-log2Ceil(iParams.refillCycles))
         }
     
     s1Bankid := RegNext(bank(s0Vaddr))
@@ -269,7 +265,7 @@ with HasCoreParameters
     io.cbusReq.valid := s2Miss && !refillValid && !io.s2_kill
     io.cbusReq.isWrite := false.B
     io.cbusReq.size := 1.U(2.W)
-    io.cbusReq.addr := (refillPaddr >> iParams.blockOffBits) << iParams.blockOffBits
+    io.cbusReq.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
     io.cbusReq.mask := 0.U
     io.cbusReq.axiBurstType := 1.U
     io.cbusReq.axiLen := iParams.refillCycles.U
