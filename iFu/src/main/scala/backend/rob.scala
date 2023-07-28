@@ -52,6 +52,10 @@ class RobIO(
     val flush_frontend = Output(Bool())
 
 
+    //---------------------debug
+    val debug_wb_valids = Input(Vec(numWakeupPorts, Bool()))
+    val debug_wb_wdata  = Input(Vec(numWakeupPorts, Bits(xLen.W)))
+    val debug_tsc = Input(UInt(xLen.W))
 }
 
 class CommitSignals extends CoreBundle
@@ -66,6 +70,10 @@ class CommitSignals extends CoreBundle
     
     val rbk_valids = Vec(retireWidth,Bool())
     val rollback = Bool()
+
+    //------------------debug
+    val debug_insts = Vec(retireWidth, UInt(32.W))
+    val debug_wdata = Vec(retireWidth, UInt(xLen.W))
 }
 
 class CommitExceptionSignals extends CoreBundle
@@ -112,6 +120,16 @@ class Exception extends CoreBundle
     //TODO:update cause to loogarch
     val cause = Bits(log2Ceil(freechips.rocketchip.rocket.Causes.all.max+2).W)
     val badvaddr = UInt(coreMaxAddrBits.W)
+}
+
+class DebugRobSignals extends CoreBundle
+{
+  val state = UInt()
+  val rob_head = UInt(robAddrSz.W)
+  val rob_pnr = UInt(robAddrSz.W)
+  val xcpt_val = Bool()
+  val xcpt_uop = new MicroOp()
+  val xcpt_badvaddr = UInt(xLen.W)
 }
 
 
@@ -171,6 +189,27 @@ class Rob(
         else {return robIdx(log2Ceil(coreWidth)-1,0).asUInt}
     }
 
+  // **************************************************************************
+  // Debug
+
+    class DebugRobBundle extends BoomBundle
+    {
+        val valid      = Bool()
+        val busy       = Bool()
+        val unsafe     = Bool()
+        val uop        = new MicroOp()
+        val exception  = Bool()
+    }
+    val debug_entry = Wire(Vec(numRobEntries, new DebugRobBundle))
+    debug_entry := DontCare // override in statements below
+
+    // Used for trace port, for debug purposes only
+    val rob_debug_inst_mem   = SyncReadMem(numRobRows, Vec(coreWidth, UInt(32.W)))
+    val rob_debug_inst_wmask = WireInit(VecInit(0.U(coreWidth.W).asBools))
+    val rob_debug_inst_wdata = Wire(Vec(coreWidth, UInt(32.W)))
+    rob_debug_inst_mem.write(rob_tail, rob_debug_inst_wdata, rob_debug_inst_wmask)
+    val rob_debug_inst_rdata = rob_debug_inst_mem.read(rob_head, will_commit.reduce(_||_))
+
     //---------------------------------------------
 
     val robUnsafeMasked = WireInit(VecInit(Seq.fill(numRobRows << log2Ceil(coreWidth)){false.B}))
@@ -185,8 +224,14 @@ class Rob(
         val robException = Reg(Vec(numRobRows, Bool()))
         val robPredicated = Reg(Vec(numRobRows, Bool()))
 
+        val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
+
         //------------------dispatch stage------------------
         //enqueue
+
+        rob_debug_inst_wmask(w) := io.enq_valids(w)
+        rob_debug_inst_wdata(w) := io.enq_uops(w).debug_inst
+
         when (io.enq_valids(w)){
             robVal(robTail) := true.B
             robBsy(robTail) := !(io.enq_uops(w).is_fence || io.enq_uops(w).is_fencei)
@@ -195,6 +240,8 @@ class Rob(
             robUop(robTail) := io.enq_uops(w)
             robPredicated(robTail) := false.B
 
+        }.elsewhen (io.enq_valids.reduce(_|_) && !rob_val(rob_tail)) {
+            rob_uop(rob_tail).debug_inst := BUBBLE // just for debug purposes
         }
 
         //------------------writeback-----------------------
@@ -241,6 +288,7 @@ class Rob(
         io.commit.valids(w) := willCommit(w)
         io.commit.arch_valids(w) := willCommit(w) && !robPredicated(comIdx)
         io.commit.uops(w) := robUop(comIdx)
+        io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
         
 
         when(io.brupdate.b2.mispredict &&
@@ -267,6 +315,7 @@ class Rob(
             when(IsKilledByBranch(io.brupdate,br_mask))
             {
                 robVal(i) :=false.B
+                rob_uop(i.U).debug_inst := BUBBLE
             } .elsewhen (robVal(i)){
                 robUop(i).br_mask := GetNewBrMask(io.brupdate,brMask)
             }
@@ -290,10 +339,37 @@ class Rob(
         robHeadUsesLdq(w) := robUop(robHead).uses_ldq
         robHeadUsesStq(w) := robUop(robHead).uses_stq
 
+
         for( i<- 0 until numRobRows){
             robUnsafeMasked((i<<log2Ceil(coreWidth)) + w) := robVal(i) && (robUnsafe(i) || robException(i))
 
         }
+
+        when (will_commit(w)) {
+            rob_uop(rob_head).debug_inst := BUBBLE
+            } .elsewhen (rbk_row)
+            {
+            rob_uop(rob_tail).debug_inst := BUBBLE
+            }
+
+        for (i <- 0 until numWakeupPorts) {
+            val rob_idx = io.wb_resps(i).bits.uop.rob_idx
+            when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx))) {
+                rob_debug_wdata(GetRowIdx(rob_idx)) := io.debug_wb_wdata(i)
+            }
+            val temp_uop = rob_uop(GetRowIdx(rob_idx))
+
+            assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
+                    !rob_val(GetRowIdx(rob_idx))),
+                    "[rob] writeback (" + i + ") occurred to an invalid ROB entry.")
+            assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
+                    !rob_bsy(GetRowIdx(rob_idx))),
+                    "[rob] writeback (" + i + ") occurred to a not-busy ROB entry.")
+            assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
+                    temp_uop.ldst_val && temp_uop.pdst =/= io.wb_resps(i).bits.uop.pdst),
+                    "[rob] writeback (" + i + ") occurred to the wrong pdst.")
+            }
+        io.commit.debug_wdata(w) := rob_debug_wdata(rob_head)
 
         //rob_pnr_unsafe(w) := rob_val(rob_pnr) && (rob_unsafe(rob_pnr) || rob_exception(rob_pnr))
 
@@ -322,8 +398,8 @@ class Rob(
     val refetchInst = exceptionThrown || insnSysPc2epc
     val comXcptUop = PriorityMux(robHeadVals,io.commit.uops)
     io.com_xcpt.bits.ftq_idx := comXcptUop.ftq_idx
-    io.com_xcpt.bits.edge_inst := comXcptUop.edge_inst
-    io.com_xcpt.bits.is_rvc := comXcptUop.is_rvc
+    //io.com_xcpt.bits.edge_inst := comXcptUop.edge_inst
+    //io.com_xcpt.bits.is_rvc := comXcptUop.is_rvc
     io.com_xcpt.bits.pc_lob := comXcptUop.pc_lob
 
 
@@ -339,8 +415,8 @@ class Rob(
     io.flush.valid := flushVal
     io.flush.bits.ftq_idx := flushUop.ftq_idx
     io.flush.bits.pc_lob := flushUop.pc_lob
-    io.flush.bits.edge_inst := flushUop.edge_inst
-    io.flush.bits.is_rvc := flushUop.is_rvc
+    //io.flush.bits.edge_inst := flushUop.edge_inst
+    //io.flush.bits.is_rvc := flushUop.is_rvc
     io.flush.bits.flush_typ := FlushTypes.getType(flushVal,
                                                 exceptionThrown && !isMiniException,
                                                 flushCommit && flushUop.uopc === uopERET,
@@ -380,6 +456,16 @@ class Rob(
     when(io.flush.valid || IsKilledByBranch(io.brupdate,nextXcptUop)){
         rXcptVal := false.B
     }
+
+    assert (!(exception_thrown && !r_xcpt_val),
+    "ROB trying to throw an exception, but it doesn't have a valid xcpt_cause")
+
+    assert (!(empty && r_xcpt_val),
+    "ROB is empty, but believes it has an outstanding exception.")
+
+    assert (!(will_throw_exception && (GetRowIdx(r_xcpt_uop.rob_idx) =/= rob_head)),
+    "ROB is throwing an exception, but the stored exception information's " +
+    "rob_idx does not match the rob_head")
 
     //--------------------Robhead-------------------
     val robDeq = WireInit(false.B)
