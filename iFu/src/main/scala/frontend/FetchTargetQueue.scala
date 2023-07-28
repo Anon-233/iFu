@@ -3,55 +3,7 @@ package iFu.frontend
 import chisel3._
 import chisel3.util._
 
-
-
-class FetchBundle() extends Bundle with HasFBParameters
-{
-  val pc            = UInt(vaddrBits.W)
-  val nextpc       = UInt(vaddrBits.W)
-  val insts         = Vec(fetchWidth, Bits(32.W))
-  val expInsts     = Vec(fetchWidth, Bits(32.W))
-
-  // Information for sfb folding
-  // NOTE: This IS NOT equivalent to uop.pc_lob, that gets calculated in the FB
-  val sfbs                 = Vec(fetchWidth, Bool())
-  val sfbMasks            = Vec(fetchWidth, UInt((2*fetchWidth).W))
-  val sfbDests            = Vec(fetchWidth, UInt((1+log2Ceil(fetchBytes)).W))
-  val shadowableMask      = Vec(fetchWidth, Bool())
-  val shadowedMask        = Vec(fetchWidth, Bool())
-
-  val cfiIdx       = Valid(UInt(log2Ceil(fetchWidth).W))
-  val cfiType      = UInt(CFI_SZ.W)
-  val cfiIsCall   = Bool()
-  val cfiIsRet    = Bool()
-
-  val rasTop       = UInt(vaddrBits.W)
-
-  val ftqIdx       = UInt(log2Ceil(ftqSz).W)
-  val mask          = UInt(fetchWidth.W) // mark which words are valid instructions
-
-  val brMask       = UInt(fetchWidth.W)
-
-  val gHist         = new GlobalHistory
-  val lHist         = Vec(nBanks, UInt(localHistoryLength.W))
-
-  val xcptPfIf    = Bool() // I-TLB miss (instruction fetch fault).
-  val xcptAeIf    = Bool() // Access exception.
-
-//   val bp_debug_if_oh= Vec(fetchWidth, Bool())
-//   val bp_xcpt_if_oh = Vec(fetchWidth, Bool())
-
-
-  val bpdMeta      = Vec (nBanks,Vec(bankWidth , new  PredictionMeta))
-
-  // Source of the prediction from this bundle
-  val fsrc    = UInt(BSRC_SZ.W)
-  // Source of the prediction to this bundle
-  val tsrc    = UInt(BSRC_SZ.W)
-}
-
-class FTQBundle extends Bundle with HasFTQParameters    {
-
+class FTQBundle extends Bundle with HasFTQParameters {
   // // TODO compress out high-order bits
   // val fetch_pc  = UInt(vaddrBits.W)
   // IDX of instruction that was predicted taken, if any
@@ -83,8 +35,7 @@ class FTQBundle extends Bundle with HasFTQParameters    {
  * IO to provide a port for a FunctionalUnit to get the PC of an instruction.
  * And for JALRs, the PC of the next instruction.
  */
-class GetPCFromFtqIO extends Bundle with HasFTQParameters
-{
+class GetPCFromFtqIO extends CoreBundle {
   val ftqIdx   = Input(UInt(log2Ceil(ftqSz).W))
 
   val entry     = Output(new FTQBundle)
@@ -104,8 +55,7 @@ class GetPCFromFtqIO extends Bundle with HasFTQParameters
  *
  * 
  */
-class FetchTargetQueue extends Module with HasFTQParameters
-{
+class FetchTargetQueue extends CoreModule {
   val numEntries = ftqSz
   private val idxSz = log2Ceil(numEntries)
 

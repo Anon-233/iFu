@@ -5,7 +5,7 @@ import chisel3.util._
 
 import iFu.common.FrontendParameters
 
-trait FrontendUtils{
+trait FrontendUtils {
     this: FrontendParameters =>
     // How many "chunks"/interleavings make up a cache line?
     val numChunks = iCacheParams.lineBytes / iCacheParams.bankBytes

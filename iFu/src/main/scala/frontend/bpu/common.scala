@@ -78,13 +78,3 @@ trait HasBtbParameters extends HasBPUParameters {
 
     val btbMetaSz = tagSz + 1
 }
-
-
-trait HasFTQParameters extends HasBPUParameters {
-
-
-}
-
-trait HasFBParameters extends HasBPUParameters{
-    
-}
