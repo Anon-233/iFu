@@ -15,9 +15,9 @@ import iFu.backend.{PreDecode, PreDecodeSignals}
 //TODO HasFrontEndparameters的函数只适用与ICache
 
 class FrontendExceptions extends Bundle {
-    val pf = Bool()
-    val gf = Bool()
-    val ae = Bool()
+    val pf = new TLBExceptions
+    val gf = new TLBExceptions
+    val ae = new TLBExceptions
 }
 
 class GlobalHistory extends CoreBundle with FrontendUtils {
@@ -99,7 +99,7 @@ class FetchResp extends CoreBundle {
     val mask    = UInt(fetchWidth.W)
     val xcpt    = new FrontendExceptions
     val ghist   = new GlobalHistory
-    val fsrc    = UInt(BSRC_SZ.W)
+    // val fsrc    = UInt(BSRC_SZ.W)
 }
 
 class FetchBundle extends CoreBundle {
@@ -139,7 +139,7 @@ class FetchBundle extends CoreBundle {
 
     val bpd_meta        =Vec(nBanks,UInt())
 
-    val fsrc            = UInt(BSRC_SZ.W)
+    // val fsrc            = UInt(BSRC_SZ.W)
 }
 
 class FrontendToCPUIO extends CoreBundle {  // from core to frontend instead of from frontend to core
@@ -217,11 +217,11 @@ class Frontend extends CoreModule with FrontendUtils {
     // in fact, the s0 stage is hidden within the s1 stage
     val s0_vpc                = WireInit(0.U(vaddrBits.W))
     val s0_ghist              = WireInit((0.U).asTypeOf(new GlobalHistory))
-    val s0_tsrc               = WireInit(0.U(BSRC_SZ.W))
+    // val s0_tsrc               = WireInit(0.U(BSRC_SZ.W))
     val s0_valid              = WireInit(false.B)
     val s0_is_replay          = WireInit(false.B)
     val s0_is_sfence          = WireInit(false.B)
-    val s0_replay_resp        = Wire(new TLBResp)
+    val s0_replay_tlb_resp        = Wire(new TLBResp)
     val s0_replay_bpd_resp    = Wire(new BranchPredictionBundle)
     val s0_replay_ppc         = Wire(UInt(vaddrBits.W))
 
@@ -230,7 +230,7 @@ class Frontend extends CoreModule with FrontendUtils {
         s0_valid    := true.B
         s0_vpc      := resetPC.U(vaddrBits.W)
         s0_ghist    := (0.U).asTypeOf(new GlobalHistory)    // TODO: cold boot
-        s0_tsrc     := BSRC_C
+        // s0_tsrc     := BSRC_C
     }
 
     icache.io.req.valid     := s0_valid
@@ -246,11 +246,11 @@ class Frontend extends CoreModule with FrontendUtils {
     // --------------------------------------------------------
 
     val s1_vpc       = RegNext(s0_vpc)
-    val s1_valid     = RegNext(s0_valid,false.B)
+    val s1_valid     = RegNext(s0_valid, false.B)
     val s1_ghist     = RegNext(s0_ghist)
     val s1_is_replay = RegNext(s0_is_replay)
     val s1_is_sfence = RegNext(s0_is_sfence)
-    val s1_tsrc      = RegNext(s0_tsrc)
+    // val s1_tsrc      = RegNext(s0_tsrc) // TODO: maybe more simple
     
     val f1_clear     = WireInit(false.B)
 
@@ -258,36 +258,38 @@ class Frontend extends CoreModule with FrontendUtils {
     tlb.io.req.bits.cmd         := DontCare
     tlb.io.req.bits.vaddr       := s1_vpc
     tlb.io.req.bits.passthrough := false.B  // may be changed
-    tlb.io.req.bits.size        := log2Ceil(fetchWidth * instrBytes).U
+    tlb.io.req.bits.size        := log2Ceil(fetchWidth * instrBytes).U  // what is this?
     // tlb.io.req.bits.v           := io.ptw.status.v
     // tlb.io.req.bits.prv         := io.ptw.status.prv
     tlb.io.sfence               := RegNext(io.cpu.sfence)
     // tlb.io.kill                 := false.B
+
     // 如果s1阶段将要进行replay，则不考虑tlb miss
     // 因为此时tlb resp的值是被replay的值，而被replay的值来源之前的s2
-    // TODO 如果s2的指令发生tlb_miss咋办，信息已经保存在异常中了吗？
+
+    // TODO: TLB miss should call exception
     val s1_tlb_miss = !s1_is_replay && tlb.io.resp.miss
-    val s1_tlb_resp = Mux(s1_is_replay,RegNext(s0_replay_resp),tlb.io.resp)
-    val s1_ppc = Mux(s1_is_replay,RegNext(s0_replay_ppc),tlb.io.resp.paddr)
+    val s1_tlb_resp = Mux(s1_is_replay, RegNext(s0_replay_tlb_resp), tlb.io.resp)
+    val s1_ppc = Mux(s1_is_replay, RegNext(s0_replay_ppc), tlb.io.resp.paddr)
     val s1_bpd_resp = bpd.io.resp.f1
 
     icache.io.s1_paddr  := s1_ppc
     icache.io.s1_kill   := tlb.io.resp.miss || f1_clear
 
+    val f1_mask = fetchMask(s1_vpc) // 有效的bank位置 "b01" or "b11"
 
-    val f1_mask = fetchMask(s1_vpc) //有效的bank位置（"b01"或者"b11"）
-    //根据bpd的f1的结果进行重定向
-    val f1_redirects = (0 until fetchWidth) map { i=>
+    // 根据bpd的f1的结果进行重定向
+    val f1_redirects = (0 until fetchWidth).map{ i=>
         s1_valid && f1_mask(i) && s1_bpd_resp.predInfos(i).predictedpc.valid &&
-                (s1_bpd_resp.predInfos(i).isJal ||
-                        (s1_bpd_resp.predInfos(i).isBranch && s1_bpd_resp.predInfos(i).taken))
+        (s1_bpd_resp.predInfos(i).isJal ||
+        (s1_bpd_resp.predInfos(i).isBranch && s1_bpd_resp.predInfos(i).taken))
     }
-    val f1_redirect_idx = PriorityEncoder(f1_redirects)
     val f1_do_redirect = f1_redirects.reduce(_||_)
-    val f1_targs = s1_bpd_resp.predInfos.map(_.predictedpc.bits)
-    val f1_predicted_target = Mux(f1_do_redirect,
-        f1_targs(f1_redirect_idx),
-        nextFetch(s1_vpc))
+    val f1_redirect_idx = PriorityEncoder(f1_redirects)
+    val f1_tgts = s1_bpd_resp.predInfos.map(_.predictedpc.bits)
+    val f1_predicted_target = Mux(f1_do_redirect, f1_tgts(f1_redirect_idx),
+                                                  nextFetch(s1_vpc)
+    )
     val f1_predicted_ghist = s1_ghist.update(
         s1_bpd_resp.predInfos.map(p => p.isBranch && p.predictedpc.valid).asUInt & f1_mask,
         s1_bpd_resp.predInfos(f1_redirect_idx).taken && f1_do_redirect,
@@ -296,48 +298,54 @@ class Frontend extends CoreModule with FrontendUtils {
         f1_do_redirect,
         s1_vpc,
         false.B,
-        false.B)
-    //当前s1寄存器有效。注意，s1阶段可能会replay
-    when (s1_valid && !s1_tlb_miss){
-        // 发生tlb异常时停止取指
-        s0_valid    := !(s1_tlb_resp.ae.inst || s1_tlb_resp.pf.inst)
-        s0_tsrc     := BSRC_1
-        s0_vpc      := f1_predicted_target
-        s0_ghist    := f1_predicted_ghist
+        false.B
+    )
+
+    // 当前s1寄存器有效 注意，s1阶段可能会replay
+    when (s1_valid && !s1_tlb_miss) {
+        s0_valid     := !(s1_tlb_resp.ae.inst || s1_tlb_resp.pf.inst) // 发生tlb异常时停止取指
+        // s0_tsrc      := BSRC_1
+        s0_vpc       := f1_predicted_target
+        s0_ghist     := f1_predicted_ghist
         s0_is_replay := false.B
     }
+
     // --------------------------------------------------------
     // **** ICache Response (F2) ****
     // --------------------------------------------------------
-    val s2_valid = RegNext(s1_valid && !f1_clear, false.B)
-    val s2_vpc      = RegNext(s1_vpc)
-    val s2_ghist    = Reg(new GlobalHistory)
-    s2_ghist := s1_ghist
-    val s2_ppc = RegNext(s1_ppc)
-    val s2_tsrc = RegNext(s1_tsrc)
-    val s2_fsrc = WireInit(BSRC_1)
-    val f2_clear = WireInit(false.B)
-    val s2_tlb_resp = RegNext(s1_tlb_resp)
-    val s2_tlb_miss = RegNext(s1_tlb_miss)
+
+    val s2_valid     = RegNext(s1_valid && !f1_clear, false.B)
+    val s2_vpc       = RegNext(s1_vpc)
+    val s2_ghist     = Reg(new GlobalHistory)
+    val s2_ppc       = RegNext(s1_ppc)
+    // val s2_tsrc      = RegNext(s1_tsrc)
+    val s2_tlb_resp  = RegNext(s1_tlb_resp)
+    val s2_tlb_miss  = RegNext(s1_tlb_miss)
     val s2_is_replay = RegNext(s1_is_replay) && s2_valid
+
+    val f2_clear     = WireInit(false.B)
+    // val s2_fsrc      = WireInit(BSRC_1)
+    val f3_ready     = Wire(Bool())
+
     val s2_xcpt = s2_valid && (s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay
-    val f3_ready = Wire(Bool())
 
     icache.io.s2_kill := s2_xcpt
 
-    val f2_bpd_resp = bpd.io.resp.f2
+    s2_ghist := s1_ghist
+
     val f2_mask = fetchMask(s2_vpc)
-    val f2_redirects = (0 until fetchWidth) map { i =>
+    val f2_bpd_resp = bpd.io.resp.f2
+    val f2_redirects = (0 until fetchWidth).map{ i =>
         s2_valid && f2_mask(i) && f2_bpd_resp.predInfos(i).predictedpc.valid &&
-                (f2_bpd_resp.predInfos(i).isJal ||
-                        (f2_bpd_resp.predInfos(i).isBranch && f2_bpd_resp.predInfos(i).taken))
+        (f2_bpd_resp.predInfos(i).isJal ||
+        (f2_bpd_resp.predInfos(i).isBranch && f2_bpd_resp.predInfos(i).taken))
     }
     val f2_redirect_idx = PriorityEncoder(f2_redirects)
-    val f2_targs = f2_bpd_resp.predInfos.map(_.predictedpc.bits)
+    val f2_tgts = f2_bpd_resp.predInfos.map(_.predictedpc.bits)
     val f2_do_redirect = f2_redirects.reduce(_||_)
-    val f2_predicted_target = Mux(f2_do_redirect,
-        f2_targs(f2_redirect_idx),
-        nextFetch(s2_vpc))
+    val f2_predicted_target = Mux(f2_do_redirect, f2_tgts(f2_redirect_idx),
+                                                  nextFetch(s2_vpc)
+    )
     val f2_predicted_ghist = s2_ghist.update(
         f2_bpd_resp.predInfos.map(p => p.isBranch && p.predictedpc.valid).asUInt & f2_mask,
         f2_bpd_resp.predInfos(f2_redirect_idx).taken && f2_do_redirect,
@@ -346,76 +354,84 @@ class Frontend extends CoreModule with FrontendUtils {
         f2_do_redirect,
         s2_vpc,
         false.B,
-        false.B)
+        false.B
+    )
+
     val f2_correct_f1_ghist = s1_ghist =/= f2_predicted_ghist
-    //当本周期s2需要阻塞时，下一周期s2寄存器valid为假，并且会将内容传给s1寄存器（通过s0）
-    when((s2_valid && !icache.io.resp.valid) ||
-            (s2_valid && icache.io.resp.valid && !f3_ready)){
-        s0_valid := (!s2_tlb_resp.ae.inst && !s2_tlb_resp.pf.inst) || s2_is_replay || s2_tlb_miss
-        s0_vpc := s2_vpc
+    
+    // 当本周期s2需要阻塞时，下一周期s2寄存器valid为假，并且会将内容传给s1寄存器（通过s0）
+    when (
+        (s2_valid && !icache.io.resp.valid) ||
+        (s2_valid && icache.io.resp.valid && !f3_ready)
+    ) {
+        // TODO: when exception happened, and f3 ready is false, then s0 valid is flase????? 
+        s0_valid     := !(s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) || s2_is_replay || s2_tlb_miss
+        s0_vpc       := s2_vpc
         s0_is_replay := s2_valid && icache.io.resp.valid
-        // When this is not a replay (it queried the BPDs, we should use f3 resp in the replaying s1)
-        //会传给bpd，当s2_is_replay时，用bpd f3的预测结果来传给s1
-        s0_ghist := s2_ghist
-        s0_tsrc := s2_tsrc
-        f1_clear := true.B
-    }.elsewhen(s2_valid && f3_ready) {  //预测有效时，不需要更改s0
+        s0_ghist     := s2_ghist
+        // s0_tsrc      := s2_tsrc
+        f1_clear     := true.B
+    } .elsewhen(s2_valid && f3_ready) {
         when(s1_valid && s1_vpc === f2_predicted_target && !f2_correct_f1_ghist){
             s2_ghist := f2_predicted_ghist
         }
         when((s1_valid && (s1_vpc =/= f2_predicted_target || f2_correct_f1_ghist)) || !s1_valid){
-            f1_clear    := true.B
-
-            s0_valid    := !((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay)
-            s0_vpc      := f2_predicted_target
-            s0_is_replay:= false.B
-            s0_ghist    := f2_predicted_ghist
-            s2_fsrc     := BSRC_2
-            s0_tsrc     := BSRC_2
+            // TODO: same problem as above
+            s0_valid     := !((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_is_replay)
+            s0_vpc       := f2_predicted_target
+            s0_is_replay := false.B
+            s0_ghist     := f2_predicted_ghist
+            // s2_fsrc      := BSRC_2
+            // s0_tsrc      := BSRC_2
+            f1_clear     := true.B
         }
     }
     s0_replay_bpd_resp := f2_bpd_resp
-    s0_replay_resp := s2_tlb_resp
+    s0_replay_tlb_resp := s2_tlb_resp
     s0_replay_ppc := s2_ppc
+
     // --------------------------------------------------------
     // **** F3 ****
+    //      PreDecode
     // --------------------------------------------------------
+    
     val f3_clear = WireInit(false.B)
+    val f4_ready = Wire(Bool())
     val f3 = withReset(reset.asBool || f3_clear) {
-        Module(new Queue(new FetchResp,1,pipe = true, flow=false))
+        Module(new Queue(new FetchResp, 1, pipe = true, flow = false))
     }
-    //f3_bpd_resp的输入是f3的数据，输出也是f3的数据（flow）。
+    // f3_bpd_resp的输入是f3的数据，输出也是f3的数据（flow）。
     val f3_bpd_resp = withReset(reset.asBool || f3_clear) {
-        Module(new Queue(new BranchPredictionBundle,1,pipe = true, flow = true))
+        Module(new Queue(new BranchPredictionBundle, 1, pipe = true, flow = true))
     }
 
-    val f4_ready = Wire(Bool())
     f3_ready := f3.io.enq.ready
 
     /**
      * 进s3条件：
-     *  1.s2指令有效
-     *  2.icache返回结果有效，或者是tlb除了miss以外的异常。miss情况可能可以由ptw解决，所以暂时不入队
+     *  1. s2指令有效
+     *  2. icache返回结果有效，或者是tlb除了miss以外的异常。miss情况可能可以由ptw解决，所以暂时不入队
      */
-    //TODO 没有ptw,s2_tlb_miss或许不需要判定is_replay，并把s2_tlb_miss与ae,pf合在一起
-    f3.io.enq.valid     := (s2_valid && !f2_clear &&
-            (icache.io.resp.valid || ((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_tlb_miss))
-            )
-    f3.io.enq.bits.pc := s2_vpc
-    f3.io.enq.bits.data := Mux(s2_xcpt, 0.U, icache.io.resp.bits.data)
+    // TODO 没有ptw，s2_tlb_miss或许不需要判定is_replay，并把s2_tlb_miss与ae，pf合在一起
+    f3.io.enq.valid := (s2_valid && !f2_clear &&
+        (icache.io.resp.valid || ((s2_tlb_resp.ae.inst || s2_tlb_resp.pf.inst) && !s2_tlb_miss))
+    )
+    f3.io.enq.bits.pc    := s2_vpc
+    f3.io.enq.bits.data  := Mux(s2_xcpt, 0.U, icache.io.resp.bits.data)
     f3.io.enq.bits.ghist := s2_ghist
-    f3.io.enq.bits.mask := fetchMask(s2_vpc)
-    f3.io.enq.bits.xcpt := s2_tlb_resp
-    f3.io.enq.bits.fsrc := s2_fsrc
-//    f3.io.enq.bits.tsrc := s2_tsrc
-    //RAS输入在s2，输出在s3
-    val ras_read_idx = RegInit(0.U(log2Ceil(numRasEntries).W))
+    f3.io.enq.bits.mask  := fetchMask(s2_vpc)
+    f3.io.enq.bits.xcpt  := s2_tlb_resp // ????
+    // f3.io.enq.bits.fsrc  := s2_fsrc
+    // f3.io.enq.bits.tsrc := s2_tsrc
+
+    // RAS输入在s2，输出在s3
+    val ras_read_idx = RegInit(0.U(log2Ceil(numRasEntries).W))  // ensure that the RAS response is in the same cycle as f3
     ras.io.read_idx := ras_read_idx
-    when(f3.io.enq.fire){
+    when (f3.io.enq.fire) {
         ras_read_idx := f3.io.enq.bits.ghist.ras_idx
         ras.io.read_idx := f3.io.enq.bits.ghist.ras_idx
     }
-    //
+
     f3_bpd_resp.io.enq.valid := f3.io.deq.valid && RegNext(f3.io.enq.ready)
     f3_bpd_resp.io.enq.bits := bpd.io.resp.f3
     when (f3_bpd_resp.io.enq.fire){
@@ -444,15 +460,15 @@ class Frontend extends CoreModule with FrontendUtils {
     val f3_ret_mask         = Wire(Vec(fetchWidth,Bool()))
     val f3_btb_mispredicts  = Wire(Vec(fetchWidth,Bool()))
 
-    //连线，将信号整合到f3_fetch_bundle里面。
+    //连线，将信号整合到f3_fetch_bundle里面
     f3_fetch_bundle.mask := f3_mask.asUInt
     f3_fetch_bundle.br_mask := f3_br_mask.asUInt
     f3_fetch_bundle.pc      := f3_imemresp.pc
     f3_fetch_bundle.ftq_idx := 0.U      //之后会被赋值
     f3_fetch_bundle.xcpt_pf_if := f3_imemresp.xcpt.pf
     f3_fetch_bundle.xcpt_ae_if := f3_imemresp.xcpt.ae
-    f3_fetch_bundle.fsrc := f3_imemresp.fsrc
-//    f3_fetch_bundle.tsrc := f3_imemresp.tsrc
+    // f3_fetch_bundle.fsrc := f3_imemresp.fsrc
+    // f3_fetch_bundle.tsrc := f3_imemresp.tsrc
     f3_fetch_bundle.shadowed_mask := f3_shadowed_mask
     
     var redirect_found = false.B
@@ -601,9 +617,8 @@ class Frontend extends CoreModule with FrontendUtils {
             s0_vpc      := f3_predicted_target
             s0_is_replay:= false.B
             s0_ghist    := f3_predicted_ghist
-            s0_tsrc     := BSRC_3
-
-            f3_fetch_bundle.fsrc := BSRC_3
+            // s0_tsrc     := BSRC_3
+            // f3_fetch_bundle.fsrc := BSRC_3
         }
     }
     //当f3发现btb预测错误时，建一个队列来存储bpd更新
@@ -703,27 +718,27 @@ class Frontend extends CoreModule with FrontendUtils {
     fb.io.clear := false.B
 
     when(io.cpu.sfence.valid){
+        fb.io.clear  := true.B
+        f4_clear     := true.B
+        f3_clear     := true.B
+        f2_clear     := true.B
+        f1_clear     := true.B
+
+        s0_valid     := false.B
+        s0_vpc       := io.cpu.sfence.bits.addr
+        s0_is_replay := false.B
+        s0_is_sfence := true.B
+    }.elsewhen(io.cpu.redirect_flush){
         fb.io.clear := true.B
         f4_clear    := true.B
         f3_clear    := true.B
         f2_clear    := true.B
         f1_clear    := true.B
 
-        s0_valid    := false.B
-        s0_vpc      := io.cpu.sfence.bits.addr
-        s0_is_replay:= false.B
-        s0_is_sfence    := true.B
-    }.elsewhen(io.cpu.redirect_flush){
-        fb.io.clear := true.B
-        f4_clear    := true.B
-        f3_clear    := true.B
-        f2_clear := true.B
-        f1_clear := true.B
-
         s0_valid := io.cpu.redirect_val
         s0_vpc := io.cpu.redirect_pc
         s0_ghist := io.cpu.redirect_ghist
-        s0_tsrc := BSRC_C
+        // s0_tsrc := BSRC_C
         s0_is_replay := false.B
 
         ftq.io.redirect.valid := io.cpu.redirect_val

@@ -3,13 +3,13 @@ package iFu.common
 import chisel3._
 import chisel3.util._
 
-trait BSRC {
-    val BSRC_SZ = 2
-    val BSRC_1  = 0.U(BSRC_SZ.W) // 1-cycle branch pred
-    val BSRC_2  = 1.U(BSRC_SZ.W) // 2-cycle branch pred
-    val BSRC_3  = 2.U(BSRC_SZ.W) // 3-cycle branch pred
-    val BSRC_C  = 3.U(BSRC_SZ.W) // core branch resolution
-}
+// trait BSRC {
+//     val BSRC_SZ = 2
+//     val BSRC_1  = 0.U(BSRC_SZ.W) // 1-cycle branch pred
+//     val BSRC_2  = 1.U(BSRC_SZ.W) // 2-cycle branch pred
+//     val BSRC_3  = 2.U(BSRC_SZ.W) // 3-cycle branch pred
+//     val BSRC_C  = 3.U(BSRC_SZ.W) // core branch resolution
+// }
 
 trait CFIType {
     val CFI_SZ   = 2
@@ -25,4 +25,4 @@ trait IQType {
     val IQT_MEM = 2.U(IQT_SZ.W)
 }
 
-object Consts extends BSRC with CFIType with IQType {}
+object Consts extends CFIType with IQType {}
