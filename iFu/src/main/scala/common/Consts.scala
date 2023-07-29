@@ -37,13 +37,31 @@ object Consts {
     val immS20 = 6.U(3.W) //Cat(Fill(10,inst(24)),inst(24,5),Fill(2,0.U))
     val immS26 = 7.U(3.W) // Cat(Fill(4,inst(9)),inst(9,0),inst(25,10),Fill(2,0.U))
 
-    val BR_N = 0.U(4.W)   // Next
-    val BR_NE = 1.U(4.W)  // Branch on NotEqual
-    val BR_EQ = 2.U(4.W)  // Branch on Equal
-    val BR_GE = 3.U(4.W)  // Branch on Greater/Equal
+    val BR_N   = 0.U(4.W) // Next
+    val BR_NE  = 1.U(4.W) // Branch on NotEqual
+    val BR_EQ  = 2.U(4.W) // Branch on Equal
+    val BR_GE  = 3.U(4.W) // Branch on Greater/Equal
     val BR_GEU = 4.U(4.W) // Branch on Greater/Equal Unsigned
-    val BR_LT = 5.U(4.W)  // Branch on Less Than
+    val BR_LT  = 5.U(4.W) // Branch on Less Than
     val BR_LTU = 6.U(4.W) // Branch on Less Than Unsigned
-    val BR_J = 7.U(4.W)   // Jump
-    val BR_JR = 8.U(4.W)  // Jump Register
+    val BR_J   = 7.U(4.W) // Jump
+    val BR_JR  = 8.U(4.W) // Jump Register
+
+    val OP1_X    = BitPat("b??")
+    val OP1_RS1  = 0.U(2.W) // Register Source #1
+    val OP1_ZERO = 1.U(2.W)
+    val OP1_PC   = 2.U(2.W)
+
+    val OP2_X    = BitPat("b???")
+    val OP2_RS2  = 0.U(3.W) // Register Source #2
+    val OP2_IMM  = 1.U(3.W) // immediate
+    val OP2_ZERO = 2.U(3.W) // constant 0
+    val OP2_NEXT = 3.U(3.W) // constant 4 (for PC + 4)
+
+    val REN_0 = false.B
+    val REN_1 = true.B
+
+    val MEN_X = false.B
+    val MEN_0 = false.B
+    val MEN_1 = true.B
 }
