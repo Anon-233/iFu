@@ -31,27 +31,16 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
 
   })
 
-  val bpdStr = new StringBuilder
-  bpdStr.append(BoomCoreStringPrefix("==Branch Predictor Memory Sizes==\n"))
   val bankedPredictors = (0 until nBanks) map ( b => {
     val m = Module(new BankedPredictor)
   })
 
-  val bankedLhistProviders = Seq.fill(nBanks) { Module(if (localHistoryNSets > 0) new LocalBranchPredictorBank else new NullLocalBranchPredictorBank) }
 
 
   {
     require(nBanks == 2)
 
-    bankedPredictors(0).io.f1lhist := bankedLhistProviders(0).io.f1lhist
-    bankedPredictors(1).io.f1lhist := bankedLhistProviders(1).io.f1lhist
-
     when (bank(io.f0req.bits.pc) === 0.U) {
-      bankedLhistProviders(0).io.f0valid := io.f0req.valid
-      bankedLhistProviders(0).io.f0pc    := bankAlign(io.f0req.bits.pc)
-
-      bankedLhistProviders(1).io.f0valid := io.f0req.valid
-      bankedLhistProviders(1).io.f0pc    := nextBank(io.f0req.bits.pc)
 
       bankedPredictors(0).io.f0valid := io.f0req.valid
       bankedPredictors(0).io.f0pc    := bankAlign(io.f0req.bits.pc)
@@ -61,11 +50,7 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
       bankedPredictors(1).io.f0pc    := nextBank(io.f0req.bits.pc)
       bankedPredictors(1).io.f0mask  := ~(0.U(bankWidth.W))
     } .otherwise {
-      bankedLhistProviders(0).io.f0valid := io.f0req.valid && !mayNotBeDualBanked(io.f0req.bits.pc)
-      bankedLhistProviders(0).io.f0pc    := nextBank(io.f0req.bits.pc)
 
-      bankedLhistProviders(1).io.f0valid := io.f0req.valid
-      bankedLhistProviders(1).io.f0pc    := bankAlign(io.f0req.bits.pc)
 
       bankedPredictors(0).io.f0valid := io.f0req.valid && !mayNotBeDualBanked(io.f0req.bits.pc)
       bankedPredictors(0).io.f0pc    := nextBank(io.f0req.bits.pc)
@@ -85,12 +70,6 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
   }
 
 
-  for (i <- 0 until nBanks) {
-    bankedLhistProviders(i).io.f3TakenBr := bankedPredictors(i).io.resp.f3.map ( p =>
-      p.isBr && p.predictedPc.valid && p.taken
-    ).reduce(_||_)
-  }
-
   {
     require(nBanks == 2)
     val b0fire = io.f3fire && RegNext(RegNext(RegNext(bankedPredictors(0).io.f0valid)))
@@ -98,8 +77,6 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
     bankedPredictors(0).io.f3fire := b0fire
     bankedPredictors(1).io.f3fire := b1fire
 
-    bankedLhistProviders(0).io.f3fire := b0fire
-    bankedLhistProviders(1).io.f3fire := b1fire
 
 
 
@@ -107,8 +84,6 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
     io.resp.f3.meta(0)    := bankedPredictors(0).io.f3meta
     io.resp.f3.meta(1)    := bankedPredictors(1).io.f3meta
 
-    io.resp.f3.lhist(0)   := bankedLhistProviders(0).io.f3lhist
-    io.resp.f3.lhist(1)   := bankedLhistProviders(1).io.f3lhist
 
     when (bank(io.resp.f1.pc) === 0.U) {
       for (i <- 0 until bankWidth) {
@@ -155,8 +130,6 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
   // Use the meta from the latest resp
   io.resp.f1.meta := DontCare
   io.resp.f2.meta := DontCare
-  io.resp.f1.lhist := DontCare
-  io.resp.f2.lhist := DontCare
 
 
   for (i <- 0 until nBanks) {
@@ -164,7 +137,6 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
     bankedPredictors(i).io.update.bits.isRepairUpdate     := io.update.bits.isRepairUpdate
 
     bankedPredictors(i).io.update.bits.meta             := io.update.bits.meta(i)
-    bankedPredictors(i).io.update.bits.lhist            := io.update.bits.lHist(i)
     bankedPredictors(i).io.update.bits.cfiIdx.bits     := io.update.bits.cfiIdx.bits
     bankedPredictors(i).io.update.bits.cfiTaken        := io.update.bits.cfiTaken
     bankedPredictors(i).io.update.bits.cfiMispredicted := io.update.bits.cfiMispredicted
@@ -173,9 +145,6 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
     bankedPredictors(i).io.update.bits.cfiIsJalr      := io.update.bits.cfiIsJalr
     bankedPredictors(i).io.update.bits.target           := io.update.bits.target
 
-    bankedLhistProviders(i).io.update.mispredict := io.update.bits.isMispredictUpdate
-    bankedLhistProviders(i).io.update.repair     := io.update.bits.isRepairUpdate
-    bankedLhistProviders(i).io.update.lhist      := io.update.bits.lHist(i)
   }
 
  {
@@ -187,11 +156,6 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
       val b1UpdateValid = io.update.valid &&
         (!io.update.bits.cfiIdx.valid || io.update.bits.cfiIdx.bits >= bankWidth.U)
 
-      bankedLhistProviders(0).io.update.valid := io.update.valid && io.update.bits.brMask(bankWidth-1,0) =/= 0.U
-      bankedLhistProviders(1).io.update.valid := b1UpdateValid && io.update.bits.brMask(fetchWidth-1,bankWidth) =/= 0.U
-
-      bankedLhistProviders(0).io.update.pc := bankAlign(io.update.bits.pc)
-      bankedLhistProviders(1).io.update.pc := nextBank(io.update.bits.pc)
 
       bankedPredictors(0).io.update.valid := io.update.valid
       bankedPredictors(1).io.update.valid := b1UpdateValid
@@ -214,11 +178,6 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
       val b0UpdateValid = io.update.valid && !mayNotBeDualBanked(io.update.bits.pc) &&
         (!io.update.bits.cfiIdx.valid || io.update.bits.cfiIdx.bits >= bankWidth.U)
 
-      bankedLhistProviders(1).io.update.valid := io.update.valid && io.update.bits.brMask(bankWidth-1,0) =/= 0.U
-      bankedLhistProviders(0).io.update.valid := b0UpdateValid && io.update.bits.brMask(fetchWidth-1,bankWidth) =/= 0.U
-
-      bankedLhistProviders(1).io.update.pc := bankAlign(io.update.bits.pc)
-      bankedLhistProviders(0).io.update.pc := nextBank(io.update.bits.pc)
 
       bankedPredictors(1).io.update.valid := io.update.valid
       bankedPredictors(0).io.update.valid := b0UpdateValid

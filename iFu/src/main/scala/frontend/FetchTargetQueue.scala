@@ -94,7 +94,6 @@ class FetchTargetQueue extends CoreModule {
     val meta  = SyncReadMem(numFTQEntries, Vec(nBanks, new PredictionMeta))
     val ram   = Reg(Vec(numFTQEntries, new FTQBundle))
     val gHist = Seq.fill(nBanks) { SyncReadMem(numFTQEntries, new GlobalHistory) }
-    val lHist = SyncReadMem(numFTQEntries, Vec(nBanks, UInt(localHistoryLength.W)))
 
     val previousgHist = RegInit((0.U).asTypeOf(new GlobalHistory))
     val previousEntry = RegInit((0.U).asTypeOf(new FTQBundle))
@@ -132,7 +131,6 @@ class FetchTargetQueue extends CoreModule {
         )
 
         // 进行写入操作
-        lHist.write(enqPtr, io.enq.bits.lHist)
         gHist.map(g => g.write(enqPtr, newgHist))
         meta.write(enqPtr, io.enq.bits.bpdMeta)
         ram(enqPtr) := newEntry
@@ -168,7 +166,6 @@ class FetchTargetQueue extends CoreModule {
                     Mux(bpdUpdateRepair || bpdUpdateMispredict, bpdRepairIdx,
                                                                 bpdPtr))
     val bpdgHist  = gHist(0).read(bpdIdx, true.B)
-    val bpdlHist  = lHist.read(bpdIdx, true.B)
     val bpdMeta   = meta.read(bpdIdx, true.B)
     val bpdpc     = RegNext(pcs(bpdIdx))
     val bpdTarget = RegNext(pcs(WrapInc(bpdIdx, numFTQEntries)))
@@ -242,7 +239,6 @@ class FetchTargetQueue extends CoreModule {
         io.bpdUpdate.bits.cfiIsBr            := bpdEntry.brMask(cfiIdx)
         io.bpdUpdate.bits.cfiIsJal           := bpdEntry.cfiType === CFI_JAL || bpdEntry.cfiType === CFI_JALR
         io.bpdUpdate.bits.gHist              := bpdgHist
-        io.bpdUpdate.bits.lHist              := bpdlHist
         io.bpdUpdate.bits.meta               := bpdMeta
 
         firstEmpty := false.B

@@ -132,7 +132,6 @@ class FetchBundle extends CoreBundle {
     val brMask         = UInt(fetchWidth.W)
 
     val gHist           = new GlobalHistory
-    val lHist           = Vec(nBanks, UInt(localHistoryLength.W))
 
     val xcpt_pf_if      = Bool()    // I-TLB miss(instruction fetch fault)
     val xcpt_ae_if      = Bool()    // Access exception
@@ -550,7 +549,6 @@ class Frontend extends CoreModule{
     f3_fetch_bundle.cfiIsCall   := f3_call_mask(f3_fetch_bundle.cfiIdx.bits)
     f3_fetch_bundle.cfiIsRet    := f3_ret_mask(f3_fetch_bundle.cfiIdx.bits)
     f3_fetch_bundle.gHist         := f3.io.deq.bits.gHist
-    f3_fetch_bundle.lHist         := f3_bpd_resp.io.deq.bits.lhist
     f3_fetch_bundle.bpdMeta      := f3_bpd_resp.io.deq.bits.meta
     f3_fetch_bundle.rasTop       := ras.io.read_addr
 
@@ -614,7 +612,6 @@ class Frontend extends CoreModule{
     f4_btb_corrections.io.enq.bits.btbMispredicts     := f3_btb_mispredicts.asUInt
     f4_btb_corrections.io.enq.bits.pc                 := f3_fetch_bundle.pc
     f4_btb_corrections.io.enq.bits.gHist              := f3_fetch_bundle.gHist
-    f4_btb_corrections.io.enq.bits.lHist              := f3_fetch_bundle.lHist
     f4_btb_corrections.io.enq.bits.meta               := f3_fetch_bundle.bpdMeta
 
     // -------------------------------------------------------
