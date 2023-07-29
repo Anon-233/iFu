@@ -84,8 +84,8 @@ class RenameMapTable(
 
     //输出,对于转发在顶层模块判断和进行
       for (i <- 0 until plWidth) {
-        io.map_resps(i).prs1       := (0 until i).foldLeft(map_table(io.map_reqs(i).lrs1)) ((p,k) =>p)
-        io.map_resps(i).prs2       := (0 until i).foldLeft(map_table(io.map_reqs(i).lrs2)) ((p,k) =>p)
-        io.map_resps(i).stale_pdst := (0 until i).foldLeft(map_table(io.map_reqs(i).ldst)) ((p,k) =>p)
+        io.map_resps(i).prs1       := mapTable(io.map_reqs(i).lrs1)
+        io.map_resps(i).prs2       := mapTable(io.map_reqs(i).lrs2)
+        io.map_resps(i).stale_pdst := mapTable(io.map_reqs(i).ldst)
   }
 }
