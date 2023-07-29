@@ -213,7 +213,7 @@ class DcacheMeta extends Module with HasDcacheParameters{
     io.dirtyMeta := dirtyMeta
 
     when(io.fenceTakeDirtyMeta){
-        // 将这个脏行的dirty位置为0
+        // 将这个脏行的dirty位置为0写回
         dirtyTable(dirtyIdx) := dirtyTable(dirtyIdx) & ~(1.U << dirtyPos)
         dirtyMeta.dirty := false.B
         meta.write(dirtyIdx, VecInit(Seq.fill(nWays)(dirtyMeta)), cleanedMask.asBools)
@@ -629,11 +629,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
 
     var s0state =   Mux(rpuJustDone,        wb,
-        Mux(mshrReplayValid,    replay,
-            Mux(mshrReadValid,      mshrread,
-                Mux(io.lsu.req.valid,   lsu,
+                    Mux(mshrReplayValid,    replay,
+                    Mux(mshrReadValid,      mshrread,
+                    Mux(io.lsu.req.valid,   lsu,
+                    Mux(
                     Mux(prefetchValid,      prefetch,
-                        nil)))))
+                                            nil))))))
 
     var s0kill = Vec(memWidth, Bool())
     s0kill = io.lsu.s1kill
@@ -759,6 +760,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // 另一个是rpu写回的,是要写回的,叫replacedMetaline
     val s1handleMetaLine = Wire(Vec(memWidth , new MetaLine))
     val s1replacedMetaLine = new MetaLine
+
+
+    io.lsu.ordered := io.lsu.forceOrder && !meta.hasDirty //只要没有dirty位,就返回forceOrder
 
     when(s1state === lsu  && s1valid ){
         for(w <- 0 until memWidth){
@@ -1032,6 +1036,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             sendNack := false.B
         }
     }
+
+    
 
     // 检查流水线里面是不是至多有一条mshrread 
     mshrReadValid := mshrs.io.newFetchAddr.valid &&
