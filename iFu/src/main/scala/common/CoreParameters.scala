@@ -36,6 +36,14 @@ class FrontendParameters{
     val instrBytes:Int                 = 4
 }
 
+class ROBParameters{
+    val robAddrSz: Int = 0
+    val retireWidth: Int = 0
+    val numRobRows: Int = 0
+    val numRobEntries:Int = 0
+
+}
+
 
 trait HasCoreParameters {
     val resetPC: Int = 0x1c000000
@@ -45,8 +53,10 @@ trait HasCoreParameters {
     val coreInstrBytes: Int = 4
     val coreInstrBits: Int = coreInstrBytes * 8
     val coreWidth = 4
+    val memWidth = 2
 
     val frontendParams: FrontendParameters = new FrontendParameters
+    val robParameters: ROBParameters = new ROBParameters
     val issueParams: Seq[IssueParams] = Seq(
         IssueParams(issueWidth = 1, numIssueSlots = 16, iqType = IQT_MEM.litValue, dispatchWidth = 1),
         IssueParams(issueWidth = 2, numIssueSlots = 16, iqType = IQT_INT.litValue, dispatchWidth = 1))

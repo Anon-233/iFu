@@ -14,20 +14,20 @@ class RobIO(
     val enq_uops = Input(Vec(coreWidth,new MicroOp()))
     val enq_partial_stall = Input(Bool())
 
-    val xcpt_fetch_pc = Input(UInt(vaddrBitsExtended.W))
+    val xcpt_fetch_pc = Input(UInt(vaddrBits.W))
     //output
-    val rob_tail_idx = Output(UInt(robAddrSz.W))
-    val rob_pnr_idx = Output(UInt(robAddrSz.W))
-    val rob_head_idx = Output(UInt(robAddrSz.W))
+    val rob_tail_idx = Output(UInt(robParameters.robAddrSz.W))
+    val rob_pnr_idx = Output(UInt(robParameters.robAddrSz.W))
+    val rob_head_idx = Output(UInt(robParameters.robAddrSz.W))
 
     val brupdate = Input(new BrUpdataInfo())
     //写回阶段
-    val wb_resps = Flipped(Vec(numWakeupPorts,Valid(new ExeUnitResp(xLen max fLen+1))))
+    val wb_resps = Flipped(Vec(numWakeupPorts,Valid(new ExeUnitResp(xLen))))
 
     //store stage
-    val lsu_clr_bsy = Input(Vec(memWidth +1,Valid(UInt(robAddrSz.W))))
+    val lsu_clr_bsy = Input(Vec(memWidth +1,Valid(UInt(robParameters.robAddrSz.W))))
 
-    val lsu_clr_unsafe = Input(Vec(memWidth,Valid(robAddrSz.W)))
+    val lsu_clr_unsafe = Input(Vec(memWidth,Valid(robParameters.robAddrSz.W)))
 
     val lxcpt = Flipped(new ValidIO(new Exception()))
 
@@ -60,28 +60,28 @@ class RobIO(
 
 class CommitSignals extends CoreBundle
 {
-    val valids = Vec(retireWidth, Bool())
-    val arch_valids = Vec(retireWidth,Bool())
-    val uops = Vec(retireWidth,new MicroOP())
+    val valids = Vec(robParameters.retireWidth, Bool())
+    val arch_valids = Vec(robParameters.retireWidth,Bool())
+    val uops = Vec(robParameters.retireWidth, new MicroOp() )
     //val fflags = Valid(UInt(5.W))
 
     //maybe use
     //val debug
     
-    val rbk_valids = Vec(retireWidth,Bool())
+    val rbk_valids = Vec(robParameters.retireWidth,Bool())
     val rollback = Bool()
 
     //------------------debug
-    val debug_insts = Vec(retireWidth, UInt(32.W))
-    val debug_wdata = Vec(retireWidth, UInt(xLen.W))
+    val debug_insts = Vec(robParameters.retireWidth, UInt(32.W))
+    val debug_wdata = Vec(robParameters.retireWidth, UInt(xLen.W))
 }
 
 class CommitExceptionSignals extends CoreBundle
 {
-    val ftq_idx = UInt(log2Ceil(ftqSz).W)
+    val ftq_idx = UInt(log2Ceil(frontendParams.numFTQEntries).W)
     //val edge_inst = Bool()
     //val is_rvc = Bool()
-    val pc_lob = UInt(log2Ceil(icBlockBytes).W)
+    val pc_lob = UInt(log2Ceil(frontendParams.iCacheParams.lineBytes).W)
     val cause = UInt(xLen.W)
     val badvaddr = UInt(xLen.W)
 
@@ -119,14 +119,14 @@ class Exception extends CoreBundle
     val uop = new MicroOp()
     //TODO:update cause to loogarch
     val cause = Bits(log2Ceil(freechips.rocketchip.rocket.Causes.all.max+2).W)
-    val badvaddr = UInt(coreMaxAddrBits.W)
+    val badvaddr = UInt(paddrBits.W)
 }
 
 class DebugRobSignals extends CoreBundle
 {
   val state = UInt()
-  val rob_head = UInt(robAddrSz.W)
-  val rob_pnr = UInt(robAddrSz.W)
+  val rob_head = UInt(robParameters.robAddrSz.W)
+  val rob_pnr = UInt(robParameters.robAddrSz.W)
   val xcpt_val = Bool()
   val xcpt_uop = new MicroOp()
   val xcpt_badvaddr = UInt(xLen.W)
@@ -139,16 +139,21 @@ class Rob(
 {
     val io = IO(new RobIO(numWakeupPorts))
 
+    //-------------------------------
+    val numRobRows = robParameters.numRobRows
+    val numRobEntries = robParameters.numRobEntries
+    //-------------------------------
+
     //state
     val stateReset :: stateNormal ::stateRollback ::stateWatiTillEmpty ::Nil = Enum(4)
     val robState = RegInit(stateReset)
 
-    val robHead = RegInit(0.U(log2Ceil(numRobRows).W))
+    val robHead = RegInit(0.U(log2Ceil(robParameters.numRobRows).W))
     val robHeadLsb = RegInit(0.U((1 max log2Ceil(coreWidth)).W))
     val robHeadIdx = if (coreWidth == 1) robHead else Cat(robHead,robHeadLsb)
 
-    val robTail = RegInit(0.U(log2Ceil(numRobRows).W))
-    val robTailLsb = RegInit(0.U((1 max logCeil(coreWidth)).W))
+    val robTail = RegInit(0.U(log2Ceil(robParameters.numRobRows).W))
+    val robTailLsb = RegInit(0.U((1 max log2Ceil(coreWidth)).W))
     val robTailIdx = if (coreWidth ==1 )robTail else Cat(robTail,robTailLsb)
     
     //maybe not use
@@ -175,8 +180,8 @@ class Rob(
     val exceptionThrown = Wire(Bool())
 
     val rXcptVal = RegInit(false.B)
-    val rXcptUop = Reg(new MicroOP())
-    val rXcptBadvaddr = Reg(UInt(coreMaxAddrBits.W))
+    val rXcptUop = Reg(new MicroOp())
+    val rXcptBadvaddr = Reg(UInt(paddrBits.W))
     io.flush_frontend := rXcptVal
 
     //-----------------tool def---------------------
@@ -192,7 +197,7 @@ class Rob(
   // **************************************************************************
   // Debug
 
-    class DebugRobBundle extends BoomBundle
+    class DebugRobBundle extends CoreBundle
     {
         val valid      = Bool()
         val busy       = Bool()
@@ -240,8 +245,8 @@ class Rob(
             robUop(robTail) := io.enq_uops(w)
             robPredicated(robTail) := false.B
 
-        }.elsewhen (io.enq_valids.reduce(_|_) && !rob_val(rob_tail)) {
-            rob_uop(rob_tail).debug_inst := BUBBLE // just for debug purposes
+        }.elsewhen (io.enq_valids.reduce(_|_) && !robVal(robTail)) {
+            robUop(robTail).debug_inst := BUBBLE // just for debug purposes
         }
 
         //------------------writeback-----------------------
@@ -393,7 +398,7 @@ class Rob(
     io.com_xcpt.bits.cause := rXcptUop.exc_cause
 
     io.com_xcpt.bits.badvaddr := Sext(rXcptBadvaddr, xLen)
-    val insnSysPc2epc = robHeadVals.reduce(_||_) && PriorityMux(robHeadvals,io.commit.uops.map{u => u.is_sys_pc2epc})
+    val insnSysPc2epc = robHeadVals.reduce(_||_) && PriorityMux(robHeadVals,io.commit.uops.map{u => u.is_sys_pc2epc})
     
     val refetchInst = exceptionThrown || insnSysPc2epc
     val comXcptUop = PriorityMux(robHeadVals,io.commit.uops)
@@ -425,7 +430,7 @@ class Rob(
     
 
     //------------------exception-------------------
-    val nextXcptUop = Wire(new MicroOP())
+    val nextXcptUop = Wire(new MicroOp())
     nextXcptUop := rXcptUop
     val enqXcpts = Wire(Vec(coreWidth,Bool()))
     for(i <- 0 until coreWidth) {

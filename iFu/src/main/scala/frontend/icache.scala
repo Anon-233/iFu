@@ -230,7 +230,7 @@ class ICache(val iParams : ICacheParameters
     val s2HitWay = OHToUInt(s2TagHit)
     val s2Bankid = RegNext(s1Bankid)
     val s2WayMux = Mux1H(s2TagHit,s2Dout)
-    
+
     val sz = s2WayMux.getWidth
     val s2Bank0Data = s2WayMux(sz/2-1, 0)
     val s2Bank1Data = s2WayMux(sz-1,sz/2)
