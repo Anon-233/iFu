@@ -12,17 +12,16 @@ class BPUParameters {
 }
 
 class ICacheParameters {
-    val nBanks: Int        = 2
-    val nSets: Int         = 0
-    val nWays: Int         = 0
-    val lineBytes:Int      = 0
-    val tagBits: Int       = 0
-    val untagBits: Int     = 0
-    val offsetBits : Int   = log2Ceil(lineBytes)
-    val bytesPerBeat: Int  = 0
-    val refillCycles : Int = lineBytes/bytesPerBeat
-    val bankBytes: Int     = 4 * 4
-    val banksPerLine: Int  = lineBytes/bankBytes
+    val nBanks: Int       = 2
+    val nSets: Int        = 64
+    val nWays: Int        = 8
+    val lineBytes:Int     = 64
+    val indexBits: Int    = log2Ceil(nSets)
+    val offsetBits : Int  = log2Ceil(lineBytes)
+    val untagBits: Int    = indexBits + offsetBits
+    val tagBits: Int      = 32 - untagBits
+    val bankBytes: Int    = 4 * 4
+    val banksPerLine: Int = lineBytes / bankBytes
 }
 
 class FrontendParameters{
