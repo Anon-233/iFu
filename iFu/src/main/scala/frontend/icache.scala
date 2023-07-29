@@ -71,14 +71,14 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val dataArrays =
         (0 until iParams.nWays).map{
             x => SyncReadMem(
-                size = iParams.nSets,
-                data = UInt((packetBits / iParams.nBanks).W)
+                iParams.nSets,
+                UInt((packetBits / iParams.nBanks).W)
             )
         } ++
         (0 until iParams.nWays).map{
             x => SyncReadMem(
-                size = iParams.nSets,
-                data = UInt((packetBits / iParams.nBanks).W)
+                iParams.nSets,
+                UInt((packetBits / iParams.nBanks).W)
             )
         }
     val dataArrayB0 = dataArrays.take(iParams.nWays)
@@ -113,24 +113,24 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         s1_tagHit(i) := s1_validBit && tag === s1_tag
     }
     val s1_hit = s1_tagHit.reduce(_||_)
+    val s1_dataOut = Wire(Vec(iParams.nWays, UInt(packetBits.W)))
 //========== ----S1 Stage---- ==========
 /*---------------------------------------------------------------------*/
-//========== S0 - S1 Register ==========
+//========== S1 - S2 Register ==========
     val s2_valid = RegNext(s1_valid && !io.s1_kill)
     val s2_tagHit = RegNext(s1_tagHit)
     val s2_hit = RegNext(s1_hit)
     val s2_bankid = RegNext(s1_bankid)
-    val s1_dataOut = Wire(Vec(iParams.nWays, UInt(packetBits.W)))
-//========== S0 - S1 Register ==========
+    val s2_dataOut = RegNext(s1_dataOut)
+//========== S1 - S2 Register ==========
 /*---------------------------------------------------------------------*/
 //========== ----S2 Stage---- ==========
-    val s2_dataOut = RegNext(s1_dataOut)
     val s2_wayMux = Mux1H(s2_tagHit, s2_dataOut)
 
     val sz = s2_wayMux.getWidth
     val s2_bank0Data = s2_wayMux(sz / 2 - 1, 0)
     val s2_bank1Data = s2_wayMux(sz - 1, sz / 2)
-    val s2_data = Mux(s2_bankid,
+    val s2_data = Mux(s2_bankid.asBool,
         Cat(s2_bank0Data, s2_bank1Data),
         Cat(s2_bank1Data, s2_bank0Data)
     )
@@ -145,8 +145,8 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val invalidated = Reg(Bool()) //清空整个icache
     val refillValid = RegInit(false.B)
     val refillFire = io.cbusReq.fire
-    val s2Miss = s2Valid && !s2Hit && !RegNext(refillValid)
-    val refillPaddr = RegEnable(io.s1_paddr , s1Valid && !(refillValid || s2Miss))
+    val s2Miss = s2_valid && !s2_hit && !RegNext(refillValid)
+    val refillPaddr = RegEnable(io.s1_paddr , s1_valid && !(refillValid || s2Miss))
     val refillTag = refillPaddr(iParams.tagBits + iParams.untagBits-1,iParams.untagBits)
     val refillIdx = refillPaddr(iParams.untagBits-1,iParams.offsetBits)
     val refillOneBeat = io.cbusReq.valid && io.cbusResp.ready
@@ -168,11 +168,11 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     }
 
     when(refillOneBeat){
-        vbArray := vbArray.bitSet(Cat(replWay, refillIdx), refillDone && !invalidated)
+        validArray := validArray.bitSet(Cat(replWay, refillIdx), refillDone && !invalidated)
     }
 
     when(io.invalidate) {
-        vbArray := 0.U
+        validArray := 0.U
         invalidated := true.B
     }
 
@@ -182,12 +182,12 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         val wEn = (refillOneBeat && !invalidated) && replWay === i.U
 
         val memIdx0 = Mux(refillOneBeat,
-            ((refillIdx << (log2Ceil(iParams.refillCycles) - 1)) | (refillCnt >> 1.U)),
-            b0Row(s0Vaddr)
+            ((refillIdx << (log2Ceil(refillCycles) - 1)) | (refillCnt >> 1.U)),
+            b0Row(s0_vaddr)
         )
         val memIdx1 = Mux(refillOneBeat,
-            ((refillIdx << (log2Ceil(iParams.refillCycles) - 1)) | (refillCnt >> 1.U)),
-            b1Row(s0Vaddr)
+            ((refillIdx << (log2Ceil(refillCycles) - 1)) | (refillCnt >> 1.U)),
+            b1Row(s0_vaddr)
         )
 
         when (wEn && refillCnt(0) === 0.U){
@@ -198,8 +198,8 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         }
 
         s1_dataOut(i) := Cat(
-            dataArrayB1(i).read(memIdx1, !wEn && s0Ren),
-            dataArrayB0(i).read(memIdx0, !wEn && s0Ren)
+            dataArrayB1(i).read(memIdx1, !wEn && s0_readEn),
+            dataArrayB0(i).read(memIdx0, !wEn && s0_readEn)
         )
     }
 
@@ -209,7 +209,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     io.cbusReq.bits.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
     io.cbusReq.bits.mask := 0.U
     io.cbusReq.bits.axiBurstType := 1.U
-    io.cbusReq.bits.axiLen := iParams.refillCycles.U
+    io.cbusReq.bits.axiLen := refillCycles.U
 
     when (!refillValid) { invalidated := false.B }
     when (refillFire) { refillValid := true.B }

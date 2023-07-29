@@ -2,12 +2,12 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
-
 import iFu.isa.Instructions._
+import iFu.common.Consts._
 import iFu.common._
-import common.Consts._
-import iFu.backend.{DecodeLogic}
+import iFu.backend.DecodeLogic
 import iFu.backend.{CSR, MemoryOpConstants}
+
 
 //TODO 增加Ori的检测，为move指令。增加andi的检测，为Nop指令  Done
 //TODO ALU Decode

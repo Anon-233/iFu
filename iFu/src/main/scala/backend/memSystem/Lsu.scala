@@ -1,12 +1,13 @@
 package backend.memSystem
 
+import backend.execute.ExeUnitResp
 import chisel3._
 import chisel3.util._
-
 import iFu.common._
-import backend.memSystem.LSUConsts._    // TODO
+import iFu.common.Consts._
+import iFu.util._
+import backend.memSystem.LSUConsts._
 import iFu.backend.CommitSignals        // TODO
-import iFu.frontend.WrapInc             // TODO
 
 //TODO  memWidth为2，如果为1，需要wakeup不成功后增加一周期delay  Done
 //TODO tlb_miss抛出异常。
@@ -16,11 +17,11 @@ import iFu.frontend.WrapInc             // TODO
 //TODO LSU会将vaddr的idx位发给DCache，TLB_MISS在s1_kill掉请求
 object IsKilledByBranch {
     def apply(brupdate: BrUpdateInfo, uop: MicroOp): Bool = {
-        return maskMatch(brupdate.b1.mispredict_mask, uop.br_mask)
+        return maskMatch(brupdate.b1.mispredictMask, uop.brMask)
     }
 
     def apply(brupdate: BrUpdateInfo, uop_mask: UInt): Bool = {
-        return maskMatch(brupdate.b1.mispredict_mask, uop_mask)
+        return maskMatch(brupdate.b1.mispredictMask, uop_mask)
     }
 }
 
@@ -59,7 +60,7 @@ object LSUConsts {
 
 class LSUExeIO extends CoreBundle {
     val req     = Flipped(new Valid(new FuncUnitResp))
-    val iresp   = new Decoupled(new ExeUnitResp)
+    val iresp   = new DecoupledIO(new ExeUnitResp)
 }
 
 class DCacheReq extends CoreBundle {
@@ -75,7 +76,7 @@ class DCacheResp extends CoreBundle {
 
 // lsu <> dcache 
 class LSUDMemIO extends CoreBundle {
-    val req         = new Decoupled(Vec(memWidth,Valid(new DCacheReq)))
+    val req         = new DecoupledIO(Vec(memWidth,Valid(new DCacheReq)))
     val s1_kill     = Output(Vec(memWidth, Bool()))
     val resp        = Flipped(Vec(memWidth, new Valid(new DCacheResp)))
 
@@ -591,7 +592,7 @@ class Lsu extends CoreModule {
             dmem_req(w).bits.data := (new StoreGen(
                 stq_commit_e.bits.uop.mem_size, 0.U,
                 stq_commit_e.bits.data.bits,
-                coreDataBytes
+                xLen
             )).data
             dmem_req(w).bits.uop := stq_commit_e.bits.uop
 
@@ -844,12 +845,12 @@ class Lsu extends CoreModule {
         val word_addr_matches = widthMap(w => (
             stq(i).bits.addr.valid &&
             !stq(i).bits.addr_is_virtual &&
-            (s_addr(corePAddrBits - 1, 2) === lcam_addr(w)(corePAddrBits - 1, 2))
+            (s_addr(xLen - 1, 2) === lcam_addr(w)(xLen - 1, 2))
         ))
         val write_mask = GenByteMask(s_addr, s_uop.mem_size)
         for (w <- 0 until memWidth) {
             when(do_ld_search(w) && stq(i).valid && lcam_st_dep_mask(w)(i)) {
-                when(((lcam_mask(w) & write_mask) === lcam_mask(w)) && !s_uop.is_fence && wword_addr_matches(w) && can_forward(w)) {
+                when(((lcam_mask(w) & write_mask) === lcam_mask(w)) && !s_uop.is_fence && word_addr_matches(w) && can_forward(w)) {
                     ldst_addr_matches(w)(i) := true.B
                     ldst_forward_matches(w)(i) := true.B
                     io.dmem.s1_kill(w) := RegNext(dmem_req_fire(w))
@@ -1318,11 +1319,11 @@ object maskMatch {
 
 object GetNewBrMask {
     def apply(brupdate: BrUpdateInfo, uop: MicroOp): UInt = {
-        return uop.brMask & ~brupdate.b1.resolve_mask
+        return uop.brMask & ~brupdate.b1.resolveMask
     }
 
     def apply(brupdate: BrUpdateInfo, br_mask: UInt): UInt = {
-        return br_mask & ~brupdate.b1.resolve_mask
+        return br_mask & ~brupdate.b1.resolveMask
     }
 }
 
