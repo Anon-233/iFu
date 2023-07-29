@@ -7,15 +7,6 @@ import frontend.isa.Instructions._
 //TODO 合并常量
 //TODO 修改isRet和isCall
 trait PreDecodeConsts {
-    val CFI_SZ = 2
-    val CFI_X = 0.U(CFI_SZ.W) // Not a CFI instruction
-    val CFI_BR = 1.U(CFI_SZ.W) // Branch
-    val CFI_JAL = 2.U(CFI_SZ.W) // JAL
-    val CFI_JALR = 3.U(CFI_SZ.W) // JALR
-    val blockBytes = 256
-    val X = BitPat("b?")
-    val Y = BitPat("b1")
-    val N = BitPat("b0")
     val default = List[BitPat](N,N,N,N,X)
     val table:Array[(BitPat,List[BitPat])] = Array[(BitPat,List[BitPat])](
         ////                               is br?
@@ -44,10 +35,7 @@ trait PreDecodeConsts {
         SLTU                        ->List(N, N, N, Y, Y),
         SLTI                        ->List(N, N, N, Y, N),
         SLTUI                       ->List(N, N, N, Y, N),
-
-//        PCADDI                      ->List(N, N, N, Y, N),
-//        PCADDU12I                   ->List(N, N, N, Y, N),
-
+        
         AND                         ->List(N, N, N, Y, Y),
         OR                          ->List(N, N, N, Y, Y),
         XOR                         ->List(N, N, N, Y, Y),
@@ -66,8 +54,6 @@ trait PreDecodeConsts {
         SLLIW                       ->List(N, N, N, Y, N),
         SRLIW                       ->List(N, N, N, Y, N),
         SRAIW                       ->List(N, N, N, Y, N)
-
-
     )
 }
 
