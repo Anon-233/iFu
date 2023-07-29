@@ -136,13 +136,11 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     )
 //========== ----S2 Stage---- ==========
 /*---------------------------------------------------------------------*/
-//========== ----- Resp ----- ==========
-    io.resp.valid := s2_valid && s2_hit
-    io.resp.bits.data := s2_data
-//========== ----- Resp ----- ==========
-
-
-    val invalidated = Reg(Bool()) //清空整个icache
+//========== ----- xxxx ----- ==========
+    
+    
+//========== ----- xxxx ----- ==========
+    val invalidated = Reg(Bool()) // 清空整个icache
     val refillValid = RegInit(false.B)
     val refillFire = io.cbusReq.fire
     val s2Miss = s2_valid && !s2_hit && !RegNext(refillValid)
@@ -150,8 +148,6 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val refillTag = refillPaddr(iParams.tagBits + iParams.untagBits-1,iParams.untagBits)
     val refillIdx = refillPaddr(iParams.untagBits-1,iParams.offsetBits)
     val refillOneBeat = io.cbusReq.valid && io.cbusResp.ready
-
-    io.req.ready := !refillOneBeat  // ????
 
     val dDone = io.cbusResp.ready && io.cbusResp.isLast
     val refillCnt = RegInit(0.U(4.W)) //和refillCycles
@@ -178,8 +174,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 
 //-----------------------------------------------------------------------
     for(i <- 0 until iParams.nWays){
-        val s0_readEn = s0_valid
-        val wEn = (refillOneBeat && !invalidated) && replWay === i.U
+        val writeEn = (refillOneBeat && !invalidated) && replWay === i.U
 
         val memIdx0 = Mux(refillOneBeat,
             ((refillIdx << (log2Ceil(refillCycles) - 1)) | (refillCnt >> 1.U)),
@@ -190,20 +185,20 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
             b1Row(s0_vaddr)
         )
 
-        when (wEn && refillCnt(0) === 0.U){
+        when (writeEn && refillCnt(0) === 0.U){
             dataArrayB0(i).write(memIdx0,io.cbusResp.data)
         }
-        when (wEn && refillCnt(0) === 1.U){
+        when (writeEn && refillCnt(0) === 1.U){
             dataArrayB1(i).write(memIdx1,io.cbusResp.data)
         }
 
         s1_dataOut(i) := Cat(
-            dataArrayB1(i).read(memIdx1, !wEn && s0_readEn),
-            dataArrayB0(i).read(memIdx0, !wEn && s0_readEn)
+            dataArrayB1(i).read(memIdx1, s0_valid),
+            dataArrayB0(i).read(memIdx0, s0_valid)
         )
     }
 
-    io.cbusReq.valid := s2Miss && !refillValid && !io.s2_kill
+    
     io.cbusReq.bits.isWrite := false.B
     io.cbusReq.bits.size := 1.U(2.W)
     io.cbusReq.bits.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
@@ -214,4 +209,26 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     when (!refillValid) { invalidated := false.B }
     when (refillFire) { refillValid := true.B }
     when (refillDone) { refillValid := false.B }
+
+/*---------------------------------------------------------------------*/
+//========== ----- FSM  ----- ==========
+    val s_Normal :: s_Fetch :: Nil = Enum(2)
+    val iCacheState = RegInit(s_Normal)
+    when (iCacheState === s_Normal) {
+        iCacheState := Mux(s2Miss && !io.s2_kill, s_Fetch, s_Normal)
+    } .elsewhen (iCacheState === s_Fetch) {
+        iCacheState := Mux(refillDone, s_Normal, s_Fetch)
+    } .otherwise {
+        iCacheState := iCacheState
+    }
+//========== ----- FSM  ----- ==========
+/*---------------------------------------------------------------------*/
+//========== ------ IO ------ ==========
+    io.req.ready      := iCacheState === s_Normal
+    io.resp.valid     := s2_valid && s2_hit
+    io.resp.bits.data := s2_data
+
+    io.cbusReq.valid := (s2Miss && !io.s2_kill) || (iCacheState === s_Fetch)
+//========== ------ IO ------ ==========
+/*---------------------------------------------------------------------*/
 }
