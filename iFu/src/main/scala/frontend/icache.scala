@@ -140,7 +140,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     
     
 //========== ----- xxxx ----- ==========
-    val invalidated = Reg(Bool()) // 清空整个icache
+    val invalidated = Reg(Bool())
     val refillValid = RegInit(false.B)
     val refillFire = io.cbusReq.fire
     val s2Miss = s2_valid && !s2_hit && !RegNext(refillValid)
@@ -198,14 +198,6 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         )
     }
 
-    
-    io.cbusReq.bits.isWrite := false.B
-    io.cbusReq.bits.size := 1.U(2.W)
-    io.cbusReq.bits.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
-    io.cbusReq.bits.mask := 0.U
-    io.cbusReq.bits.axiBurstType := 1.U
-    io.cbusReq.bits.axiLen := refillCycles.U
-
     when (!refillValid) { invalidated := false.B }
     when (refillFire) { refillValid := true.B }
     when (refillDone) { refillValid := false.B }
@@ -224,11 +216,17 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 //========== ----- FSM  ----- ==========
 /*---------------------------------------------------------------------*/
 //========== ------ IO ------ ==========
-    io.req.ready      := iCacheState === s_Normal
-    io.resp.valid     := s2_valid && s2_hit
+    io.req.ready := iCacheState === s_Normal
+    io.resp.valid := s2_valid && s2_hit
     io.resp.bits.data := s2_data
 
     io.cbusReq.valid := (s2Miss && !io.s2_kill) || (iCacheState === s_Fetch)
+    io.cbusReq.bits.isWrite := false.B
+    io.cbusReq.bits.size := 1.U
+    io.cbusReq.bits.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
+    io.cbusReq.bits.mask := 0.U
+    io.cbusReq.bits.axiBurstType := 1.U
+    io.cbusReq.bits.axiLen := refillCycles.U
 //========== ------ IO ------ ==========
 /*---------------------------------------------------------------------*/
 }
