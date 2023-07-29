@@ -5,34 +5,56 @@ import chisel3.util._
 
 import iFu.common.Consts._
 
-class CBusReq(val s: Int) extends CoreBundle {
+class CBusReq(val s: Int, val ml: Int) extends CoreBundle {
+    val dataWidth = s match {
+        case MSIZE1   => 8
+        case MSIZE2   => 16
+        case MSIZE4   => 32
+        case MSIZE8   => 64
+        case MSIZE16  => 128
+        case MSIZE32  => 256
+        case MSIZE64  => 512
+        case MSIZE128 => 1024
+    }
+    val mlen = ml match {
+        case MLEN1   => 1
+        case MLEN2   => 2
+        case MLEN4   => 4
+        case MLEN8   => 8
+        case MLEN16  => 16
+        case MLEN32  => 32
+        case MLEN64  => 64
+        case MLEN128 => 128
+        case MLEN256 => 256
+    }
+
     val valid = Bool()
     val isStore = Bool()
     val size = UInt(MSIZE1.getWidth.W)
     val addr = UInt(paddrBits.W)
-    val data = UInt((1 << (s + 3)).W)
-    val mask = UInt((nRowBytes).W)//两个cache这里的AXI可以不同
+    val data = UInt(dataWidth.W)
+    val mask = UInt((mlen * dataWidth / 8).W)
     val axiBurstType = UInt(AXI_BURST_INCR.getWidth.W)
     val axiLen = UInt(MLEN1.getWidth.W)
 }
 
 class CBusResp(val s: Int) extends CoreBundle{
-    val data = UInt((1 << (s + 3)).W)
+    val dataWidth = s match {
+        case MSIZE1   => 8
+        case MSIZE2   => 16
+        case MSIZE4   => 32
+        case MSIZE8   => 64
+        case MSIZE16  => 128
+        case MSIZE32  => 256
+        case MSIZE64  => 512
+        case MSIZE128 => 1024
+    }
+    val data = UInt(dataWidth.W)
     val isLast = Bool()
     val ready = Bool()
 }
 
-class iCBusReq extends CBusReq(2) {
-    val size = MSIZE4
-    val axiBurstType = AXI_BURST_INCR
-    val axiLen = MLEN16
-}
-
-class dCBusReq extends CBusReq(2) {
-    val size = MSIZE4
-    val axiBurstType = AXI_BURST_INCR
-    val axiLen = MLEN16
-}
-
-class iCBusResp extends CBusResp(2)
-class dCBusResp extends CBusResp(2)
+class iCBusReq extends CBusReq(MSIZE4, MLEN16)
+class dCBusReq extends CBusReq(MSIZE4, MLEN16)
+class iCBusResp extends CBusResp(MSIZE4)
+class dCBusResp extends CBusResp(MSIZE4)
