@@ -44,6 +44,12 @@ class ROBParameters{
 
 }
 
+class LSUParameters{
+    val numSTQEntries: Int = 32
+    val numLDQEntries: Int = 32
+    val ldqAddrSz    : Int = log2Ceil(numLDQEntries)
+    val stqAddrSz    : Int = log2Ceil(numSTQEntries)
+}
 
 trait HasCoreParameters {
     val resetPC: Int = 0x1c000000
