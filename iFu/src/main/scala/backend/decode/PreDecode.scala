@@ -3,57 +3,56 @@ package iFu.backend
 import iFu.common.{CoreBundle, CoreModule}
 import chisel3._
 import chisel3.util._
+
 import frontend.isa.Instructions._
+import iFu.common.Consts._
 //TODO 合并常量
 //TODO 修改isRet和isCall
-trait PreDecodeConsts {
+trait PreDecodeTable {
     val default = List[BitPat](N,N,N,N,X)
     val table:Array[(BitPat,List[BitPat])] = Array[(BitPat,List[BitPat])](
-        ////                               is br?
-        ////                               |  is jal?
-        ////                               |  |  is jalr?
-        ////                               |  |  |
-        ////                               |  |  |  shadowable
-        ////                               |  |  |  |  has_rs2
-        ////                               |  |  |  |  |
-        JIRL                        ->List(N, N, Y, N, X),
-        B                           ->List(N, Y, N, N, X),
-        BL                          ->List(N, Y, N, N, X),
-        BEQ                         ->List(Y, N, N, N, X),
-        BNE                         ->List(Y, N, N, N, X),
-        BLT                         ->List(Y, N, N, N, X),
-        BLTU                        ->List(Y, N, N, N, X),
-        BGE                         ->List(Y, N, N, N, X),
-        BGEU                        ->List(Y, N, N, N, X),
+        ////                      is br?
+        ////                      |  is jal?
+        ////                      |  |  is jalr?
+        ////                      |  |  |
+        ////                      |  |  |  shadowable
+        ////                      |  |  |  |  has_rs2
+        ////                      |  |  |  |  |
+        JIRL               ->List(N, N, Y, N, X),
+        B                  ->List(N, Y, N, N, X),
+        BL                 ->List(N, Y, N, N, X),
+        BEQ                ->List(Y, N, N, N, X),
+        BNE                ->List(Y, N, N, N, X),
+        BLT                ->List(Y, N, N, N, X),
+        BLTU               ->List(Y, N, N, N, X),
+        BGE                ->List(Y, N, N, N, X),
+        BGEU               ->List(Y, N, N, N, X),
 
-
-        ADDW                        ->List(N, N, N, Y, Y),
-        SUBW                        ->List(N, N, N, Y, Y),
-        ADDIW                       ->List(N, N, N, Y, N),
-        LU12IW                      ->List(N, N, N, Y, N),
-        SLT                         ->List(N, N, N, Y, Y),
-        SLTU                        ->List(N, N, N, Y, Y),
-        SLTI                        ->List(N, N, N, Y, N),
-        SLTUI                       ->List(N, N, N, Y, N),
+        ADDW               ->List(N, N, N, Y, Y),
+        SUBW               ->List(N, N, N, Y, Y),
+        ADDIW              ->List(N, N, N, Y, N),
+        LU12IW             ->List(N, N, N, Y, N),
+        SLT                ->List(N, N, N, Y, Y),
+        SLTU               ->List(N, N, N, Y, Y),
+        SLTI               ->List(N, N, N, Y, N),
+        SLTUI              ->List(N, N, N, Y, N),
         
-        AND                         ->List(N, N, N, Y, Y),
-        OR                          ->List(N, N, N, Y, Y),
-        XOR                         ->List(N, N, N, Y, Y),
-        NOR                         ->List(N, N, N, Y, Y),
+        AND                ->List(N, N, N, Y, Y),
+        OR                 ->List(N, N, N, Y, Y),
+        XOR                ->List(N, N, N, Y, Y),
+        NOR                ->List(N, N, N, Y, Y),
 
-        ANDI                        ->List(N, N, N, Y, N),
-        ORI                         ->List(N, N, N, Y, N),
-        XORI                        ->List(N, N, N, Y, N),
-
-        ANDN                        ->List(N, N, N, Y, Y),
-        ORN                         ->List(N, N, N, Y, Y),
-
-        SLLW                        ->List(N, N, N, Y, Y),
-        SRLW                        ->List(N, N, N, Y, Y),
-        SRAW                        ->List(N, N, N, Y, Y),
-        SLLIW                       ->List(N, N, N, Y, N),
-        SRLIW                       ->List(N, N, N, Y, N),
-        SRAIW                       ->List(N, N, N, Y, N)
+        ANDI               ->List(N, N, N, Y, N),
+        ORI                ->List(N, N, N, Y, N),
+        XORI               ->List(N, N, N, Y, N),
+        ANDN               ->List(N, N, N, Y, Y),
+        ORN                ->List(N, N, N, Y, Y),
+        SLLW               ->List(N, N, N, Y, Y),
+        SRLW               ->List(N, N, N, Y, Y),
+        SRAW               ->List(N, N, N, Y, Y),
+        SLLIW              ->List(N, N, N, Y, N),
+        SRLIW              ->List(N, N, N, Y, N),
+        SRAIW              ->List(N, N, N, Y, N)
     )
 }
 
