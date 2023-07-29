@@ -30,23 +30,37 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         val cbusReq = Decoupled(new CbusReq)
     })
 /*---------------------------------------------------------------------*/
+//========== ----i$ params--- ==========
     val nBanks = iParams.nBanks
     val refillCycles = iParams.lineBytes / io.cbusResp.data.getWidth
     require(
         iParams.lineBytes % io.cbusResp.data.getWidth == 0,
         "LineBytes must be divisible by data width."
     )
+    require(
+        refillCycles >= nBanks,
+        "Refill cycles must be greater than or equal to the number of banks."
+    )
+    require(
+        isPow2(refillCycles),
+        "Refill cycles must be a power of 2."
+    )
     val packetBits = frontendParams.fetchBytes * 8
-    require((2 * (io.cbusResp.data.getWidth) == packetBits))
+    val refillToOneBank = refillCycles == iParams.banksPerLine
+//========== ----i$ params--- ==========
 /*---------------------------------------------------------------------*/
+//========== ----i$ funcs---- ==========
     def b0Row(addr: UInt) =
         addr(iParams.untagBits - 1, log2Ceil(iParams.bankBytes)) + bank(addr)
     def b1Row(addr: UInt) =
         addr(iParams.untagBits - 1, log2Ceil(iParams.bankBytes))
+//========== ----i$ funcs---- ==========
 /*---------------------------------------------------------------------*/
+//========== ----i$ body----- ==========
+    val s2_miss = Wire(Bool())
     val s_Normal :: s_Fetch :: Nil = Enum(2)
     val iCacheState = RegInit(s_Normal)
-    val replWay = LFSR(16, refillFire)(log2Ceil(iParams.nWays) - 1, 0)
+    val replWay = LFSR(16, s2_miss)(log2Ceil(iParams.nWays) - 1, 0)
     val validArray = RegInit(0.U((iParams.nSets * iParams.nWays).W))
     val tagArray = SyncReadMem(
         iParams.nSets,
@@ -67,6 +81,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         }
     val dataArrayB0 = dataArrays.take(iParams.nWays)
     val dataArrayB1 = dataArrays.drop(iParams.nWays)
+//========== ----i$ body----- ==========
 /*---------------------------------------------------------------------*/
 //========== ----S0 Stage---- ==========
     val s0_valid = io.req.fire
@@ -109,8 +124,9 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 //========== S1 - S2 Register ==========
 /*---------------------------------------------------------------------*/
 //========== ----S2 Stage---- ==========
-    val s2_wayMux = Mux1H(s2_tagHit, s2_dataOut)
+    s2_miss := s2_valid && !s2_hit && (iCacheState === s_Normal)
 
+    val s2_wayMux = Mux1H(s2_tagHit, s2_dataOut)
     val sz = s2_wayMux.getWidth
     val s2_bank0Data = s2_wayMux(sz / 2 - 1, 0)
     val s2_bank1Data = s2_wayMux(sz - 1, sz / 2)
@@ -120,94 +136,99 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     )
 //========== ----S2 Stage---- ==========
 /*---------------------------------------------------------------------*/
-//========== ----- xxxx ----- ==========
-    
-    
-//========== ----- xxxx ----- ==========
+//========== --inv i$ logic-- ==========
     val invalidated = Reg(Bool())
-    val refillValid = RegInit(false.B)
-    val refillFire = io.cbusReq.fire
-    val s2_miss = s2_valid && !s2_hit && (iCacheState === s_Normal)
-
-    val refillTag = refillPaddr(iParams.tagBits + iParams.untagBits-1,iParams.untagBits)
-    val refillIdx = refillPaddr(iParams.untagBits-1,iParams.offsetBits)
-    val refillOneBeat = io.cbusReq.valid && io.cbusResp.ready
-
-    val dDone = io.cbusResp.ready && io.cbusResp.isLast
-    val refillCnt = RegInit(0.U(4.W)) //和refillCycles
-    when(refillOneBeat){
-        refillCnt := refillCnt + 1.U
-    }
-    when(dDone){
-        refillCnt := 0.U
-    }
-    val refillDone = refillOneBeat && dDone
-    
-    when(refillDone){
-        tagArray.write(refillIdx,VecInit(Seq.fill(iParams.nWays)(refillTag)),Seq.tabulate(iParams.nWays)(replWay === _.U))
-    }
-
-    when(refillOneBeat){
-        validArray := validArray.bitSet(Cat(replWay, refillIdx), refillDone && !invalidated)
-    }
-
     when(io.invalidate) {
         validArray := 0.U
         invalidated := true.B
     }
+    when (iCacheState =/= s_Fetch) {
+        invalidated := false.B
+    }
+//========== --inv i$ logic-- ==========
 //-----------------------------------------------------------------------
+//========== --Refill Logic-- ==========
     val refillPaddr = RegEnable(
         io.s1_paddr,
-        s1_valid && !(refillValid || s2_miss)
+        s1_valid && !(s2_miss || iCacheState === s_Fetch)
     )
+    val refillTag = refillPaddr(iParams.tagBits + iParams.untagBits - 1, iParams.untagBits)
+    val refillIdx = refillPaddr(iParams.untagBits-1, iParams.offsetBits)
 
-    val refillBufCnt = RegInit(0.U(log2Ceil(refillCycles / nBanks).W))
-    val refillBuf = RegInit(
-        VecInit(Seq.fill(refillCycles / nBanks)(0.U((packetBits / refillCycles).W)))
-    )
-    val refillBufWriteEn = io.cbusReq.valid && io.cbusResp.ready
-    when (refillBufWriteEn) {
-        refillBufCnt := refillBufCnt + 1.U
-        refillBuf(refillBufCnt) := io.cbusResp.data
+    var refillOneBankEn: Bool = null
+    var refillOneBankData: UInt = null
+    var refillLastBank: Bool = null
+    if (refillToOneBank) {
+        refillOneBankEn = io.cbusReq.valid && io.cbusResp.ready
+        refillOneBankData = io.cbusResp.data
+        refillLastBank = io.cbusResp.ready && io.cbusResp.isLast
+    } else {
+        val refillBufCnt = RegInit(0.U(log2Ceil(refillCycles / nBanks).W))
+        val refillBuf = RegInit(
+            VecInit(Seq.fill(refillCycles / nBanks)(0.U((packetBits / refillCycles).W)))
+        )
+        val refillBufWriteEn = io.cbusReq.valid && io.cbusResp.ready
+        when (refillBufWriteEn) {
+            refillBufCnt := refillBufCnt + 1.U
+            refillBuf(refillBufCnt) := io.cbusResp.data
+        }
+
+        refillOneBankEn = RegNext(refillBufWriteEn) && refillBufCnt === 0.U
+        refillOneBankData = refillBuf.asUInt
+        refillLastBank = RegNext(io.cbusResp.ready && io.cbusResp.isLast)
     }
-    val refillOneBankEn = RegNext(refillBufWriteEn) && refillBufCnt === 0.U
 
-//-----------------------------------------------------------------------
-    for(i <- 0 until iParams.nWays){
-        val writeEn = (refillOneBeat && !invalidated) && replWay === i.U
-
-        val memIdx0 = Mux(refillOneBeat,
+    val refillCnt = RegInit(0.U(log2Ceil(refillCycles).W))
+    when (refillOneBankEn) {
+        refillCnt := refillCnt + 1.U
+    }
+    
+    for (i <- 0 until iParams.nWays) {
+        val dataArray0Idx = Mux(
+            refillOneBankEn,
             ((refillIdx << (log2Ceil(refillCycles) - 1)) | (refillCnt >> 1.U)),
             b0Row(s0_vaddr)
         )
-        val memIdx1 = Mux(refillOneBeat,
+        val dataArray1Idx = Mux(
+            refillOneBankEn,
             ((refillIdx << (log2Ceil(refillCycles) - 1)) | (refillCnt >> 1.U)),
             b1Row(s0_vaddr)
         )
-
-        when (writeEn && refillCnt(0) === 0.U){
-            dataArrayB0(i).write(memIdx0,io.cbusResp.data)
-        }
-        when (writeEn && refillCnt(0) === 1.U){
-            dataArrayB1(i).write(memIdx1,io.cbusResp.data)
-        }
-
+        // read data
         s1_dataOut(i) := Cat(
-            dataArrayB1(i).read(memIdx1, s0_valid),
-            dataArrayB0(i).read(memIdx0, s0_valid)
+            dataArrayB1(i).read(dataArray0Idx, s0_valid),
+            dataArrayB0(i).read(dataArray1Idx, s0_valid)
+        )
+        // write data
+        val writeEn = (refillOneBankEn && !invalidated) && replWay === i.U
+        when (writeEn && refillCnt(0) === 0.U) {
+            dataArrayB0(i).write(dataArray0Idx, refillOneBankData)
+        }
+        when (writeEn && refillCnt(0) === 1.U) {
+            dataArrayB1(i).write(dataArray1Idx, refillOneBankData)
+        }
+    }
+    when(refillLastBank){
+        tagArray.write(
+            refillIdx,
+            VecInit(
+                Seq.fill(iParams.nWays)(refillTag)),
+                Seq.tabulate(iParams.nWays)(replWay === _.U
+            )
         )
     }
-
-    when (!refillValid) { invalidated := false.B }
-    when (refillFire) { refillValid := true.B }
-    when (refillDone) { refillValid := false.B }
-
+    when(refillOneBeat){
+        validArray := validArray.bitSet(
+            Cat(replWay, refillIdx), refillLastBank && !invalidated
+        )
+    }
+//========== --Refill Logic-- ==========
 /*---------------------------------------------------------------------*/
 //========== ----- FSM  ----- ==========
     when (iCacheState === s_Normal) {
         iCacheState := Mux(s2_miss && !io.s2_kill, s_Fetch, s_Normal)
     } .elsewhen (iCacheState === s_Fetch) {
-        iCacheState := Mux(refillDone, s_Normal, s_Fetch)
+        iCacheState := Mux(refillLastBank, s_Normal, s_Fetch)
     } .otherwise {
         iCacheState := iCacheState
     }
