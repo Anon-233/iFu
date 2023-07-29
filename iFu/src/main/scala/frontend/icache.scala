@@ -6,6 +6,7 @@ import chisel3.util.random.LFSR
 
 import iFu.common._
 import iFu.frontend.FrontendUtils._
+import iFu.common.Consts._
 
 class ICacheReq extends CoreBundle {
   val addr = UInt(vaddrBits.W)
@@ -26,8 +27,8 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         val resp = Valid(new ICacheResp)
         val invalidate = Input(Bool())
 
-        val cbusResp = Input(new CbusResp)
-        val cbusReq = Output(new CbusReq)
+        val cbusResp = Input(new iCBusResp)
+        val cbusReq = Output(new iCBusReq)
     })
 /*---------------------------------------------------------------------*/
 //========== ----i$ params--- ==========
@@ -241,11 +242,12 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 
     io.cbusReq.valid := (s2_miss && !io.s2_kill) || (iCacheState === s_Fetch)
     io.cbusReq.isStore := false.B
-    io.cbusReq.size := 1.U
+    io.cbusReq.size := MSIZE4
     io.cbusReq.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
     io.cbusReq.mask := 0.U
-    io.cbusReq.axiBurstType := 1.U
-    io.cbusReq.axiLen := refillCycles.U
+    io.cbusReq.axiBurstType := AXI_BURST_INCR
+    io.cbusReq.axiLen := MLEN16
+    require(iParams.lineBytes == 64)
 //========== ------ IO ------ ==========
 /*---------------------------------------------------------------------*/
 }
