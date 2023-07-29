@@ -1,7 +1,7 @@
 package iFu.backend
 
 import chisel3._
-import chisel3.util.BitPat
+import chisel3.util._
 import chisel3.util.experimental.decode._
 
 object DecodeLogic {
@@ -20,7 +20,7 @@ object DecodeLogic {
         val signalIdxs = signalWidths.scan(totalWidth-1){ (l,r) => l-r}
         //返回译码结果
         val decoded = apply(instr, default.reduce(_ ## _), mapping.map { case (inst, signals) => (inst, signals.reduce(_ ## _)) })
-            //将译码结果转换为Seq[BitPat]
+        //将译码结果转换为Seq[BitPat]
         signalIdxs.zip(signalIdxs.tail).map { case (lidx, ridx) => decoded(lidx, ridx + 1) }.toList
     }
 }

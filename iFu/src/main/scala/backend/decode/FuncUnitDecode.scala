@@ -1,29 +1,15 @@
-package backend.decode
+package iFu.backend
 
-import backend.decode.FunUDConsts._
-import backend.decode.XDecode._
-import backend.decode.common.{immS12, immS14, immS16, immS20, immS26, immU12, immU20, immU5, immX}
 import chisel3._
 import chisel3.util._
-import iFu.backend.{AluFuncCode, DecodeLogic, DivFuncCode, MultFuncCode}
-import iFu.common.{CoreBundle, CoreModule, MicroOp, MicroOpCode}
-/**
- * Control signal bundle for register renaming
- */
+
+import iFu.common._
+import iFu.common.Consts._
+
 //TODO 增加CSR相关指令，IDLE，RDCNT等
 
-object FunUDConsts
-{
+object FunUDConsts {
     // Branch Type
-    val BR_N = 0.U(4.W) // Next 存疑
-    val BR_NE = 1.U(4.W) // Branch on NotEqual
-    val BR_EQ = 2.U(4.W) // Branch on Equal
-    val BR_GE = 3.U(4.W) // Branch on Greater/Equal
-    val BR_GEU = 4.U(4.W) // Branch on Greater/Equal Unsigned
-    val BR_LT = 5.U(4.W) // Branch on Less Than
-    val BR_LTU = 6.U(4.W) // Branch on Less Than Unsigned
-    val BR_J = 7.U(4.W) // Jump
-    val BR_JR = 8.U(4.W) // Jump Register
 
     // RS1 Operand Select Signal
     val OP1_RS1 = 0.U(2.W) // Register Source #1

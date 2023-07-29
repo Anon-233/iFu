@@ -3,12 +3,12 @@ package iFu.backend
 import chisel3._
 import chisel3.util._
 
+import iFu.isa.Instructions._
 import iFu.common._   
-import frontend.isa.Instructions._
 import iFu.common.Consts._
-//TODO 合并常量
-//TODO 修改isRet和isCall
+
 //TODO 增加PCADDIW等与PC有关的指令
+
 trait PreDecodeTable {
     val default = List[BitPat](N,N,N,N,X)
     val table:Array[(BitPat,List[BitPat])] = Array[(BitPat,List[BitPat])](
@@ -42,12 +42,12 @@ trait PreDecodeTable {
         OR                 ->List(N, N, N, Y, Y),
         XOR                ->List(N, N, N, Y, Y),
         NOR                ->List(N, N, N, Y, Y),
-
         ANDI               ->List(N, N, N, Y, N),
         ORI                ->List(N, N, N, Y, N),
         XORI               ->List(N, N, N, Y, N),
         ANDN               ->List(N, N, N, Y, Y),
         ORN                ->List(N, N, N, Y, Y),
+
         SLLW               ->List(N, N, N, Y, Y),
         SRLW               ->List(N, N, N, Y, Y),
         SRAW               ->List(N, N, N, Y, Y),
@@ -57,71 +57,75 @@ trait PreDecodeTable {
     )
 }
 
-class PreDecodeSignals extends CoreBundle with PreDecodeConsts{
+class PreDecodeSignals extends CoreBundle {
     val isRet       = Bool()
     val isCall      = Bool()
     val target      = UInt(vaddrBits.W)
     val cfiType     = UInt(CFI_SZ.W)
-    val sfbOffset   = Valid(UInt(log2Ceil(blockBytes).W))
+    val sfbOffset   = Valid(UInt(log2Ceil(blockBytes).W))   // do we need this?
     val shadowable  = Bool()
 }
-class PreDecode extends CoreModule with PreDecodeConsts {
+
+class PreDecode extends CoreModule with PreDecodeTable {
     val io = IO(new Bundle{
-        val instr   = Input(UInt(32.W))
+        val instr   = Input(UInt(coreInstrBits.W))
         val pc      = Input(UInt(vaddrBits.W))
         val out     = Output(new PreDecodeSignals)
     })
+
     //TODO 换成asBool
-    val bpdSignals  = DecodeLogic(io.inst,default,table)
-    val isBr        = bpdSignals(0)(0)
-    val isJal       = bpdSignals(1)(0)
-    val isJalr      = bpdSignals(2)(0)
+    val bpdSignals = DecodeLogic(io.inst, default, table)
+
+    val isBr          = bpdSignals(0)(0)
+    val isJal         = bpdSignals(1)(0)
+    val isJalr        = bpdSignals(2)(0)
     val isShadowable  = bpdSignals(3)(0)
-    val hasRs2      = bpdSignals(4)(0)
+    val hasRs2        = bpdSignals(4)(0)
 
     /**
      * isRet的情况：
-     *      1.为JIRL指令
-     *      2.rd=0，rj=1
-     *      3立即数值为0
+     *      1. 为JIRL指令
+     *      2. rd=0 rj=1
+     *      3. 立即数值为0
      */
-    io.out.isRet := isJalr &&
-            io.inst(4,0) === BitPat("b00000") &&
-            io.inst(9,5) === BitPat("b00001") &&
-            io.inst(25,10) === 0.U
-
+    io.out.isRet := (isJalr && io.inst(4,0) === 0.U && io.inst(9,5) === 1.U && io.inst(25,10) === 0.U)
     /**
      * isCall的情况：为BL指令
      */
-    io.out.isCall := isJal && io.inst(26) === BitPat("b1")
-    //target输出一个32位的地址，结果要进行对齐
-    io.out.target := ((Mux(isBr,
-        Cat(Fill(14,io.inst(25)),io.inst(25,10),0.U(2.W)),
-        Cat(Fill(4,io.inst(9)),io.inst(9,0),io.inst(25,10),0.U(2.W))).asSInt + io.pc.asSInt).asSInt & (-4).S).asUInt
-    io.out.cfiType := Mux(isBr,CFI_BR,
-            Mux(isJal,CFI_JAL,
-            Mux(isJalr,CFI_JALR,CFI_X)))
-    val brOffset = Cat(io.inst(25,10),0.U(2.W))
+    io.out.isCall := isJal && io.inst(26)
+
+    // target输出一个32位的地址
+    io.out.target := ((
+        Mux(isBr, 
+            Cat(Fill(14, io.inst(25)), io.inst(25,10), 0.U(2.W)),
+            Cat(Fill(4, io.inst(9)), io.inst(9,0), io.inst(25,10), 0.U(2.W))
+        ).asSInt + io.pc.asSInt).asSInt & (-4).S).asUInt
+
+    io.out.cfiType := Mux(isBr,   CFI_BR,
+                      Mux(isJal,  CFI_JAL,
+                      Mux(isJalr, CFI_JALR,
+                                  CFI_X)))
+
+    val brOffset = Cat(io.inst(25,10), 0.U(2.W))
+
     /**
-        是否是sfb:
-            1.是条件分支指令
-            2.偏移量为正值
-            3.偏移量不为0
-            4.偏移量在一个Cacheline内
+     *  是否是sfb:
+     *      1. 是条件分支指令
+     *      2. 偏移量为正值
+     *      3. 偏移量不为0
+     *      4. 偏移量在一个Cacheline内
      */
     io.out.sfbOffset.valid := isBr &&
             !io.inst(25) &&
             brOffset =/= 0.U &&
-            brOffset(17,log2Ceil(blockBytes)) === 0.U
-//            (brOffset >> log2Ceil(blockBytes)) === 0.U
-    io.out.sfbOffset.bits   := brOffset
+            brOffset(17, log2Ceil(blockBytes)) === 0.U
+
+    io.out.sfbOffset.bits := brOffset
 
     /**
-        shadowable的条件：
-            1.指令本身是可以shadowable的
-            2.没有RS2或者（RD==RS1）或者（为ADDW指令并且RS2=0）
+     *  shadowable的条件：
+     *      1. 指令本身是可以shadowable的
+     *      2. 没有 RS2 或者 RD == RS1
      */
-    io.out.shadowable   := isShadowable &&
-            (!hasRs2 ||
-            (io.inst(9,5) === io.inst(4,0)))
+    io.out.shadowable   := isShadowable && (!hasRs2 || (io.inst(9,5) === io.inst(4,0)))
 }

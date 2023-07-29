@@ -1,4 +1,4 @@
-package frontend.isa
+package iFu.isa
 
 import chisel3.util.BitPat
 
