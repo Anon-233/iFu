@@ -22,6 +22,7 @@ class ICacheParameters {
     val tagBits: Int      = 32 - untagBits
     val bankBytes: Int    = 4 * 4
     val banksPerLine: Int = lineBytes / bankBytes
+    require(isPow2(banksPerLine))
 }
 
 class FrontendParameters{

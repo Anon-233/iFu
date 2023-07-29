@@ -178,7 +178,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         refillLastBank = RegNext(io.cbusResp.ready && io.cbusResp.isLast)
     }
 
-    val refillCnt = RegInit(0.U(log2Ceil(refillCycles).W))
+    val refillCnt = RegInit(0.U(log2Ceil(iParams.banksPerLine).W))
     when (refillOneBankEn) {
         refillCnt := refillCnt + 1.U
     }
@@ -186,12 +186,12 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     for (i <- 0 until iParams.nWays) {
         val dataArray0Idx = Mux(
             refillOneBankEn,
-            ((refillIdx << (log2Ceil(refillCycles) - 1)) | (refillCnt >> 1.U)),
+            ((refillIdx << (log2Ceil(iParams.banksPerLine) - 1)) | (refillCnt >> 1.U)),
             b0Row(s0_vaddr)
         )
         val dataArray1Idx = Mux(
             refillOneBankEn,
-            ((refillIdx << (log2Ceil(refillCycles) - 1)) | (refillCnt >> 1.U)),
+            ((refillIdx << (log2Ceil(iParams.banksPerLine) - 1)) | (refillCnt >> 1.U)),
             b1Row(s0_vaddr)
         )
         // read data
@@ -217,11 +217,11 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
             )
         )
     }
-    when(refillOneBeat){
-        validArray := validArray.bitSet(
-            Cat(replWay, refillIdx), refillLastBank && !invalidated
-        )
-    }
+
+    validArray := validArray.bitSet(
+        Cat(replWay, refillIdx), refillLastBank && !invalidated
+    )
+
 //========== --Refill Logic-- ==========
 /*---------------------------------------------------------------------*/
 //========== ----- FSM  ----- ==========
@@ -240,7 +240,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     io.resp.bits.data := s2_data
 
     io.cbusReq.valid := (s2_miss && !io.s2_kill) || (iCacheState === s_Fetch)
-    io.cbusReq.bits.isWrite := false.B
+    io.cbusReq.bits.isStore := false.B
     io.cbusReq.bits.size := 1.U
     io.cbusReq.bits.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
     io.cbusReq.bits.mask := 0.U
