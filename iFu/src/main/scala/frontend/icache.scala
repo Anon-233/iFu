@@ -230,8 +230,7 @@ class ICache(val iParams : ICacheParameters
     val s2HitWay = OHToUInt(s2TagHit)
     val s2Bankid = RegNext(s1Bankid)
     val s2WayMux = Mux1H(s2TagHit,s2Dout)
-
-    val s2UnbankedData = s2WayMux
+    
     val sz = s2WayMux.getWidth
     val s2Bank0Data = s2WayMux(sz/2-1, 0)
     val s2Bank1Data = s2WayMux(sz-1,sz/2)
@@ -261,8 +260,7 @@ class ICache(val iParams : ICacheParameters
     io.cbusReq.bits.mask := 0.U
     io.cbusReq.bits.axiBurstType := 1.U
     io.cbusReq.bits.axiLen := iParams.refillCycles.U
-    
-    //io.perf.acquire := tl_out.a.fire
+
 
     when (!refillValid) { invalidated := false.B }
     when (refillFire) { refillValid := true.B }
