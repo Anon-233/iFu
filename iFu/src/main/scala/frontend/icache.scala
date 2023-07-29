@@ -156,8 +156,10 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         invalidated := true.B
     }
 //-----------------------------------------------------------------------
-    val refillPaddr = RegEnable(io.s1_paddr, s1_valid && !(refillValid || s2_miss))
-    when ()
+    val refillPaddr = RegEnable(
+        io.s1_paddr,
+        s1_valid && !(refillValid || s2_miss)
+    )
 
     val refillBufCnt = RegInit(0.U(log2Ceil(refillCycles / nBanks).W))
     val refillBuf = RegInit(
