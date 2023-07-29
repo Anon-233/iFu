@@ -2,15 +2,17 @@ package iFu.frontend
 
 import chisel3._
 import chisel3.util._
+import iFu.common._
+import iFu.frontend.FrontendUtils._
 
 
-class BranchPredictionRequest(implicit p: Parameters) extends BoomBundle()(p)
+class BranchPredictionRequest extends CoreBundle
 {
-  val pc    = UInt(vaddrBitsExtended.W)
-  val ghist = new GlobalHistory
+  val pc    = UInt(vaddrBits.W)
+  val gHist = new GlobalHistory
 }
 
-class BranchPredictor(implicit p: Parameters) extends Module()(p)
+class BranchPredictor extends CoreModule
  with HasBPUParameters
 {
   val io = IO(new Bundle {
@@ -31,9 +33,7 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
 
   })
 
-  val bankedPredictors = (0 until nBanks) map ( b => {
-    val m = Module(new BankedPredictor)
-  })
+  val bankedPredictors = Vec(nBanks, Module(new BankedPredictor))
 
 
 
@@ -61,11 +61,11 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
       bankedPredictors(1).io.f0mask  := fetchMask(io.f0req.bits.pc)
     }
     when (RegNext(bank(io.f0req.bits.pc) === 0.U)) {
-      bankedPredictors(0).io.f1ghist  := RegNext(io.f0req.bits.ghist.histories(0))
-      bankedPredictors(1).io.f1ghist  := RegNext(io.f0req.bits.ghist.histories(1))
+      bankedPredictors(0).io.f1ghist  := RegNext(io.f0req.bits.gHist.histories(0))
+      bankedPredictors(1).io.f1ghist  := RegNext(io.f0req.bits.gHist.histories(1))
     } .otherwise {
-      bankedPredictors(0).io.f1ghist  := RegNext(io.f0req.bits.ghist.histories(1))
-      bankedPredictors(1).io.f1ghist  := RegNext(io.f0req.bits.ghist.histories(0))
+      bankedPredictors(0).io.f1ghist  := RegNext(io.f0req.bits.gHist.histories(1))
+      bankedPredictors(1).io.f1ghist  := RegNext(io.f0req.bits.gHist.histories(0))
     }
   }
 
@@ -87,37 +87,37 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
 
     when (bank(io.resp.f1.pc) === 0.U) {
       for (i <- 0 until bankWidth) {
-        io.resp.f1.preds(i)           := bankedPredictors(0).io.resp.f1(i)
-        io.resp.f1.preds(i+bankWidth) := bankedPredictors(1).io.resp.f1(i)
+        io.resp.f1.predInfos(i)           := bankedPredictors(0).io.resp.f1(i)
+        io.resp.f1.predInfos(i+bankWidth) := bankedPredictors(1).io.resp.f1(i)
       }
     } .otherwise {
       for (i <- 0 until bankWidth) {
-        io.resp.f1.preds(i)           := bankedPredictors(1).io.resp.f1(i)
-        io.resp.f1.preds(i+bankWidth) := bankedPredictors(0).io.resp.f1(i)
+        io.resp.f1.predInfos(i)           := bankedPredictors(1).io.resp.f1(i)
+        io.resp.f1.predInfos(i+bankWidth) := bankedPredictors(0).io.resp.f1(i)
       }
     }
 
     when (bank(io.resp.f2.pc) === 0.U) {
       for (i <- 0 until bankWidth) {
-        io.resp.f2.preds(i)           := bankedPredictors(0).io.resp.f2(i)
-        io.resp.f2.preds(i+bankWidth) := bankedPredictors(1).io.resp.f2(i)
+        io.resp.f2.predInfos(i)           := bankedPredictors(0).io.resp.f2(i)
+        io.resp.f2.predInfos(i+bankWidth) := bankedPredictors(1).io.resp.f2(i)
       }
     } .otherwise {
       for (i <- 0 until bankWidth) {
-        io.resp.f2.preds(i)           := bankedPredictors(1).io.resp.f2(i)
-        io.resp.f2.preds(i+bankWidth) := bankedPredictors(0).io.resp.f2(i)
+        io.resp.f2.predInfos(i)           := bankedPredictors(1).io.resp.f2(i)
+        io.resp.f2.predInfos(i+bankWidth) := bankedPredictors(0).io.resp.f2(i)
       }
     }
 
     when (bank(io.resp.f3.pc) === 0.U) {
       for (i <- 0 until bankWidth) {
-        io.resp.f3.preds(i)           := bankedPredictors(0).io.resp.f3(i)
-        io.resp.f3.preds(i+bankWidth) := bankedPredictors(1).io.resp.f3(i)
+        io.resp.f3.predInfos(i)           := bankedPredictors(0).io.resp.f3(i)
+        io.resp.f3.predInfos(i+bankWidth) := bankedPredictors(1).io.resp.f3(i)
       }
     } .otherwise {
       for (i <- 0 until bankWidth) {
-        io.resp.f3.preds(i)           := bankedPredictors(1).io.resp.f3(i)
-        io.resp.f3.preds(i+bankWidth) := bankedPredictors(0).io.resp.f3(i)
+        io.resp.f3.predInfos(i)           := bankedPredictors(1).io.resp.f3(i)
+        io.resp.f3.predInfos(i+bankWidth) := bankedPredictors(0).io.resp.f3(i)
       }
     }
   }
@@ -172,8 +172,8 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
       bankedPredictors(0).io.update.bits.cfiIdx.valid := io.update.bits.cfiIdx.valid && io.update.bits.cfiIdx.bits < bankWidth.U
       bankedPredictors(1).io.update.bits.cfiIdx.valid := io.update.bits.cfiIdx.valid && io.update.bits.cfiIdx.bits >= bankWidth.U
 
-      bankedPredictors(0).io.update.bits.ghist := io.update.bits.gHist.histories(0)
-      bankedPredictors(1).io.update.bits.ghist := io.update.bits.gHist.histories(1)
+      bankedPredictors(0).io.update.bits.gHist := io.update.bits.gHist.histories(0)
+      bankedPredictors(1).io.update.bits.gHist := io.update.bits.gHist.histories(1)
     } .otherwise {
       val b0UpdateValid = io.update.valid && !mayNotBeDualBanked(io.update.bits.pc) &&
         (!io.update.bits.cfiIdx.valid || io.update.bits.cfiIdx.bits >= bankWidth.U)
@@ -194,8 +194,8 @@ class BranchPredictor(implicit p: Parameters) extends Module()(p)
       bankedPredictors(1).io.update.bits.cfiIdx.valid := io.update.bits.cfiIdx.valid && io.update.bits.cfiIdx.bits < bankWidth.U
       bankedPredictors(0).io.update.bits.cfiIdx.valid := io.update.bits.cfiIdx.valid && io.update.bits.cfiIdx.bits >= bankWidth.U
 
-      bankedPredictors(1).io.update.bits.ghist := io.update.bits.gHist.histories(0)
-      bankedPredictors(0).io.update.bits.ghist := io.update.bits.gHist.histories(1)
+      bankedPredictors(1).io.update.bits.gHist := io.update.bits.gHist.histories(0)
+      bankedPredictors(0).io.update.bits.gHist := io.update.bits.gHist.histories(1)
     }
 
   }

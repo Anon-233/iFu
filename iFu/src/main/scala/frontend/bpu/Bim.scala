@@ -2,6 +2,8 @@ package iFu.frontend
 
 import chisel3._
 import chisel3.util._
+import iFu.frontend.FrontendUtils._
+import iFu.util._
 
 
 

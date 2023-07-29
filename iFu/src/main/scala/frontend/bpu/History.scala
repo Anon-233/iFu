@@ -2,7 +2,8 @@ package iFu.frontend
 
 import chisel3._
 import chisel3.util._
-
+import iFu.frontend.FrontendUtils._
+import iFu.util._
 import scala.math.min
 
 class GlobalHistory extends Bundle  with HasBPUParameters{

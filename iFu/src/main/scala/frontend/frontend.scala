@@ -236,7 +236,7 @@ class Frontend extends CoreModule{
 
     bpd.io.f0req.valid      := s0_valid
     bpd.io.f0req.bits.pc    := s0_vpc
-    bpd.io.f0req.bits.ghist := s0_ghist
+    bpd.io.f0req.bits.gHist := s0_ghist
 
     // --------------------------------------------------------
     // **** ICache Access (F1) ****

@@ -6,18 +6,18 @@ import chisel3.util._
 import iFu.common._
 
 class Ras extends CoreModule {
-    val nRasEntries = frontendParams.bpdParams.nRasEntries
+    val numRasEntries = frontendParams.bpdParams.numRasEntries
 
     val io = IO(new Bundle {
-        val read_idx    = Input(UInt(log2Ceil(nRasEntries).W))
+        val read_idx    = Input(UInt(log2Ceil(numRasEntries).W))
         val read_addr   = Output(UInt(vaddrBits.W))
 
         val write_valid = Input(Bool())
-        val write_idx   = Input(UInt(log2Ceil(nRasEntries).W))
+        val write_idx   = Input(UInt(log2Ceil(numRasEntries).W))
         val write_addr  = Input(UInt(vaddrBits.W))
     })
 
-    val ras = Reg(Vec(nRasEntries, UInt(vaddrBits.W)))
+    val ras = Reg(Vec(numRasEntries, UInt(vaddrBits.W)))
 
     io.read_addr := Mux(
         RegNext(io.write_valid && io.write_idx === io.read_idx), RegNext(io.write_addr),
