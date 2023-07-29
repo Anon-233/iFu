@@ -26,7 +26,6 @@ object DescribedSRAM {
     }
 }
 class CbusReq extends Bundle{
-    val valid = Bool()
     val isWrite = Bool()
     val size = UInt(2.W)
     val addr = UInt(32.W)
@@ -70,7 +69,7 @@ class ICache(val iParams : ICacheParameters
         val invalidate = Input(Bool())
 
         val cbusResp = Input(new CbusResp)
-        val cbusReq = Output(new CbusReq)
+        val cbusReq = Decoupled(new CbusReq)
     })
 
     val wordBits = frontendParams.fetchBytes * 8
@@ -90,7 +89,7 @@ class ICache(val iParams : ICacheParameters
 
     val invalidated = Reg(Bool()) //清空整个icache
     val refillValid = RegInit(false.B) 
-    val refillFire = io.cbusReq.valid //&& cbusReq.ready
+    val refillFire = io.cbusReq.valid && io.cbusReq.ready
     val s2Miss = s2Valid && !s2Hit && !RegNext(refillValid)
     val refillPaddr = RegEnable(io.s1_paddr , s1Valid && !(refillValid || s2Miss))
     val refillTag = refillPaddr(iParams.tagBits + iParams.untagBits-1,iParams.untagBits)
@@ -142,7 +141,7 @@ class ICache(val iParams : ICacheParameters
     }
     
     val ramDepth = if(refillsToOneBank){
-        iParams.nSets * iParams.refillCycles /2
+        iParams.nSets * iParams.refillCycles /2 //TODO：决定是否除以2
     }else{
         iParams.nSets * iParams.refillCycles
     }
@@ -256,12 +255,12 @@ class ICache(val iParams : ICacheParameters
     //tl_out.e.valid := false.B
 
     io.cbusReq.valid := s2Miss && !refillValid && !io.s2_kill
-    io.cbusReq.isWrite := false.B
-    io.cbusReq.size := 1.U(2.W)
-    io.cbusReq.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
-    io.cbusReq.mask := 0.U
-    io.cbusReq.axiBurstType := 1.U
-    io.cbusReq.axiLen := iParams.refillCycles.U
+    io.cbusReq.bits.isWrite := false.B
+    io.cbusReq.bits.size := 1.U(2.W)
+    io.cbusReq.bits.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
+    io.cbusReq.bits.mask := 0.U
+    io.cbusReq.bits.axiBurstType := 1.U
+    io.cbusReq.bits.axiLen := iParams.refillCycles.U
     
     //io.perf.acquire := tl_out.a.fire
 
