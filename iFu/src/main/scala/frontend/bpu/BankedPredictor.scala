@@ -74,7 +74,6 @@ class BranchPredictionBundle extends Bundle with HasBPUParameters{
     val pc = UInt(vaddrBits.W)
     val predInfos = (Vec(fetchWidth, new PredictionInfo))
     val meta = Vec(nBanks,new PredictionMeta)
-    val lhist = Vec(nBanks,UInt(localHistoryLength.W))
 }
 
 
@@ -109,7 +108,6 @@ class BranchPredictionUpdate extends Bundle with HasBPUParameters{
     //val cfi_is_ret  = Bool()
 
     val gHist = new GlobalHistory
-    val lHist = Vec(nBanks, UInt(localHistoryLength.W))
 
     // What did this CFI jump to?
     val target        = UInt(vaddrBits.W)
@@ -150,7 +148,6 @@ class BankedUpdateInfo extends Bundle with HasBPUParameters{
     //val cfi_is_ret  = Bool()
 
     val gHist = new GlobalHistory
-    val lhist =  UInt(localHistoryLength.W)
 
 
     // What did this CFI jump to?
