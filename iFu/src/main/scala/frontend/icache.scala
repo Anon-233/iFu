@@ -7,32 +7,13 @@ import chisel3.util.random.LFSR
 import iFu.common._
 import iFu.frontend.FrontendUtils._
 
-class CbusReq extends Bundle {
-    val isWrite = Bool()
-    val size = UInt(2.W)
-    val addr = UInt(32.W)
-    val data = UInt(32.W)
-    val mask = UInt(16.W)
-    val axiBurstType = UInt(2.W)
-    val axiLen = UInt(8.W)
-}
-
-class CbusResp extends Bundle {
-    val data = UInt(32.W)
-    val isLast = Bool()
-    val ready = Bool()
-}
-
-//ICache的输出
-class ICacheResp extends CoreBundle {
-    val data = UInt((frontendParams.fetchBytes*8).W)
-}
-
-
 class ICacheReq extends CoreBundle {
   val addr = UInt(vaddrBits.W)
 }
 
+class ICacheResp extends CoreBundle {
+    val data = UInt((frontendParams.fetchBytes*8).W)
+}
 
 class ICache(val iParams : ICacheParameters) extends CoreModule {
     val io = IO(new Bundle{
@@ -49,6 +30,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         val cbusReq = Decoupled(new CbusReq)
     })
 /*---------------------------------------------------------------------*/
+    val nBanks = iParams.nBanks
     val refillCycles = iParams.lineBytes / io.cbusResp.data.getWidth
     require(
         iParams.lineBytes % io.cbusResp.data.getWidth == 0,
@@ -62,6 +44,8 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     def b1Row(addr: UInt) =
         addr(iParams.untagBits - 1, log2Ceil(iParams.bankBytes))
 /*---------------------------------------------------------------------*/
+    val s_Normal :: s_Fetch :: Nil = Enum(2)
+    val iCacheState = RegInit(s_Normal)
     val replWay = LFSR(16, refillFire)(log2Ceil(iParams.nWays) - 1, 0)
     val validArray = RegInit(0.U((iParams.nSets * iParams.nWays).W))
     val tagArray = SyncReadMem(
@@ -72,13 +56,13 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         (0 until iParams.nWays).map{
             x => SyncReadMem(
                 iParams.nSets,
-                UInt((packetBits / iParams.nBanks).W)
+                UInt((packetBits / nBanks).W)
             )
         } ++
         (0 until iParams.nWays).map{
             x => SyncReadMem(
                 iParams.nSets,
-                UInt((packetBits / iParams.nBanks).W)
+                UInt((packetBits / nBanks).W)
             )
         }
     val dataArrayB0 = dataArrays.take(iParams.nWays)
@@ -143,8 +127,8 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val invalidated = Reg(Bool())
     val refillValid = RegInit(false.B)
     val refillFire = io.cbusReq.fire
-    val s2Miss = s2_valid && !s2_hit && !RegNext(refillValid)
-    val refillPaddr = RegEnable(io.s1_paddr , s1_valid && !(refillValid || s2Miss))
+    val s2_miss = s2_valid && !s2_hit && (iCacheState === s_Normal)
+
     val refillTag = refillPaddr(iParams.tagBits + iParams.untagBits-1,iParams.untagBits)
     val refillIdx = refillPaddr(iParams.untagBits-1,iParams.offsetBits)
     val refillOneBeat = io.cbusReq.valid && io.cbusResp.ready
@@ -171,6 +155,20 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         validArray := 0.U
         invalidated := true.B
     }
+//-----------------------------------------------------------------------
+    val refillPaddr = RegEnable(io.s1_paddr, s1_valid && !(refillValid || s2_miss))
+    when ()
+
+    val refillBufCnt = RegInit(0.U(log2Ceil(refillCycles / nBanks).W))
+    val refillBuf = RegInit(
+        VecInit(Seq.fill(refillCycles / nBanks)(0.U((packetBits / refillCycles).W)))
+    )
+    val refillBufWriteEn = io.cbusReq.valid && io.cbusResp.ready
+    when (refillBufWriteEn) {
+        refillBufCnt := refillBufCnt + 1.U
+        refillBuf(refillBufCnt) := io.cbusResp.data
+    }
+    val refillOneBankEn = RegNext(refillBufWriteEn) && refillBufCnt === 0.U
 
 //-----------------------------------------------------------------------
     for(i <- 0 until iParams.nWays){
@@ -204,10 +202,8 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 
 /*---------------------------------------------------------------------*/
 //========== ----- FSM  ----- ==========
-    val s_Normal :: s_Fetch :: Nil = Enum(2)
-    val iCacheState = RegInit(s_Normal)
     when (iCacheState === s_Normal) {
-        iCacheState := Mux(s2Miss && !io.s2_kill, s_Fetch, s_Normal)
+        iCacheState := Mux(s2_miss && !io.s2_kill, s_Fetch, s_Normal)
     } .elsewhen (iCacheState === s_Fetch) {
         iCacheState := Mux(refillDone, s_Normal, s_Fetch)
     } .otherwise {
@@ -220,7 +216,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     io.resp.valid := s2_valid && s2_hit
     io.resp.bits.data := s2_data
 
-    io.cbusReq.valid := (s2Miss && !io.s2_kill) || (iCacheState === s_Fetch)
+    io.cbusReq.valid := (s2_miss && !io.s2_kill) || (iCacheState === s_Fetch)
     io.cbusReq.bits.isWrite := false.B
     io.cbusReq.bits.size := 1.U
     io.cbusReq.bits.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
