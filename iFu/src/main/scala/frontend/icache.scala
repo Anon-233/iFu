@@ -27,7 +27,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         val invalidate = Input(Bool())
 
         val cbusResp = Input(new CbusResp)
-        val cbusReq = Decoupled(new CbusReq)
+        val cbusReq = Output(new CbusReq)
     })
 /*---------------------------------------------------------------------*/
 //========== ----i$ params--- ==========
@@ -240,12 +240,12 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     io.resp.bits.data := s2_data
 
     io.cbusReq.valid := (s2_miss && !io.s2_kill) || (iCacheState === s_Fetch)
-    io.cbusReq.bits.isStore := false.B
-    io.cbusReq.bits.size := 1.U
-    io.cbusReq.bits.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
-    io.cbusReq.bits.mask := 0.U
-    io.cbusReq.bits.axiBurstType := 1.U
-    io.cbusReq.bits.axiLen := refillCycles.U
+    io.cbusReq.isStore := false.B
+    io.cbusReq.size := 1.U
+    io.cbusReq.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
+    io.cbusReq.mask := 0.U
+    io.cbusReq.axiBurstType := 1.U
+    io.cbusReq.axiLen := refillCycles.U
 //========== ------ IO ------ ==========
 /*---------------------------------------------------------------------*/
 }
