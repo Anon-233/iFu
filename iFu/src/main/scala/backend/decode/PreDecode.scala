@@ -1,13 +1,14 @@
 package iFu.backend
 
-import iFu.common.{CoreBundle, CoreModule}
 import chisel3._
 import chisel3.util._
 
+import iFu.common._   
 import frontend.isa.Instructions._
 import iFu.common.Consts._
 //TODO 合并常量
 //TODO 修改isRet和isCall
+//TODO 增加PCADDIW等与PC有关的指令
 trait PreDecodeTable {
     val default = List[BitPat](N,N,N,N,X)
     val table:Array[(BitPat,List[BitPat])] = Array[(BitPat,List[BitPat])](
