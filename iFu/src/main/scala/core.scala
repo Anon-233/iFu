@@ -15,8 +15,8 @@ import iFu.util._
 class Core extends CoreModule {
     val io = IO(new CoreBundle {
         //        val interrupts = Input(new freechips.rocketchip.tile.CoreInterrupts())
-        val ifu = new boom.ifu.BoomFrontendIO //TODO 添加到core中
-        val lsu = Flipped(new boom.lsu.LSUCoreIO)
+        val ifu = new FrontendToCPUIO //TODO 添加到core中
+        val lsu = Flipped(new LSUCoreIO)
         //        val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
     })
     //**********************************
