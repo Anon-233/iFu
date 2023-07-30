@@ -2,6 +2,7 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
+import iFu.common._
 
 class DivFuncCode {
     val SZ_DIV_FN = 4
