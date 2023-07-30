@@ -60,15 +60,15 @@ abstract class AbsIssueUnit (
     
     for (w <- 0 until dispatchWidth) {
         disUops(w) := io.disUops(w).bits
-        disUops(w).iw_state := s_valid_1
-        disUops(w).iw_p1_poinsoned := false.B
-        disUops(w).iw_p2_poinsoned := false.B
+        disUops(w).iwState := s_valid_1
+        disUops(w).iw_p1_poisoned := false.B
+        disUops(w).iw_p2_poisoned := false.B
 
         when (
             (io.disUops(w).bits.uopc === uopSTA) ||
             (io.disUops(w).bits.uopc === uopAMO_AG)
         ) {
-            disUops(w).iw_state := s_valid_2
+            disUops(w).iwState := s_valid_2
         }
 
         if (iqType == IQT_MEM.litValue) {
