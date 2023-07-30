@@ -6,6 +6,7 @@ import chisel3.util._
 import iFu.common._
 import iFu.backend._
 import iFu.frontend._
+import iFu.util._
 
 
 /**
@@ -43,7 +44,7 @@ class Core extends CoreModule {
     val dec_brmask_logic = Module(new BranchMaskGenerationLogic(coreWidth))
     val rename_stage = Module(new RenameStage(coreWidth, numIntPhysRegs, numIntRenameWakeupPorts, false))
     val pred_rename_stage = Module(new PredRenameStage(coreWidth, ftqSz, 1))
-    val rename_stages = if (usingFPU) Seq(rename_stage, fp_rename_stage, pred_rename_stage) else Seq(rename_stage, pred_rename_stage)
+    val rename_stages = Seq(rename_stage, pred_rename_stage)
 
     val mem_iss_unit = Module(new IssueUnitCollapsing(memIssueParam, numIntIssueWakeupPorts))
     mem_iss_unit.suggestName("mem_issue_unit")
@@ -152,12 +153,12 @@ class Core extends CoreModule {
     }
 
     b2.mispredict := mispredict_val
-    b2.cfi_type := oldest_mispredict.cfi_type
+    b2.cfiType := oldest_mispredict.cfiType
     b2.taken := oldest_mispredict.taken
-    b2.pc_sel := oldest_mispredict.pc_sel
+    b2.pcSel := oldest_mispredict.pcSel
     b2.uop := UpdateBrMask(brupdate, oldest_mispredict.uop)
-    b2.jalr_target := RegNext(jmp_unit.io.brinfo.jalr_target)
-    b2.target_offset := oldest_mispredict.target_offset
+    b2.jalrTarget := RegNext(jmp_unit.io.brinfo.jalr_target)
+    b2.targetOffset := oldest_mispredict.targetOffset
 
     val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftqIdx
 
@@ -201,7 +202,7 @@ class Core extends CoreModule {
 
     io.ifu.flush_icache := (0 until coreWidth).map { i =>
         (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_fencei) ||
-                (RegNext(dec_valids(i) && dec_uops(i).is_jalr && csr.io.status.debug))
+                (RegNext(dec_valids(i) && dec_uops(i).isJalr && csr.io.status.debug))
     }.reduce(_ || _)
 
 
@@ -212,7 +213,7 @@ class Core extends CoreModule {
         // Clear the global history when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
         val new_ghist = WireInit((0.U).asTypeOf(new GlobalHistory))
         new_ghist.current_saw_branch_not_taken := true.B
-        new_ghist.ras_idx := io.ifu.get_pc(0).entry.ras_idx
+        new_ghist.rasIdx := io.ifu.get_pc(0).entry.ras_idx
         io.ifu.redirect_ghist := new_ghist
         when(FlushTypes.useCsrEvec(flush_typ)) {
             io.ifu.redirect_pc := Mux(flush_typ === FlushTypes.eret,
@@ -233,10 +234,10 @@ class Core extends CoreModule {
         val uop_maybe_pc = block_pc | brupdate.b2.uop.pcLowBits
         val npc = uop_maybe_pc + Mux(brupdate.b2.uop.is_rvc || brupdate.b2.uop.edge_inst, 2.U, 4.U)
         val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
-        jal_br_target := (uop_maybe_pc.asSInt + brupdate.b2.target_offset +
+        jal_br_target := (uop_maybe_pc.asSInt + brupdate.b2.targetOffset +
                 (Fill(vaddrBitsExtended - 1, brupdate.b2.uop.edge_inst) << 1).asSInt).asUInt
-        val bj_addr = Mux(brupdate.b2.cfi_type === CFI_JALR, brupdate.b2.jalr_target, jal_br_target)
-        val mispredict_target = Mux(brupdate.b2.pc_sel === PC_PLUS4, npc, bj_addr)
+        val bj_addr = Mux(brupdate.b2.cfiType === CFI_JALR, brupdate.b2.jalrTarget, jal_br_target)
+        val mispredict_target = Mux(brupdate.b2.pcSel === PC_PLUS4, npc, bj_addr)
         io.ifu.redirect_val := true.B
         io.ifu.redirect_pc := mispredict_target
         io.ifu.redirect_flush := true.B
@@ -407,8 +408,8 @@ class Core extends CoreModule {
         dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).allocate_brtag
         dec_brmask_logic.io.will_fire(w) := dec_fire(w) &&
                 dec_uops(w).allocate_brtag // ren, dis can back pressure us
-        dec_uops(w).br_tag := dec_brmask_logic.io.br_tag(w)
-        dec_uops(w).br_mask := dec_brmask_logic.io.br_mask(w)
+        dec_uops(w).brTag := dec_brmask_logic.io.br_tag(w)
+        dec_uops(w).brMask := dec_brmask_logic.io.br_mask(w)
     }
 
     branch_mask_full := dec_brmask_logic.io.is_full
@@ -517,8 +518,8 @@ class Core extends CoreModule {
 
     for (w <- 0 until coreWidth) {
         // Dispatching instructions request load/store queue entries when they can proceed.
-        dis_uops(w).ldq_idx := io.lsu.dis_ldq_idx(w)
-        dis_uops(w).stq_idx := io.lsu.dis_stq_idx(w)
+        dis_uops(w).ldqIdx := io.lsu.dis_ldq_idx(w)
+        dis_uops(w).stqIdx := io.lsu.dis_stq_idx(w)
     }
 
     //-------------------------------------------------------------
