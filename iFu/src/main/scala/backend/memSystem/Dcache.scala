@@ -170,6 +170,8 @@ class DcacheMeta extends Module with HasDcacheParameters{
 
         val hasDirty = Output(Bool())
         val dirtyMeta = Output(new MetaLine)
+        val dirtyIdx = Output(UInt(nIdxBits.W))
+        val dirtyPos = Output(UInt(log2Ceil(nWays).W))
 
         val fenceTakeDirtyMeta = Input(Bool())//拿走一个脏行，之后就将其
 
@@ -206,11 +208,14 @@ class DcacheMeta extends Module with HasDcacheParameters{
     val dirtySet = dirtyTable.map((x:UInt) => x.orR)
     val dirtyIdx = PriorityEncoder(dirtySet)
     val dirtyPos = PriorityEncoder(dirtyTable(dirtyIdx))
+    io.dirtyIdx := dirtyIdx
+    io.dirtyPos := dirtyPos
     val cleanedMask = UInt(nWays.W)
     cleanedMask := UIntToOH(dirtyPos)
     io.hasDirty := dirtySet.reduce(_||_)
     var dirtyMeta = meta.read(dirtyIdx, true.B)(dirtyPos)
     io.dirtyMeta := dirtyMeta
+
 
     when(io.fenceTakeDirtyMeta){
         // 将这个脏行的dirty位置为0写回
@@ -546,7 +551,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // fence : 清空所有的dirty行
     val replay :: wb ::  mshrread :: lsu  :: prefetch :: nil :: fence :: Nil = Enum(7)
 
-    val fenceValid = Wire(Bool())
+    
 
     // 存储meta信息
     val meta = Module(new DcacheMeta)
@@ -570,9 +575,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     // 替换单元
     val RPU = Module(new ReplaceUnit)
+
     val rpuJustDone = Wire(Bool())
     val mshrReadValid = Wire(Bool())
     val mshrReplayValid =Wire(Bool())
+    val fenceValid = Wire(Bool())
     val prefetchValid = Wire(Bool())
 
     rpuJustDone := RPU.io.ready && RegNext(!RPU.io.ready)
@@ -585,6 +592,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     mshrs.io.replay.ready := true.B//有就接
 
     mshrReplayValid := mshrs.io.replay.valid
+
+    fenceValid := io.lsu.forceOrder
+    // 只要meta没有dirty，就可以回应fence，不需要管流水线和mshr状态（如果里面有没做完的指令，lsu肯定非空，unique仍然会停留在dispatch）
+    io.lsu.ordered := (fenceValid && !meta.io.hasDirty)
+
     // TODO prefetch
 
     prefetchValid := false.B
@@ -610,8 +622,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         Mux((mshrReplayValid), true.B,
             Mux((mshrReadValid), true.B,
                 Mux(io.lsu.req.valid, true.B,
-                    Mux((prefetchValid), true.B,
-                        Mux( fenceValid      ,true.B, false.B))))))
+                    Mux((fenceValid), true.B,
+                        Mux( prefetchValid ,true.B, false.B))))))
 
     val dontCareReq = 0.U.asTypeOf(new DCacheReq)
 
@@ -632,7 +644,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                     Mux(mshrReplayValid,    replay,
                     Mux(mshrReadValid,      mshrread,
                     Mux(io.lsu.req.valid,   lsu,
-                    Mux(
+                    Mux(fenceValid ,        fence,
                     Mux(prefetchValid,      prefetch,
                                             nil))))))
 
@@ -716,6 +728,13 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // rpuMetaWrite.req.bits.replacePos := DontCare
         // rpuDataWrite.req.bits.tag := DontCare 
 
+    }.elsewhen(s0state === fence){
+        for( w<- 0 until memWidth){
+            lsuMetaRead(w).req.valid := false.B
+        }
+
+        mshrMetaRead.req.valid := false.B
+        rpuMetaWrite.req.valid := false.B
     }.otherwise{
         for( w<- 0 until memWidth){
             lsuMetaRead(w).req.valid := false.B
@@ -830,6 +849,16 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         rpuDataWrite.req.bits.idx := s1newwbIdx
         rpuDataWrite.req.bits.wdata := s1newDataLine
         rpuDataWrite.req.bits.wayMask := 1.U << s1newAlloceWay
+    }.elsewhen(s0state === fence){
+        when(!meta.io.hasDirty) { 
+            s1state := nil 
+        }.otherwise{
+            s1replacedMetaLine := meta.io.dirtyMetaLine
+            s1replaceIdx := meta.io.dirtyIdx
+            s1replacePos := meta.io.dirtyPos
+            s1replaceAddr := Cat(meta.io.dirtyMetaLine.tag, s1replaceIdx, 0.U(nOffsetBits.W))
+        }
+         
     }
 
 
@@ -1013,8 +1042,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             sendNack := false.B
         }
 
-
-
     }.elsewhen(s2state === wb){
         // wb到此已经做好了
 
@@ -1050,9 +1077,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         io.lsu.nack(w).valid := sendNack
         io.lsu.nack(w).bits := 0.U.asTypeOf(new DCacheReq)
     }
-
-
-
 
     // TODO lr/sc
     //

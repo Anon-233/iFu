@@ -304,6 +304,7 @@ class MSHRFile extends Module with HasDcacheParameters{
     // 二表是否已满
     val secondFull = !(secondAllocatable.reduce(_ || _))
 
+
     val hasStores = Wire(Vec(nSecondMSHRs, Bool()))
     val hasStore = hasStores.reduce(_ || _)
 
@@ -327,6 +328,7 @@ class MSHRFile extends Module with HasDcacheParameters{
     // 任意一个满了，外界都不能再往里面写入新的请求
     val mshrFull = firstFull || secondFull
     io.full := mshrFull
+
 
     // 不满，并且不会再已有store的时候再存入新的store，才接收外界信号
     
