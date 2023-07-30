@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import iFu.common._
 import iFu.util._
+import iFu.common.Consts._
 
 
 class RobIO(
@@ -116,7 +117,7 @@ class DebugRobSignals extends CoreBundle
 
 class Rob(
     val numWakeupPorts: Int
-) extends CoreModule with MicroOpCode
+) extends CoreModule
 {
     val io = IO(new RobIO(numWakeupPorts))
 
