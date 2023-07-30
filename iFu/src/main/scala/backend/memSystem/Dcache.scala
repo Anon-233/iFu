@@ -1,5 +1,7 @@
 package backend.memSystem
 
+
+import iFu.common._
 import chisel3._
 import chisel3.util._
 
@@ -219,7 +221,7 @@ class DcacheMeta extends Module with HasDcacheParameters{
 
     when(io.fenceTakeDirtyMeta){
         // 将这个脏行的dirty位置为0写回
-        dirtyTable(dirtyIdx) := dirtyTable(dirtyIdx) & ~(1.U << dirtyPos)
+        dirtyTable(dirtyIdx) := dirtyTable(dirtyIdx) & (~(1.U << dirtyPos))
         dirtyMeta.dirty := false.B
         meta.write(dirtyIdx, VecInit(Seq.fill(nWays)(dirtyMeta)), cleanedMask.asBools)
     }
@@ -426,7 +428,7 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
         val newWay = Output(UInt(log2Ceil(nWays).W))
 
 
-        val isfence = Input(Bool())
+        val isFence = Input(Bool())
 
         // c线
         val cbusResp = Input(new CbusResp)
@@ -444,6 +446,7 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
     val replaceWay = RegInit(0.U(log2Ceil(nWays).W))
     val newAddr = RegInit(0.U(32.W))
     val newWay = RegInit(0.U(log2Ceil(nWays).W))
+    val isFence = RegInit(false.B)
 
     io.cbusReq.valid := state === fetch || state === wb
     io.cbusReq.isStore := state === wb
@@ -463,6 +466,7 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
             replaceAddr := io.replaceAddr
             fetchAddr := io.fetchAddr
             replaceWay := io.replaceWay
+            isFence := io.isFence
             when(io.replaceMetaLine.valid && io.replaceMetaLine.dirty){
 
                 state := wb
@@ -498,7 +502,7 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
         io.cbusReq.addr := replaceAddr
         io.cbusReq.data := dataLineBuffer(offsetIdx)
         when(io.cbusResp.ready){
-            state := Mux(io.cbusResp.isLast, Mux( io.isfence , ready ,fetch), wb)//写回完成，正常指令去fetch，是fence指令就直接回到ready
+            state := Mux(io.cbusResp.isLast, Mux( isFence , ready ,fetch), wb)//写回完成，正常指令去fetch，是fence指令就直接回到ready
             offsetIdx := Mux(io.cbusResp.isLast, 0.U, offsetIdx + 1.U)
         }
     }
@@ -781,7 +785,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s1replacedMetaLine = new MetaLine
 
 
-    io.lsu.ordered := io.lsu.forceOrder && !meta.hasDirty //只要没有dirty位,就返回forceOrder
+    io.lsu.ordered := io.lsu.forceOrder && !meta.io.hasDirty //只要没有dirty位,就返回forceOrder
 
     when(s1state === lsu  && s1valid ){
         for(w <- 0 until memWidth){
@@ -833,7 +837,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         when(mshrMetaRead.resp.valid){
             // 保存读的meta，再去读data
             s1replacedMetaLine := mshrMetaRead.resp.bits.rmeta
-            s1replacedMetaLine := mshrMetaRead.resp.bits.rmeta
             // 拼装出要被替换的行的地址(最后的offset位待定)
             s1replaceAddr := Cat(mshrMetaRead.resp.bits.rmeta.tag, s1replaceIdx, 0.U(nOffsetBits.W))
             // 接下来要去读data
@@ -850,13 +853,17 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         rpuDataWrite.req.bits.wdata := s1newDataLine
         rpuDataWrite.req.bits.wayMask := 1.U << s1newAlloceWay
     }.elsewhen(s0state === fence){
-        when(!meta.io.hasDirty) { 
+        when(!meta.io.hasDirty) {
+            //没有Dirty就不做了
             s1state := nil 
         }.otherwise{
-            s1replacedMetaLine := meta.io.dirtyMetaLine
-            s1replaceIdx := meta.io.dirtyIdx
-            s1replacePos := meta.io.dirtyPos
-            s1replaceAddr := Cat(meta.io.dirtyMetaLine.tag, s1replaceIdx, 0.U(nOffsetBits.W))
+            s1replacedMetaLine := meta.io.dirtyMeta
+            s1replaceAddr := Cat(meta.io.dirtyMeta.tag, s1replaceIdx, 0.U(nOffsetBits.W))
+            // 接下来要去读data(走的是metaread这个IO通路)
+            mshrDataRead.req.valid := s1valid
+            mshrDataRead.req.bits.idx := meta.io.dirtyIdx
+            mshrDataRead.req.bits.replacePos := meta.io.dirtyPos
+
         }
          
     }
@@ -876,9 +883,13 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s2handleMetaLine = RegNext(s1handleMetaLine)
     val s2replacedMetaLine = RegNext(s1replacedMetaLine)
 
-    // 用于repaly或者lsu的一个handledataline，或者metaread的一个replacedataline
+    // 用于repaly或者lsu的一组handledataline，以及metaread或者fence的一个replacedataline
     val s2handleDataLine = Wire(Vec(memWidth ,Vec(nRowWords,UInt(32.W))))
-    val s2replacedDataLine = Wire(Vec(nRowWords,UInt(32.W)))
+
+    for(w <- 0 until memWidth){
+        s2handleDataLine(w) := lsuDataRead(w).resp.bits.rdata
+    }
+    val s2replacedDataLine = mshrDataRead.resp.bits.rdata
 
     // 写回mshr所需的miss路号
     val s2missAllocPos = RegNext(s1missAllocPos)
@@ -1021,11 +1032,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             sendResp(w) := Mux(s2replayPipeNumber === w.asUInt , true.B , false.B)//resp只发给对应的流水线
             // 准备resp
         }
-    }.elsewhen(s2state === mshrread && s2valid && RPU.io.ready){
-
+    }.elsewhen((s2state === fence ||s2state === mshrread )&& s2valid && RPU.io.ready){
+        //一条指令的fetch和dirty写回主存，都需要RPU请求
         // 此时已经收集好了所需的replaceMetaline和replaceDataLine
         // 将他们连同fetchaddr一并交给RPU
-        RPU.io.needReplace := s2state === mshrread && s2valid
+        RPU.io.needReplace := (s2state === fence ||s2state === mshrread )&& s2valid
         RPU.io.replaceMetaLine := s2replacedMetaLine
         RPU.io.replaceDataLine := s2replacedDataLine
         RPU.io.replaceAddr := s2replaceAddr
