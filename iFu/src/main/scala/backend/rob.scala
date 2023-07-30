@@ -59,25 +59,6 @@ class RobIO(
     val debug_tsc = Input(UInt(xLen.W))
 }
 
-class CommitSignals extends CoreBundle
-{
-    val valids = Vec(robParameters.retireWidth, Bool())
-    val arch_valids = Vec(robParameters.retireWidth,Bool())
-    val uops = Vec(robParameters.retireWidth, new MicroOp() )
-    //val fflags = Valid(UInt(5.W))
-
-    //maybe use
-    //val debug
-    
-    val rbk_valids = Vec(robParameters.retireWidth,Bool())
-    val rollback = Bool()
-
-    //------------------debug
-    val debug_insts = Vec(robParameters.retireWidth, UInt(32.W))
-    val debug_wdata = Vec(robParameters.retireWidth, UInt(xLen.W))
-    val debug_ldst = UInt(lregSz.W)
-}
-
 class CommitExceptionSignals extends CoreBundle
 {
     val ftq_idx = UInt(log2Ceil(frontendParams.numFTQEntries).W)

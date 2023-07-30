@@ -69,35 +69,6 @@ class LSUExeIO extends CoreBundle {
     val iresp   = new DecoupledIO(new ExeUnitResp)
 }
 
-class DCacheReq extends CoreBundle {
-    val uop         = new MicroOp()
-    val addr        = UInt(vaddrBits.W)
-    val data        = Bits(xLen.W)
-}
-
-class DCacheResp extends CoreBundle {
-    val uop  = new MicroOp()
-    val data = Bits(xLen.W)
-}
-
-// lsu <> dcache 
-class LSUDMemIO extends CoreBundle {
-    /**************************************/
-    val robAddrSz = robParameters.robAddrSz
-    /***************************************/
-    val req         = new DecoupledIO(Vec(memWidth,Valid(new DCacheReq)))
-    val s1_kill     = Output(Vec(memWidth, Bool()))
-    val resp        = Flipped(Vec(memWidth, new Valid(new DCacheResp)))
-
-    val nack        = Flipped(Vec(memWidth, new Valid(new DCacheReq)))
-
-    val brupdate    = Output(new BrUpdateInfo)
-    val exception   = Output(Bool())
-    val rob_head_idx = Output(UInt(robAddrSz.W))
-
-    val force_order = Output(Bool())
-    val ordered     = Input(Bool())
-}
 
 /**
  * 输入dispatch阶段的uop，commit的信息，rob，brupdate
@@ -406,6 +377,8 @@ class Lsu extends CoreModule {
         stq_commit_e.bits.addr.valid && // 地址准备好了
         !stq_commit_e.bits.addr_is_virtual &&   // TLB 没有miss
         stq_commit_e.bits.data.valid))    // 数据准备好了
+
+
     ))
     //---------------------------------------------------------
     // Controller logic. Arbitrate which request actually fires

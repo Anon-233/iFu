@@ -29,24 +29,6 @@ case class SupportedFuncs(
     // val tlb: Boolean = false
 )
 
-class FuncUnitReq extends CoreBundle {
-    val kill = Bool()
-    val uop = new MicroOp()
-    val rs1Data = UInt(xLen.W)
-    val rs2Data = UInt(xLen.W)
-    val predData = Bool()
-}
-
-class FuncUnitResp extends CoreBundle {
-    val uop = new MicroOp()
-    val predicated = Bool()
-    val data = UInt(xLen.W)
-    val addr = UInt(xLen.W)
-    // val mxcpt = // TODO
-    // val sfence = // TODO
-}
-
-
 abstract class FuncUnit(
     val isPiplined: Boolean,
     val numStages: Int,
