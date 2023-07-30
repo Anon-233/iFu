@@ -9,5 +9,13 @@ class debugDiff extends CoreBundle{
     val commit = Input(new CommitSignals())
   })
 
+  val debug_reg = Mem(lregSz,UInt(xLen.W))
+
+  for(w <- 0 until coreWidth){
+    val lreg = io.commit.debug_ldst
+    val wdata = io.commit.debug_wdata
+
+    debug_reg(lreg) := wdata
+  }
 
 }

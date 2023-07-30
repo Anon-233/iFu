@@ -55,6 +55,7 @@ class RobIO(
     //---------------------debug
     val debug_wb_valids = Input(Vec(numWakeupPorts, Bool()))
     val debug_wb_wdata  = Input(Vec(numWakeupPorts, Bits(xLen.W)))
+    val debug_wb_ldst = Input(Vec(numWakeupPorts,UInt(lregSz.W))
     val debug_tsc = Input(UInt(xLen.W))
 }
 
@@ -74,6 +75,7 @@ class CommitSignals extends CoreBundle
     //------------------debug
     val debug_insts = Vec(robParameters.retireWidth, UInt(32.W))
     val debug_wdata = Vec(robParameters.retireWidth, UInt(xLen.W))
+    val debug_ldst = UInt(lregSz.W)
 }
 
 class CommitExceptionSignals extends CoreBundle
@@ -230,6 +232,7 @@ class Rob(
         val robPredicated = Reg(Vec(numRobRows, Bool()))
 
         val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
+        val rob_debug_ldst = Mem(numRobRows,UInt(lregSz.W))
 
         //------------------dispatch stage------------------
         //enqueue
@@ -361,6 +364,7 @@ class Rob(
             val rob_idx = io.wb_resps(i).bits.uop.rob_idx
             when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx))) {
                 rob_debug_wdata(GetRowIdx(rob_idx)) := io.debug_wb_wdata(i)
+                rob_debug_ldst(GetRowIdx(rob_idx))  := io.debug_wb_ldst(i)
             }
             val temp_uop = rob_uop(GetRowIdx(rob_idx))
 
@@ -375,6 +379,7 @@ class Rob(
                     "[rob] writeback (" + i + ") occurred to the wrong pdst.")
             }
         io.commit.debug_wdata(w) := rob_debug_wdata(robHead)
+        io.commit.debug_ldst(w) := rob_debug_ldst(robHead)
 
         //rob_pnr_unsafe(w) := rob_val(rob_pnr) && (rob_unsafe(rob_pnr) || rob_exception(rob_pnr))
 
