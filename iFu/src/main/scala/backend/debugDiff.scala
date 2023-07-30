@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import iFu.common._
 
-class debugDiff extends CoreBundle{
+class debugDiff extends CoreModule {
   val io = IO(new Bundle {
     val commit = Input(new CommitSignals())
   })

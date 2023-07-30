@@ -37,7 +37,7 @@ class FreeList (
     val allocPregMask = (allocPreg zip io.reqs).scanRight(0.U(numPregs.W)){ case ((a,r),m) => m | a & Fill(numPregs,r) }
 
     //标记分配mask
-    val selMask = (selPreg zip selPregFire) map { case (s,f) => s & Fill(numPregs,f) }.reduce(_|_)
+    val selMask = (selPreg zip selPregFire) map { case (s,f) => s & Fill(numPregs,f) } reduce(_|_)
     //预测错误的分支中空闲物理寄存器的独热码集合
     val brDeallocs = brAllocList(io.brupdate.b2.uop.brTag) & Fill(numPregs, io.brupdate.b2.mispredict)
     //需要释放的物理寄存器独热码集合

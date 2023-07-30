@@ -107,3 +107,12 @@ object UpdateBrMask {
         out
     }
 }
+
+object AlignPCToBoundary
+{
+    def apply(pc: UInt, b: Int): UInt = {
+        // Invert for scenario where pc longer than b
+        //   (which would clear all bits above size(b)).
+        ~(~pc | (b-1).U)
+    }
+}
