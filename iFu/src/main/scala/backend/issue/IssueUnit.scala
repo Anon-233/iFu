@@ -53,7 +53,7 @@ abstract class AbsIssueUnit (
     val dispatchWidth: Int,
     val numWakeupPorts: Int,
     val issueWidth: Int
-) extends CoreModule with IssueState with MicroOpCode {
+) extends CoreModule with IssueState {
     val io = IO(new IssueUnitIO(dispatchWidth, numWakeupPorts, issueWidth))
 
     val disUops = Wire(Vec(dispatchWidth, new MicroOp))
