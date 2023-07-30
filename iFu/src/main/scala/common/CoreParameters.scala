@@ -49,6 +49,7 @@ class LSUParameters{
     val ldqAddrSz    : Int = log2Ceil(numLDQEntries)
     val stqAddrSz    : Int = log2Ceil(numSTQEntries)
 }
+
 class DcacheParameters {
     val nRowBits = 256
     def nRowBytes = nRowBits / 8
@@ -83,6 +84,13 @@ class DcacheParameters {
 
 }
 
+case class IssueParams(
+    iqType: Int,        // issue queue type: IQT_INT, IQT_MEM
+    numIssueSlots: Int, // number of issue slots
+    dispatchWidth: Int,
+    issueWidth: Int    // maximum number of uops issued per cycle
+)
+
 trait HasCoreParameters {
     val resetPC: Int = 0x1c000000
     val xLen: Int = 32
@@ -105,5 +113,3 @@ trait HasCoreParameters {
         IssueParams(issueWidth = 1, numIssueSlots = 16, iqType = IQT_MEM.litValue, dispatchWidth = 1),
         IssueParams(issueWidth = 2, numIssueSlots = 16, iqType = IQT_INT.litValue, dispatchWidth = 1))
 }
-
-
