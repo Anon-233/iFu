@@ -64,48 +64,6 @@ s0阶段，在各种请求之间选择
     对miss的store，必然传回nack，对miss的load，如果mshr未满，什么都不穿，满了传nack
 */
 
-
-class CbusReq extends Bundle with HasDcacheParameters {
-    val valid = Bool()
-    val isStore = Bool()
-    val size = UInt(2.W)
-    val addr = UInt(32.W)
-    val data = UInt(32.W)
-    val mask = UInt((nRowBytes).W)
-    val axiBurstType = UInt(2.W)
-    val axiLen = UInt(8.W)
-}
-
-class CbusResp extends Bundle with HasDcacheParameters {
-    val data = UInt(32.W)
-    val isLast = Bool()
-    val ready = Bool()
-}
-
-
-class DCacheReq extends Bundle with HasDcacheParameters
-{
-    val addr  = UInt(32.W)
-    val data  = Bits(coreDataBits.W)
-    val is_hella = Bool() // Is this the hellacache req? If so this is not tracked in LDQ or STQ
-    val uop = new MicroOp()
-
-}
-
-class DCacheResp extends Bundle with HasDcacheParameters
-{
-    val data = Bits(coreDataBits.W)
-    val is_hella = Bool()
-    val uop = new MicroOp()
-}
-
-
-
-
-
-
-
-
 class MetaLine extends Bundle with HasDcacheParameters{
     val valid = Bool()
     val dirty = Bool()
@@ -499,38 +457,6 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
     }
 
 }
-
-
-class lsuDMemIO extends Bundle with HasDcacheParameters
-{
-    // In lsu's dmem stage, send the request
-    val req         = new DecoupledIO(Vec(memWidth,Valid(new DCacheReq)))
-    // In lsu's LCAM search stage, kill if order fail (or forwarding possible)
-    val s1kill     = Output(Vec(memWidth, Bool()))
-    // Get a request any cycle
-    val resp        = Flipped(Vec(memWidth, new ValidIO(new DCacheResp)))
-    // In our response stage, if we get a nack, we need to reexecute
-    //   拿不到数据，需要重复执行,用这个可以实现重复执行
-    val nack        = Flipped(Vec(memWidth, new ValidIO(new DCacheReq)))
-
-    val brupdate       = Output(new BrUpdateInfo)
-    val exception    = Output(Bool())
-
-    //   这两个好像没用
-    //   val rob_pnr_idx  = Output(UInt(robAddrSz.W))
-    //   val rob_head_idx = Output(UInt(robAddrSz.W))
-
-    // Clears prefetching MSHRs
-    val forceOrder  = Output(Bool())
-    val ordered     = Input(Bool())
-
-    val perf = Input(new Bundle {
-        val acquire = Bool()
-        val release = Bool()
-    })
-
-}
-
 
 class NonBlockingDcache extends Module with HasDcacheParameters{
     val io = IO(new DCacheBundle)

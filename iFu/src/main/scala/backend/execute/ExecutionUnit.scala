@@ -11,14 +11,6 @@ import iFu.backend.FUConst._
 
 import scala.collection.mutable.ArrayBuffer
 
-
-class ExeUnitResp extends CoreBundle
-{
-    val uop = new MicroOp
-    val data = Bits(xLen.W)
-    val predicated = Bool() // Was this predicated off?
-}
-
 abstract class ExecutionUnit(
     val readsIrf         : Boolean       = false,
     val writesIrf        : Boolean       = false,
