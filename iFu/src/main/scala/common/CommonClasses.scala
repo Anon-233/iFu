@@ -3,8 +3,6 @@ package iFu.common
 import chisel3._
 import chisel3.util._
 
-import iFu.common._
-
 class BrUpdateMasks extends CoreBundle {
     val resolveMask = UInt(maxBrCount.W)
     val mispredictMask = UInt(maxBrCount.W)
@@ -44,25 +42,20 @@ class FuncUnitResp extends CoreBundle {
     // val sfence = // TODO
 }
 
-class ExeUnitResp extends CoreBundle
-{
+class ExeUnitResp extends CoreBundle {
     val uop = new MicroOp
     val data = Bits(xLen.W)
     val predicated = Bool() // Was this predicated off?
 }
 
-class DCacheReq extends CoreBundle
-{
-
+class DCacheReq extends CoreBundle {
     val addr  = UInt(32.W)
     val data  = Bits(xLen.W)
     val is_hella = Bool() // Is this the hellacache req? If so this is not tracked in LDQ or STQ
     val uop = new MicroOp()
-
 }
 
-class DCacheResp extends CoreBundle
-{
+class DCacheResp extends CoreBundle {
     val data = Bits(xLen.W)
     val is_hella = Bool()
     val uop = new MicroOp()
@@ -86,8 +79,7 @@ class LSUDMemIO extends CoreBundle {
     val ordered     = Input(Bool())
 }
 
-class CommitSignals extends CoreBundle
-{
+class CommitSignals extends CoreBundle {
     val valids = Vec(robParameters.retireWidth, Bool())
     val arch_valids = Vec(robParameters.retireWidth,Bool())
     val uops = Vec(robParameters.retireWidth, new MicroOp() )
@@ -104,3 +96,13 @@ class CommitSignals extends CoreBundle
     val debug_wdata = Vec(robParameters.retireWidth, UInt(xLen.W))
     val debug_ldst = UInt(lregSz.W)
 }
+
+case class SupportedFuncs (
+    val alu: Boolean    = false,
+    val jmp: Boolean    = false,
+    val mem: Boolean    = false,
+    val muldiv: Boolean = false,
+    val csr: Boolean    = false
+    // val cnt: Boolean    = false
+    // val tlb: Boolean    = false
+)
