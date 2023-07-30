@@ -76,7 +76,7 @@ object FlushTypes
 {
     def SZ =3
     def apply() = UInt(SZ.W)
-    def none = 0.W
+    def none = 0.U
     def xcpt = 1.U
     def eret = (2+1).U
     def refetch = 2.U
