@@ -3,7 +3,9 @@ package iFu
 
 import chisel3._
 import chisel3.util._
-import iFu.common.CoreModule
+import iFu.common._
+import iFu.backend._
+import iFu.frontend._
 
 
 /**
@@ -135,15 +137,15 @@ class Core extends CoreModule {
         b := a.io.brinfo
         b.valid := a.io.brinfo.valid && !rob.io.flush.valid
     }
-    b1.resolve_mask := brinfos.map(x => x.valid << x.uop.br_tag).reduce(_ | _)
-    b1.mispredict_mask := brinfos.map(x => (x.valid && x.mispredict) << x.uop.br_tag).reduce(_ | _)
+    b1.resolveMask := brinfos.map(x => x.valid << x.uop.brTag).reduce(_ | _)
+    b1.mispredictMask := brinfos.map(x => (x.valid && x.mispredict) << x.uop.brTag).reduce(_ | _)
 
     // Find the oldest mispredict and use it to update indices
     var mispredict_val = false.B
     var oldest_mispredict = brinfos(0)
     for (b <- brinfos) {
         val use_this_mispredict = !mispredict_val ||
-                b.valid && b.mispredict && IsOlder(b.uop.rob_idx, oldest_mispredict.uop.rob_idx, rob.io.rob_head_idx)
+                b.valid && b.mispredict && IsOlder(b.uop.robIdx, oldest_mispredict.uop.robIdx, rob.io.rob_head_idx)
 
         mispredict_val = mispredict_val || (b.valid && b.mispredict)
         oldest_mispredict = Mux(use_this_mispredict, b, oldest_mispredict)
@@ -157,10 +159,10 @@ class Core extends CoreModule {
     b2.jalr_target := RegNext(jmp_unit.io.brinfo.jalr_target)
     b2.target_offset := oldest_mispredict.target_offset
 
-    val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftq_idx
+    val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftqIdx
 
 
-    assert(!((brupdate.b1.mispredict_mask =/= 0.U || brupdate.b2.mispredict)
+    assert(!((brupdate.b1.mispredictMask =/= 0.U || brupdate.b2.mispredict)
             && rob.io.commit.rollback), "Can't have a mispredict during rollback.")
 
     io.ifu.brupdate := brupdate
@@ -228,7 +230,7 @@ class Core extends CoreModule {
         io.ifu.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
     }.elsewhen(brupdate.b2.mispredict && !RegNext(rob.io.flush.valid)) {
         val block_pc = AlignPCToBoundary(io.ifu.get_pc(1).pc, icBlockBytes)
-        val uop_maybe_pc = block_pc | brupdate.b2.uop.pc_lob
+        val uop_maybe_pc = block_pc | brupdate.b2.uop.pcLowBits
         val npc = uop_maybe_pc + Mux(brupdate.b2.uop.is_rvc || brupdate.b2.uop.edge_inst, 2.U, 4.U)
         val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
         jal_br_target := (uop_maybe_pc.asSInt + brupdate.b2.target_offset +
@@ -238,12 +240,12 @@ class Core extends CoreModule {
         io.ifu.redirect_val := true.B
         io.ifu.redirect_pc := mispredict_target
         io.ifu.redirect_flush := true.B
-        io.ifu.redirect_ftq_idx := brupdate.b2.uop.ftq_idx
+        io.ifu.redirect_ftq_idx := brupdate.b2.uop.ftqIdx
         val use_same_ghist = (brupdate.b2.cfi_type === CFI_BR &&
                 !brupdate.b2.taken &&
                 bankAlign(block_pc) === bankAlign(npc))
         val ftq_entry = io.ifu.get_pc(1).entry
-        val cfi_idx = (brupdate.b2.uop.pc_lob ^
+        val cfi_idx = (brupdate.b2.uop.pcLowBits ^
                 Mux(ftq_entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
         val ftq_ghist = io.ifu.get_pc(1).ghist
         val next_ghist = ftq_ghist.update(
@@ -262,7 +264,7 @@ class Core extends CoreModule {
             ftq_ghist,
             next_ghist)
         io.ifu.redirect_ghist.current_saw_branch_not_taken := use_same_ghist
-    }.elsewhen(rob.io.flush_frontend || brupdate.b1.mispredict_mask =/= 0.U) {
+    }.elsewhen(rob.io.flush_frontend || brupdate.b1.mispredictMask =/= 0.U) {
         io.ifu.redirect_flush := true.B
     }
 
@@ -271,7 +273,7 @@ class Core extends CoreModule {
     io.ifu.commit.valid := rob.io.commit.valids.reduce(_ | _) || rob.io.com_xcpt.valid
     io.ifu.commit.bits := Mux(rob.io.com_xcpt.valid,
         rob.io.com_xcpt.bits.ftq_idx,
-        rob.io.commit.uops(youngest_com_idx).ftq_idx)
+        rob.io.commit.uops(youngest_com_idx).ftqIdx)
 
     assert(!(rob.io.commit.valids.reduce(_ | _) && rob.io.com_xcpt.valid),
         "ROB can't commit and except in same cycle!")
@@ -354,7 +356,7 @@ class Core extends CoreModule {
     // Frontend Exception Requests
     val xcpt_idx = PriorityEncoder(dec_xcpts)
     xcpt_pc_req.valid := dec_xcpts.reduce(_ || _)
-    xcpt_pc_req.bits := dec_uops(xcpt_idx).ftq_idx
+    xcpt_pc_req.bits := dec_uops(xcpt_idx).ftqIdx
     //rob.io.xcpt_fetch_pc := RegEnable(io.ifu.get_pc.fetch_pc, dis_ready)
     rob.io.xcpt_fetch_pc := io.ifu.get_pc(0).pc
 
@@ -379,7 +381,7 @@ class Core extends CoreModule {
                         || rob.io.commit.rollback
                         || dec_xcpt_stall
                         || branch_mask_full(w)
-                        || brupdate.b1.mispredict_mask =/= 0.U
+                        || brupdate.b1.mispredictMask =/= 0.U
                         || brupdate.b2.mispredict
                         || io.ifu.redirect_flush))
 
@@ -499,7 +501,7 @@ class Core extends CoreModule {
                         || !dispatcher.io.ren_uops(w).ready
                         || wait_for_empty_pipeline(w)
                         || dis_prior_slot_unique(w)
-                        || brupdate.b1.mispredict_mask =/= 0.U
+                        || brupdate.b1.mispredictMask =/= 0.U
                         || brupdate.b2.mispredict
                         || io.ifu.redirect_flush))
 
@@ -532,16 +534,16 @@ class Core extends CoreModule {
     // Since these are also unique, increment the FTQ ptr when they are dispatched
     when(RegNext(dis_fire.reduce(_ || _) && dis_uops(PriorityEncoder(dis_fire)).is_sys_pc2epc)) {
         io.ifu.commit.valid := true.B
-        io.ifu.commit.bits := RegNext(dis_uops(PriorityEncoder(dis_valids)).ftq_idx)
+        io.ifu.commit.bits := RegNext(dis_uops(PriorityEncoder(dis_valids)).ftqIdx)
     }
 
     for (w <- 0 until coreWidth) {
         // note: this assumes uops haven't been shifted - there's a 1:1 match between PC's LSBs and "w" here
         // (thus the LSB of the rob_idx gives part of the PC)
         if (coreWidth == 1) {
-            dis_uops(w).rob_idx := rob.io.rob_tail_idx
+            dis_uops(w).robIdx := rob.io.rob_tail_idx
         } else {
-            dis_uops(w).rob_idx := Cat(rob.io.rob_tail_idx >> log2Ceil(coreWidth).U,
+            dis_uops(w).robIdx := Cat(rob.io.rob_tail_idx >> log2Ceil(coreWidth).U,
                 w.U(log2Ceil(coreWidth).W))
         }
     }
