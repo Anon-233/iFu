@@ -4,78 +4,84 @@ import chisel3._
 import chisel3.util._
 
 import iFu.common._
+import iFu.common.Consts._
 
 class IssueSlotIO(val numWakeupPorts: Int) extends CoreBundle {
-    val valid  = Output(Bool())
-    val willBeValid = Output(Bool())
-    val request = Output(Bool())
-    val grant = Input(Bool())
+    val ftqSz = frontendParams.numFTQEntries
 
-    val brUpdate = Input(new BrUpdateInfo)
-    val kill = Input(Bool())
-    val clear = Input(Bool())
+    val valid       = Output(Bool())
+    val willBeValid = Output(Bool())    // ???
+
+    val request = Output(Bool())
+    val grant   = Input(Bool())
+
+    val brUpdate   = Input(new BrUpdateInfo)
+    val kill       = Input(Bool())
+    val clear      = Input(Bool())
     val ldSpecMiss = Input(Bool())
 
-    val wakeupPorts = Vec(numWakeupPorts, Flipped(Valid(new IssueWakeup(maxPregSz.W))))
+    val wakeupPorts = Vec(numWakeupPorts, Flipped(Valid(new IssueWakeup(pregSz.W))))
     val predWakeupPorts = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
-    val specLdWakeupPorts = Vec(memWidth, Flipped(Valid(UInt(maxPregSz.W))))
+    val specLdWakeupPorts = Vec(memWidth, Flipped(Valid(UInt(pregSz.W))))
 
-    val inUop = Flipped(Valid(new MicroOp))
-    val outUop = Output(new MicroOp) // passed to next slot uop
-    val uop = Output(new MicroOp)   // issued uop
+    val inUop  = Flipped(Valid(new MicroOp))
+    val outUop = Output(new MicroOp)    // passed to next slot uop
+    val uop    = Output(new MicroOp)    // issued uop
 }
 
-class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
+class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState with MicroOpCode {
     val io = IO(new IssueSlotIO(numWakeupPorts))
 
     val state = RegInit(s_invalid)
+    val slotUop = RegInit(NullMicroOp)
     val p1 = RegInit(false.B)
     val p2 = RegInit(false.B)
     val ppred = RegInit(false.B)
     val p1Poisoned = RegInit(false.B)
     val p2Poisoned = RegInit(false.B)
-    val slotUop = RegInit(NullMicroOp)
 
     val nextState = WireInit(state)
-    val nextUopc = WireInit(slotUop.uopc)
-    val nextLRs1Rtype = WireInit(slotUop.lrs1Rtype)
-    val nextLRs2Rtype = WireInit(slotUop.lrs2Rtype)
     val nextUop = Mux(io.inUop.valid, io.inUop.bits, slotUop)
+    val nextUopc = WireInit(slotUop.uopc)
+    val nextLrs1Rtype = WireInit(slotUop.lrs1Rtype)
+    val nextLrs2Rtype = WireInit(slotUop.lrs2Rtype)
     p1Poisoned := false.B
     p2Poisoned := false.B
     val nextP1Poisoned = Mux(io.inUop.valid, io.inUop.bits.p1Poisoned, p1Poisoned)
     val nextP2Poisoned = Mux(io.inUop.valid, io.inUop.bits.p2Poisoned, p2Poisoned)
-    
+
     when (io.kill) {
         state := s_invalid
-    }.elsewhen (io.inUop.valid) {
+    } .elsewhen (io.inUop.valid) {
         state := io.inUop.bits.iw_state
-    }.elsewhen (io.clear) {
+    } .elsewhen (io.clear) {
         state := s_invalid
-    }.otherwise {
+    } .otherwise {
         state := nextState
     }
 
     when (io.kill) {
         nextState := s_invalid
-    }.elsewhen (
+    } .elsewhen (
         (io.grant && (state === s_valid_1)) ||
-        (io.grant && (state === s_valid_2) && p1 && p2 && ppred)
-    ){
+        (io.grant && (state === s_valid_2) && p1 && p2)
+    ) {
         when (!(io.ldSpecMiss && (p1Poisoned || p2Poisoned))) {
             nextState := s_invalid
         }
-    }.elsewhen (io.grant && (state === s_valid_2)) {
+    } .elsewhen (io.grant && (state === s_valid_2)) {
         when (!(io.ldSpecMiss && (p1Poisoned || p2Poisoned))) {
             nextState := s_valid_1
             when (p1) {
                 slotUop.uopc := uopSTD
                 nextUopc := uopSTD
                 slotUop.lrs1Rtype := RT_X
-                nextLRs1Rtype := RT_X
-            }.otherwise {
+                nextLrs1Rtype := RT_X
+            } .otherwise {
+                // slotUop.uopc := uopSTA
+                // nextUopc := uopSTA
                 slotUop.lrs2Rtype := RT_X
-                nextLRs2Rtype := RT_X
+                nextLrs2Rtype := RT_X
             }
         }
     }
@@ -105,7 +111,6 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
             p2 := true.B
         }
     }
-
     when (io.predWakeupPorts.valid && io.predWakeupPorts.bits === nextUop.ppred) {
         ppred := true.B
     }
@@ -147,6 +152,11 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
         io.request := false.B
     }
 
+    // maybe bug-fix
+    when (io.ldSpecMiss && (p1Poisoned || p2Poisoned)) {
+        io.request := false.B
+    }
+
     io.valid := isValid
     io.uop := slotUop
     io.uop.iw_p1_poisoned := p1Poisoned
@@ -159,8 +169,8 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     io.outUop := slotUop
     io.outUop.iw_state := nextState
     io.outUop.uopc := nextUopc
-    io.outUop.lrs1Rtype := nextLRs1Rtype
-    io.outUop.lrs2Rtype := nextLRs2Rtype
+    io.outUop.lrs1Rtype := nextLrs1Rtype
+    io.outUop.lrs2Rtype := nextLrs2Rtype
     io.outUop.br_mask := nextBrMask
     io.outUop.prs1_busy := !p1
     io.outUop.prs2_busy := !p2
@@ -172,7 +182,7 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
         when (p1 && p2 && ppred) {
             ;
         }.elsewhen (p1 && ppred) {
-            io.uop.uopc := slotUop.uopc
+            io.uop.uopc := slotUop.uopc // uopSTA
             io.uop.lrs2_rtype := RT_X
         }.elsewhen (p2 && ppred) {
             io.uop.uopc := uopSTD

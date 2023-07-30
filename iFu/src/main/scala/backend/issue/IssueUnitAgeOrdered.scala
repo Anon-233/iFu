@@ -4,19 +4,27 @@ import chisel3._
 import chisel3.util._
 
 import iFu.common._
+import iFu.common.Consts._
 
 class IssueUnitCompressed(
-    // TODO: add parameters
-) extends IssueUnit(/*TODO*/) {
+    issParams: IssueParams,
+    numWakeupPorts: Int
+) extends IssueUnit (
+    issParams.iqType,
+    issParams.numIssueSlots,
+    issParams.dispatchWidth,
+    numWakeupPorts,
+    issParams.issueWidth
+) {
     val maxShift = dispatchWidth
-    val vacants = issueSlots.map(!_.valid) ++ io.disUops.map(_.valid).map(!_.asBool)
+    val vacants = issueSlots.map(_.valid).map(!_.asBool) ++ io.disUops.map(_.valid).map(!_.asBool)
     val shamtOH = Array.fill(numIssueSlots + dispatchWidth) { Wire(UInt(maxShift.W)) }
 
     def getShamtOH(countOH: UInt, inc: Bool): UInt = {
         val next = Wire(UInt(maxShift.W))
         when (countOH === 0.U && inc) {
             next := 1.U
-        }.elsewhen (!countOH(maxShift - 1) && inc) {
+        } .elsewhen (!countOH(maxShift - 1) && inc) {
             next := (countOH << 1.U)
         }
         next
@@ -28,15 +36,17 @@ class IssueUnitCompressed(
     }
 
     val willBeValid = (0 until numIssueSlots),map(i => issueSlots(i).willBeValid) ++
-                      (0 until dispatchWidth).map(i => io.disUops(i).valid &&
-                                                    //    !disUops(i).exception &&
-                                                    //    !disUops(i).is_fence &&
-                                                    //    !disUops(i).is_fencei
+                      (0 until dispatchWidth).map(i =>
+                        io.disUops(i).valid && !disUops(i).exception &&
+                        !disUops(i).is_fence && !disUops(i).is_fencei
                       )
-    val uops = issueSlots.map(_.outUop) ++ disUops.map(_)
+
+    val uops = issueSlots.map(_.outUop) ++ disUops.map(uop => uop)
+    
     for (i <- 0 until numIssueSlots) {
         issueSlots(i).inUop.valid := false.B
-        issueSlots(i).inUop.bits := uop(i + 1)    // out of bounds?
+        issueSlots(i).inUop.bits := uop(i + 1)
+        
         for (j <- 1 to maxShift) {
             when (shamtOH(i + j) === (1 << (j - 1)).U) {
                 issueSlots(i).inUop.valid := willBeValid(i + j)
@@ -46,8 +56,8 @@ class IssueUnitCompressed(
         issueSlots(i).clear := shamtOH(i) =/= 0.U
     }
 
-    val willBeAvailable = (0 until numIssueSlots).map (
-        i => (!issueSlots(i).willBeValid || issueSlots(i).clear) && !(issueSlots(i).inUop.valid)
+    val willBeAvailable = (0 until numIssueSlots).map (i =>
+        (!issueSlots(i).willBeValid || issueSlots(i).clear) && !(issueSlots(i).inUop.valid)
     )
     val numAvailable = PopCount(willBeAvailable)
     for (w <- 0 until dispatchWidth) {
@@ -77,10 +87,13 @@ class IssueUnitCompressed(
                 issueSlots(i).grant := true.B
                 io.issueValids(w) := true.B
                 io.issueUops(w) := issueSlots(i).uop
+                // why not?
+                // portIssued(w) = true.B
+                // uopIssued = true.B
             }
-            val wasIssuedYet = portIssued(w)
+            val wasPortIssuedYet = portIssued(w)
             portIssued(w) = (canAllocate && requests(i) && !uopIssued) | portIssued(w)
-            uopIssued = (canAllocate && requests(i) && !wasIssuedYet) | uopIssued
+            uopIssued = (canAllocate && requests(i) && !wasPortIssuedYet) | uopIssued
         }
     }
 }
