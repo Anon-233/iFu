@@ -800,7 +800,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         rpuDataWrite.req.bits.idx := s1newwbIdx
         rpuDataWrite.req.bits.wdata := s1newDataLine
         rpuDataWrite.req.bits.wayMask := 1.U << s1newAlloceWay
-    }.elsewhen(s0state === fence){
+    }.elsewhen(s1state === fence){
         when(!meta.io.hasDirty) {
             //没有Dirty就不做了
             s1state := nil 
@@ -811,6 +811,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             mshrDataRead.req.valid := s1valid
             mshrDataRead.req.bits.idx := meta.io.dirtyIdx
             mshrDataRead.req.bits.replacePos := meta.io.dirtyPos
+
 
         }
          
@@ -990,6 +991,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         RPU.io.replaceAddr := s2replaceAddr
         RPU.io.fetchAddr := s2fetchAddr
         RPU.io.replaceWay := s2replacePos
+
+        //成功进入s2state fence的RPU的话，告诉meta拿到了这个dirty，让他清空
+        meta.io.fenceTakeDirtyMeta := s2state === fence
 
         // 同时告诉mshr这个fetchaddr,用于感知fetching状态转换
         mshrs.io.fetchingBlockAddr := getBlockAddr(s2fetchAddr)
