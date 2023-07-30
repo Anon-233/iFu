@@ -9,6 +9,7 @@ object MaskLower {
         (0 until n).map(i => in >> i.U).reduce(_ | _)
     }
 }
+
 object WrapInc {
     def apply(value: UInt, n: Int): UInt = {
         if (isPow2(n)) {
@@ -19,8 +20,8 @@ object WrapInc {
         }
     }
 }
-object WrapDec
-{
+
+object WrapDec {
     // "n" is the number of increments, so we wrap at n-1.
     def apply(value: UInt, n: Int): UInt = {
         if (isPow2(n)) {
@@ -31,10 +32,32 @@ object WrapDec
         }
     }
 }
-object MaskUpper
-{
+
+object MaskUpper {
     def apply(in: UInt):UInt = { //假设第i位初次为1，则(n-1,i)为1
         val n = in.getWidth
         (0 until n).map(i => (in << i.U)(n-1,0)).reduce(_|_)
+    }
+}
+
+object GetNewUopAndBrMask {
+    def apply(uop: MicroOp, brupdate: BrUpdateInfo): MicroOp = {
+        val newuop = WireInit(uop)
+        newuop.br_mask := uop.br_mask & ~brupdate.b1.resolve_mask
+        newuop
+    }
+}
+
+object SelectFirstN {
+    def apply(in: UInt, n: Int) = {
+        val sels = Wire(Vec(n, UInt(in.getWidth.W)))
+        var mask = in
+
+        for (i <- 0 until n) {
+            sels(i) := PriorityEncoderOH(mask)
+            mask = mask & ~sels(i)
+        }
+
+        sels
     }
 }
