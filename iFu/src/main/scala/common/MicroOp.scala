@@ -100,6 +100,28 @@ class MicroOp extends CoreBundle with MicroOpCode {
     def rf_wen = dst_rtype =/= RT_X
     def unsafe = use_ldq || (use_stq && !is_fence) || isBr || isJalr
     def fu_code_is(_fu: UInt) = (fuCode & _fu) =/= 0.U
+
+    def NullMicroOp: MicroOp = {
+        val uop = Wire(new MicroOp)
+        uop := DontCare // Overridden in the following lines
+        uop.uopc := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
+        uop.bypassable := false.B
+        uop.use_stq := false.B
+        uop.use_ldq := false.B
+        uop.pdst := 0.U
+        uop.dst_rtype := RT_X
+
+        val cs = Wire(new CtrlSignals())
+        cs := DontCare // Overridden in the following lines
+        cs.br_type := BR_N
+        /*cs.csr_cmd := CSR.N*/
+        cs.is_load := false.B
+        cs.is_sta := false.B
+        cs.is_std := false.B
+
+        uop.ctrl := cs
+        uop
+    }
 }
 
 class CtrlSignals extends CoreBundle {
