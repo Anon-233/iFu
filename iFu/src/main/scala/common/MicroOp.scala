@@ -5,7 +5,7 @@ import chisel3.util._
 
 import iFu.common.Consts._
 
-class MicroOp extends CoreBundle with MicroOpCode {
+class MicroOp extends CoreBundle {
     /**********************************************/
     val numFTQEntries = frontendParams.numFTQEntries
     /**********************************************/

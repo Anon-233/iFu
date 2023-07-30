@@ -29,7 +29,7 @@ class IssueSlotIO(val numWakeupPorts: Int) extends CoreBundle {
     val uop    = Output(new MicroOp)    // issued uop
 }
 
-class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState with MicroOpCode {
+class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     val io = IO(new IssueSlotIO(numWakeupPorts))
 
     val state = RegInit(s_invalid)
