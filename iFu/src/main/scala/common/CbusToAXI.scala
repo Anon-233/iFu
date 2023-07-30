@@ -201,131 +201,119 @@ endmodule
 
 */
 
+class CBusToAXIIO extends Bundle {
+    val arid    = Output(UInt(4.W))
+    val araddr  = Output(UInt(32.W))
+    val arlen   = Output(UInt(4.W))
+    val arsize  = Output(UInt(3.W))
+    val arburst = Output(UInt(2.W))
+    val arlock  = Output(Bool())
+    val arcache = Output(UInt(4.W))
+    val arprot  = Output(UInt(3.W))
+    val arvalid = Output(Bool())
 
+    val arready = Input(Bool())
+    val rid     = Input(UInt(4.W))
+    val rdata   = Input(UInt(32.W))
+    val rresp   = Input(UInt(2.W))
+    val rlast   = Input(Bool())
+    val rvalid  = Input(Bool())
 
+    val rready  = Output(Bool())
+    val awid    = Output(UInt(4.W))
+    val awaddr  = Output(UInt(32.W))
+    val awlen   = Output(UInt(4.W))
+    val awsize  = Output(UInt(3.W))
+    val awburst = Output(UInt(2.W))
+    val awlock  = Output(Bool())
+    val awcache = Output(UInt(4.W))
+    val awprot  = Output(UInt(3.W))
+    val awvalid = Output(Bool())
 
-class CbusToAXI extends CoreModule {
-    val io = IO(new Bundle {
-        val aclk = Input(Bool())
-        val areset = Input(Bool())
+    val awready = Input(Bool())
 
-        val arid = Output(UInt(4.W))
-        val araddr = Output(UInt(32.W))
-        val arlen = Output(UInt(4.W))
-        val arsize = Output(UInt(3.W))
-        val arburst = Output(UInt(2.W))
-        val arlock = Output(Bool())
-        val arcache = Output(UInt(4.W))
-        val arprot = Output(UInt(3.W))
-        val arvalid = Output(Bool())
+    val wdata  = Output(UInt(32.W))
+    val wstrb  = Output(UInt(4.W))
+    val wlast  = Output(Bool())
+    val wvalid = Output(Bool())
 
-        val arready = Input(Bool())
-        val rid = Input(UInt(4.W))
-        val rdata = Input(UInt(32.W))
-        val rresp = Input(UInt(2.W))
-        val rlast = Input(Bool())
-        val rvalid = Input(Bool())
+    val wready = Input(Bool())
+    val bid    = Input(UInt(4.W))
+    val bresp  = Input(UInt(2.W))
+    val bvalid = Input(Bool())
 
-        val rready = Output(Bool())
-        val awid = Output(UInt(4.W))
-        val awaddr = Output(UInt(32.W))
-        val awlen = Output(UInt(4.W))
-        val awsize = Output(UInt(3.W))
-        val awburst = Output(UInt(2.W))
-        val awlock = Output(Bool())
-        val awcache = Output(UInt(4.W))
-        val awprot = Output(UInt(3.W))
-        val awvalid = Output(Bool())
+    val bready = Output(Bool())
 
-        val awready = Input(Bool())
+    val creq  = Input(new CbusReq)
+    val cresp = Output(new CbusResp)
+}
 
-        val wdata = Output(UInt(32.W))
-        val wstrb = Output(UInt(4.W))
-        val wlast = Output(Bool())
-        val wvalid = Output(Bool())
+class CBusToAXI extends CoreModule {
+    val io = IO(new CBusToAXIIO)
 
-        val wready = Input(Bool())
-        val bid = Input(UInt(4.W))
-        val bresp = Input(UInt(2.W))
-        val bvalid = Input(Bool())
+    val b :: w :: aw :: r :: ar :: Nil = Enum(5)
 
-        val bready = Output(Bool())
+    val in_issue = RegInit(0.U(5.W))
+    val next_issue = Mux(io.creq.isStore 0x7.U(5.W), /*b00111*/
+                                         0x18.U(5.W) /*b11000*/)
 
-        val creq = Input(new CbusReq)
-        val cresp = Output(new CbusResp)
-    })
-
-    val b::w::aw::r::ar::Nil = Enum(5)
-
-    val in_issue = RegInit(UInt(5.W))
-    val next_issue = Wire(UInt(5.W))
-    next_issue := Mux(io.creq.isStore, 0x7.U(5.W)/*b00111*/,0x18.U(5.W) /*b11000*/)
-    
     // check ongoing request
-    val saved_req = RegInit(0.U.asTypeOf(new CbusReq))
-    val count = RegInit(0.U(8.W))
-    val is_last = Wire(Bool())
-    is_last := count === 0.U
+    val saved_req = Reg(new CbusReq)
+    val count = Reg(UInt(8.W))
+
+    val is_last = count === 0.U
 
     // interactions with AXI
-    val busy = Wire(Bool())
-
-    val handshake = Wire(UInt(5.W))
-    val ended = Wire(UInt(5.W))
-    val remain = Wire(UInt(5.W))
-
-    busy := in_issue.orR
-    handshake := Cat(
+    val busy = in_issue.orR
+    val handshake = Cat(
         in_issue(ar) && io.arready,
-        in_issue(r) && io.rvalid,
+        in_issue(r)  && io.rvalid,
         in_issue(aw) && io.awready,
-        in_issue(w) && io.wready,
-        in_issue(b) && io.bvalid
-    ) 
+        in_issue(w)  && io.wready,
+        in_issue(b)  && io.bvalid
+    )
+    val ended = handshake & Cat(1.U, io.rlast, 1.U, io.wlast, 1.U)
+    val remain = in_issue ^ ended
+    val ready = handshake(w) || handshake(r)
 
-    ended := handshake & Cat(1.U, io.rlast, 1.U, io.wlast, 1.U)
-    remain := in_issue ^ ended
-
-    // cache bus driver
-    val ready = Wire(Bool())
-    ready := handshake(w) || handshake(r)
-    io.cresp.ready := ready
+    // cache bus driver 
+    io.cresp.ready  := ready
     io.cresp.isLast := ready && (!in_issue(r) || io.rlast) && is_last
-    io.cresp.data := io.rdata
+    io.cresp.data   := io.rdata
 
 
     // AXI driver
-    io.arid := 0.U
-    io.araddr := 0.U
-    io.arlen := 0.U
-    io.arsize := 0.U
+    io.arid    := 0.U
+    io.araddr  := 0.U
+    io.arlen   := 0.U
+    io.arsize  := 0.U
     io.arburst := 0.U
-    io.arlock := 0.U
+    io.arlock  := 0.U
     io.arcache := 0.U
-    io.arprot := 0.U
+    io.arprot  := 0.U
     io.arvalid := 0.U
-    io.rready := 0.U
-    io.awid := 0.U
-    io.awaddr := 0.U
-    io.awlen := 0.U
-    io.awsize := 0.U
+    io.rready  := 0.U
+    io.awid    := 0.U
+    io.awaddr  := 0.U
+    io.awlen   := 0.U
+    io.awsize  := 0.U
     io.awburst := 0.U
-    io.awlock := 0.U
+    io.awlock  := 0.U
     io.awcache := 0.U
-    io.awprot := 0.U
+    io.awprot  := 0.U
     io.awvalid := 0.U
-    io.wdata := 0.U
-    io.wstrb := 0.U
-    io.wlast := 0.U
-    io.wvalid := 0.U
-    io.bready := 0.U
+    io.wdata   := 0.U
+    io.wstrb   := 0.U
+    io.wlast   := 0.U
+    io.wvalid  := 0.U
+    io.bready  := 0.U
 
     when (in_issue(ar)) {
         io.arvalid := 1.U
-        io.araddr := saved_req.addr
-        io.arlen := saved_req.axiLen
-        io.arsize := saved_req.size
-        io.arburst := saved_req.axiBurstType//AXIBURSTWRAP
+        io.araddr  := saved_req.addr
+        io.arlen   := saved_req.axiLen
+        io.arsize  := saved_req.size
+        io.arburst := saved_req.axiBurstType // AXIBURSTWRAP
     }
 
     when (in_issue(r)) {
@@ -334,26 +322,25 @@ class CbusToAXI extends CoreModule {
 
     when (in_issue(aw)) {
         io.awvalid := 1.U
-        io.awaddr := saved_req.addr
-        io.awlen := saved_req.axiLen
-        io.awsize := saved_req.size
-        io.awburst := saved_req.axiBurstType//AXIBURSTWRAP
+        io.awaddr  := saved_req.addr
+        io.awlen   := saved_req.axiLen
+        io.awsize  := saved_req.size
+        io.awburst := saved_req.axiBurstType // AXIBURSTWRAP
     }
 
     when (in_issue(w)) {
         io.wvalid := 1.U
-        io.wdata := saved_req.data
-        io.wstrb := saved_req.mask
-        io.wlast := is_last
+        io.wdata  := saved_req.data
+        io.wstrb  := saved_req.mask
+        io.wlast  := is_last
     }
 
     when (in_issue(b)) {
         io.bready := 1.U
     }
 
-    when(io.areset) {
-        in_issue := 0.U
-    } .elsewhen(busy) {
+
+    when(busy) {
         when(io.cresp.ready && !io.cresp.isLast) {
             count := count - 1.U
         }
@@ -363,9 +350,8 @@ class CbusToAXI extends CoreModule {
             in_issue := next_issue
         }
         saved_req := io.creq
-        count := io.creq.axiLen
+        count     := io.creq.axiLen
     }
-
 }
 
 
