@@ -27,8 +27,8 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         val resp = Valid(new ICacheResp)
         val invalidate = Input(Bool())
 
-        val cbusResp = Input(new iCBusResp)
-        val cbusReq = Output(new iCBusReq)
+        val cbusResp = Input(new CBusResp)
+        val cbusReq = Output(new CBusReq)
     })
 /*---------------------------------------------------------------------*/
 //========== ----i$ params--- ==========
