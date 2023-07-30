@@ -3,23 +3,24 @@ package iFu.backend
 import chisel3._
 import chisel3.util._
 import iFu.common._
+import iFu.util.GetNewUopAndBrMask
 
 class RegisterRead(
     issueWidth : Int,
-    supportedUnitsArray: seq[SupportedFuncUnits],
+    supportedUnitsArray: Seq[SupportedFuncUnits],
     numTotalReadPorts: Int,
     numReadPortsArray: Seq[Int],
     numTotalBypassPorts: Int,
     numTotalPredBypassPorts: Int,
     registerWidth: Int
-)(implicit p: Parameters) extends CoreModule
+)extends CoreModule
 {
     val io = IO(new Bundle{
         val iss_valids = Input(Vec(issueWidth,Bool()))
         val iss_uops = Input(Vec(issueWidth,new MicroOp()))
 
-        val rf_read_ports = Flipped(Vec(numTotalReadPorts,new RegisterFileReadPortIO(maxPregSz,registerWidth)))
-        val prf_read_ports = Flipped(Vec(issueWidth,new RegisterFileReadPortIO(log2Ceil(ftqSz),1)))
+        val rf_read_ports = Flipped(Vec(numTotalReadPorts,new RegisterFileReadPortIO(pregSz,registerWidth)))
+        val prf_read_ports = Flipped(Vec(issueWidth,new RegisterFileReadPortIO(log2Ceil(frontendParams.numFTQEntries),1)))
 
         val bypass = Input(Vec(numTotalBypassPorts,Valid(new ExeUnitResp(registerWidth))))
         val pred_bypass = Input(Vec(numTotalPredBypassPorts,Valid(new ExeUnitResp(1))))
@@ -75,17 +76,23 @@ class RegisterRead(
         val rs3Addr = io.iss_uops(w).prs3
         val predAddr = io.iss_uops(w).ppred
 
-        if(numReadPorts > 0 ) io.rf_read_ports(idx+0).addr := rs1_addr
-        if(numReadPorts > 1 ) io.rf_read_ports(idx+1).addr := rs2_addr
-        if(numReadPorts > 2 ) io.rf_read_ports(idx+2).addr := rs3_addr
+        if(numReadPorts > 0 ) io.rf_read_ports(idx+0).addr := rs1Addr
+        if(numReadPorts > 1 ) io.rf_read_ports(idx+1).addr := rs2Addr
+        if(numReadPorts > 2 ) io.rf_read_ports(idx+2).addr := rs3Addr
 
-        if(enableSFBOPT) io.prf_read_ports(w).addr := pred_addr
+        if(enableSFBOPT) io.prf_read_ports(w).addr := predAddr
+
+        if (numReadPorts > 0) rrdRs1Data(w) := Mux(RegNext(rs1Addr === 0.U), 0.U, io.rf_read_ports(idx+0).data)
+        if (numReadPorts > 1) rrdRs2Data(w) := Mux(RegNext(rs2Addr === 0.U), 0.U, io.rf_read_ports(idx+1).data)
+        if (numReadPorts > 2) rrdRs3Data(w) := Mux(RegNext(rs3Addr === 0.U), 0.U, io.rf_read_ports(idx+2).data)
+
+        if (enableSFBOpt) rrdPredData(w) := Mux(RegNext(io.iss_uops(w).is_sfb_shadow), io.prf_read_ports(w).data, false.B)
 
         val rrdKill = io.kill || IsKilledByBranch(io.brupdate,rrdUops(w))
 
         exeRegValids(w) := Mux(rrdKill,false.B,rrdValid(w))
         exeRegUops(w) := Mux(rrdKill,NullMicroOp,rrdUops(w))
-        exeRegUops(w).br_mask := GetNewBrMask(io.brupdate,rrdUops(w))
+        exeRegUops(w).brMask := GetNewBrMask(io.brupdate,rrdUops(w))
 
         idx += numReadPorts
     }
