@@ -57,14 +57,11 @@ class RobIO(
     val debug_wb_valids = Input(Vec(numWakeupPorts, Bool()))
     val debug_wb_wdata  = Input(Vec(numWakeupPorts, Bits(xLen.W)))
     val debug_wb_ldst = Input(Vec(numWakeupPorts,UInt(lregSz.W)))
-    val debug_tsc = Input(UInt(xLen.W))
 }
 
 class CommitExceptionSignals extends CoreBundle
 {
     val ftq_idx = UInt(log2Ceil(frontendParams.numFTQEntries).W)
-    //val edge_inst = Bool()
-    //val is_rvc = Bool()
     val pc_lob = UInt(log2Ceil(frontendParams.iCacheParams.lineBytes).W)
     val cause = UInt(xLen.W)
     val badvaddr = UInt(xLen.W)
