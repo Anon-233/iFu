@@ -2,70 +2,44 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
-import iFu.common.{CoreBundle, MicroOp}
 
-object FUConst {
-    val FUC_SZ = 8// TODO
-    val FU_X = BitPat.dontCare(FUC_SZ)
-    val FU_ALU = 1.U(FUC_SZ.W)
-    val FU_JMP = 2.U(FUC_SZ.W)
-    val FU_MEM = 4.U(FUC_SZ.W)
-    val FU_MUL = 8.U(FUC_SZ.W)
-    val FU_DIV = 16.U(FUC_SZ.W)
-    val FU_CSR = 32.U(FUC_SZ.W)
-    // val FN_CNT = 64.U(FUC_SZ.W)
-    // val FN_TLB = 128.U(FUC_SZ.W) // ???
-}
+import iFu.common._
+import iFu.common.Consts._
 
-import FUConst._
-
-case class SupportedFuncs(
-    val alu: Boolean = false,
-    val jmp: Boolean = false,
-    val mem: Boolean = false,
-    val muldiv: Boolean = false,
-    val csr: Boolean = false
-    // val cnt: Boolean = false
-    // val tlb: Boolean = false
-)
-
-abstract class FuncUnit(
+abstract class FuncUnit (
     val isPiplined: Boolean,
     val numStages: Int,
-    val numBypassStages: Int,
     val isJmpUnit: Boolean,
     val isAluUnit: Boolean,
-    val isMemAddrCalcUnit: Boolean,
+    val isMemAddrCalcUnit: Boolean
 ) extends CoreModule {
     val io = IO(new Bundle {
-        val req = Flipped(Decoupled(new FuncUnitReq()))
-        val resp = Decoupled(new FuncUnitResp())
-        val brUpdate = Input(new BrUpdateInfo())
-        val bypass = Output(Vec(numBypassStage, new ExeUnitResp()))
-        val brInfo = if (isAluUnit) Output(new BrResolutionInfo()) else null
-        val getFtqPC = if (isJmpUnit) Flipped(new GetPCFromFtqIO()) else null
-        val status = if (isMemAddrCalcUnit) Input(new MStatus()) else null
+        val req = Flipped(Decoupled(new FuncUnitReq))
+        val resp = Decoupled(new FuncUnitResp)
+        val brUpdate = Input(new BrUpdateInfo)
+        val bypass = Output(Vec(numStages, new ExeUnitResp))
 
-        val bp = if (isMemAddrCalcUnit) Input(Vec(nBreakpoints, new BP)) else null
-        val mcontext = if (isMemAddrCalcUnit) Input(UInt(mcontextWidth.W)) else null
-        val scontext = if (isMemAddrCalcUnit) Input(UInt(scontextWidth.W)) else null
+        val brInfo = if (isAluUnit) Output(new BrResolutionInfo) else null
+        val getFtqPC = if (isJmpUnit) Flipped(new GetPCFromFtqIO) else null
+        // val status = if (isMemAddrCalcUnit) Input(new MStatus) else null
+
+        // val bp = if (isMemAddrCalcUnit) Input(Vec(nBreakpoints, new BP)) else null
+        // val mcontext = if (isMemAddrCalcUnit) Input(UInt(mcontextWidth.W)) else null
+        // val scontext = if (isMemAddrCalcUnit) Input(UInt(scontextWidth.W)) else null
     })
 }
 
-abstract class PipelinedFuncUnit(
+abstract class PipelinedFuncUnit (
     numStages: Int,
-    numBypassStages: Int,
-    earliestBypassStage: Int,
     isJmpUnit: Boolean = false,
     isAluUnit: Boolean = false,
-    isMemAddrCalcUnit: Boolean = false,
+    isMemAddrCalcUnit: Boolean = false
 ) extends FuncUnit (
     isPiplined = true,
     numStages = numStages,
-    numBypassStages = numBypassStages,
     isJmpUnit = isJmpUnit,
     isAluUnit = isAluUnit,
-    isMemAddrCalcUnit = isMemAddrCalcUnit,
+    isMemAddrCalcUnit = isMemAddrCalcUnit
 ) {
     io.req.ready := true.B
 
@@ -80,11 +54,6 @@ abstract class PipelinedFuncUnit(
             rValids(i) := rValids(i - 1) && !IsKilledByBranch(io.brUpdate, rUops(i-1)) && !io.req.bits.kill
             rUops(i) := rUops(i - 1)
             rUops(i).brMask := GetNewBrMask(io.brUpdate, rUops(i - 1))
-
-            // should bypass late a cycle after the alu calculated the result
-            // if (numBypassStages > 0) {
-            //     io.bypass(i - 1).bits.uop := rUops(i - 1)
-            // }
         }
 
         io.resp.valid := rValids(numStages - 1) && !IsKilledByBranch(io.brUpdate, rUops(numStages - 1))
@@ -92,11 +61,9 @@ abstract class PipelinedFuncUnit(
         io.resp.bits.uop := rUops(numStages - 1)
         io.resp.bits.uop.brMask := GetNewBrMask(io.brUpdate, rUops(numStages - 1))
 
-        if (numBypassStages >0 && earliestBypassStage == 0) {
-            io.bypass(0).bits.uop := io.req.bits.uop
-            for (i <- 1 until numBypassStages) {
-                io.bypass(i).bits.uop := rUops(i - 1)
-            }
+        io.bypass(0).bits.uop := io.req.bits.uop
+        for (i <- 1 until numStages) {
+            io.bypass(i).bits.uop := rUops(i - 1)
         }
     } else {
         require (numStages == 0)
@@ -113,8 +80,6 @@ class ALUUnit(
     numStages: Int = 1,
 ) extends PipelinedFuncUnit (
     numStages = numStages,
-    numBypassStages = numStages,
-    earliestBypassStage = 0,
     isAluUnit = true,
     isJmpUnit = isJmpUnit
 ) {
@@ -231,7 +196,6 @@ class ALUUnit(
     io.resp.bits.predicated := rPred(numStages - 1)
 
     require (numStages >= 1)
-    require (numBypassStages >= 1)
     io.bypass(0).valid := io.req.valid
     io.bypass(0).bits.data := Mux(io.req.bits.uop.is_sfb_br, pcSel === PC_BRJMP, aluOut)
     for (i <- 1 until numStages) {
@@ -243,8 +207,6 @@ class ALUUnit(
 // 乘法还可以bypass???
 class PipelinedMulUnit(numStages: Int = 3) extends PipelinedFuncUnit (
     numStages = numStages,
-    numBypassStages = 0,
-    earliestBypassStage = 0
 ) {
     val imult = Module(new MultStar())
 
@@ -258,8 +220,6 @@ class PipelinedMulUnit(numStages: Int = 3) extends PipelinedFuncUnit (
 
 class MemAddrCalcUnit extends PipelinedFuncUnit(
     numStages = 0,
-    numBypassStages = 0,
-    earliestBypassStage = 0,
     isMemAddrCalcUnit = true
 ) {
     // perform address calculation
@@ -314,7 +274,6 @@ class MemAddrCalcUnit extends PipelinedFuncUnit(
 abstract class IterativeFuncUnit extends FuncUnit (
     isPiplined = false,
     numStages = 1,
-    numBypassStages = 0
 ) {
     val rUop = Reg(new MicroOp())
     val doKill = Wire(Bool())
