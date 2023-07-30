@@ -101,7 +101,10 @@ class MicroOp extends CoreBundle with MicroOpCode {
     def unsafe = use_ldq || (use_stq && !is_fence) || isBr || isJalr
     def fu_code_is(_fu: UInt) = (fuCode & _fu) =/= 0.U
 
-    def NullMicroOp: MicroOp = {
+}
+
+object NullMicroOp extends MicroOpCode {
+    def apply: MicroOp = {
         val uop = Wire(new MicroOp)
         uop := DontCare // Overridden in the following lines
         uop.uopc := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
