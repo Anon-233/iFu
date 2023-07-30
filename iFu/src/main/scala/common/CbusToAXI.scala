@@ -244,8 +244,8 @@ class CBusToAXIIO extends Bundle {
 
     val bready = Output(Bool())
 
-    val creq  = Input(new CbusReq)
-    val cresp = Output(new CbusResp)
+    val creq  = Input(new CBusReq)
+    val cresp = Output(new CBusResp)
 }
 
 class CBusToAXI extends CoreModule {
@@ -254,11 +254,11 @@ class CBusToAXI extends CoreModule {
     val b :: w :: aw :: r :: ar :: Nil = Enum(5)
 
     val in_issue = RegInit(0.U(5.W))
-    val next_issue = Mux(io.creq.isStore 0x7.U(5.W), /*b00111*/
+    val next_issue = Mux(io.creq.isStore, 0x7.U(5.W), /*b00111*/
                                          0x18.U(5.W) /*b11000*/)
 
     // check ongoing request
-    val saved_req = Reg(new CbusReq)
+    val saved_req = Reg(new CBusReq)
     val count = Reg(UInt(8.W))
 
     val is_last = count === 0.U

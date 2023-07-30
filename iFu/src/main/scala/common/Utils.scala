@@ -72,9 +72,12 @@ object maskMatch {
     def apply(msk1: UInt, msk2: UInt): Bool = (msk1 & msk2) =/= 0.U
 }
 
-def IsKilledByBranch(brupdate: BrUpdateInfo, uop: MicroOp): Bool = {
-    return maskMatch(brupdate.b1.mispredictMask, uop.brMask)
+object IsKilledByBranch{
+    def apply(brupdate: BrUpdateInfo, uop: MicroOp): Bool = {
+        return maskMatch(brupdate.b1.mispredictMask, uop.brMask)
+    }
 }
+
 object GetNewBrMask {
     def apply(brupdate: BrUpdateInfo, uop: MicroOp): UInt = {
         return uop.brMask & ~brupdate.b1.resolveMask
