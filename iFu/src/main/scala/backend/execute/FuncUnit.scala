@@ -56,7 +56,7 @@ abstract class PipelinedFuncUnit (
             rUops(i).brMask := GetNewBrMask(io.brUpdate, rUops(i - 1))
         }
 
-        io.resp.valid := rValids(numStages - 1) && !IsKilledByBranch(io.brUpdate, rUops(numStages - 1))
+        io.resp.valid := rValids(numStages - 1) && !IsKilledByBranch(io.brUpdate, rUops(numStages - 1)) && !io.req.bits.kill
         io.resp.bits.predicated := false.B  // default
         io.resp.bits.uop := rUops(numStages - 1)
         io.resp.bits.uop.brMask := GetNewBrMask(io.brUpdate, rUops(numStages - 1))
@@ -68,7 +68,7 @@ abstract class PipelinedFuncUnit (
     } else {
         require (numStages == 0)
 
-        io.resp.valid := io.req.valid && !IsKilledByBranch(io.brUpdate, io.req.bits.uop)
+        io.resp.valid := io.req.valid && !IsKilledByBranch(io.brUpdate, io.req.bits.uop) && !io.req.bits.kill
         io.resp.bits.predicated := false.B  // default
         io.resp.bits.uop := io.req.bits.uop
         io.resp.bits.uop.brMask := GetNewBrMask(io.brUpdate, io.req.bits.uop)
@@ -87,48 +87,46 @@ class ALUUnit(
 
     val imm = ImmGen(uop.immPacked, uop.ctrl.imms_el)
 
-    val op1Data: UInt = null
+    var op1Data: UInt = null
     if (isJmpUnit) {
+        val icBlockBytes = frontendParams.iCacheParams.lineBytes
         val block_pc = AlignPCToBoundary(io.getFtqPC.pc, icBlockBytes)
         val uop_pc  = (block_pc | uop.pcLowBits)
 
         op1Data = Mux(uop.ctrl.op1_sel === OP1_RS1, io.req.bits.rs1Data,
                   Mux(uop.ctrl.op1_sel === OP1_PC,  uop_pc, 0.U))
-    }  else {
+    } else {
         op1Data = Mux(uop.ctrl.op1_sel === OP1_RS1, io.req.bits.rs1Data, 0.U)
     }
     val op2Data = Mux(uop.ctrl.op2_sel === OP2_IMM, imm,
                   Mux(uop.ctrl.op2_sel === OP2_RS2, io.req.bits.rs2Data, 
-                  Mux(uop.ctrl.op2_sel === OP2_NEXT, 4.U)))
+                  Mux(uop.ctrl.op2_sel === OP2_NEXT, 4.U, 0.U)))
 
-    val alu = Module(new Alu())
+    val alu = Module(new Alu)
     alu.io.fn := uop.ctrl.op_fcn
     alu.io.op1 := op1Data
     alu.io.op2 := op2Data
 
-    val killed = WireInit(false.B)
-    when (io.req.bits.kill || IsKilledByBranch(io.brUpdate, uop)) {
-        killed := true.B
-    }
+    val killed = io.req.bits.kill || IsKilledByBranch(io.brUpdate, uop)
 
     val rs1 = io.req.bits.rs1Data
     val rs2 = io.req.bits.rs2Data
     val brEq = rs1 === rs2
     val brLtu = rs1.asUInt < rs2.asUInt
-    val brLt = (~(rs1(xLen-1) ^ rs2(xLen-1)) & br_ltu |
-                rs1(xLen-1) & ~rs2(xLen-1)).asBool
+    val brLt = (~(rs1(xLen - 1) ^ rs2(xLen - 1)) & br_ltu |
+                rs1(xLen - 1) & ~rs2(xLen - 1)).asBool
 
     val pcSel = MuxLookup(uop.ctrl.br_type, PC_PLUS4,
         Seq(
-            BR_N -> PC_PLUS4,
-            BR_NE -> Mux(!brEq, PC_BRJMP, PC_PLUS4),
-            BR_EQ -> Mux(brEq, PC_BRJMP, PC_PLUS4),
-            BR_GE -> Mux(!brLt, PC_BRJMP, PC_PLUS4),
+            BR_N   -> PC_PLUS4,
+            BR_NE  -> Mux(!brEq , PC_BRJMP, PC_PLUS4),
+            BR_EQ  -> Mux( brEq , PC_BRJMP, PC_PLUS4),
+            BR_GE  -> Mux(!brLt , PC_BRJMP, PC_PLUS4),
             BR_GEU -> Mux(!brLtu, PC_BRJMP, PC_PLUS4),
-            BR_LT -> Mux(brLt, PC_BRJMP, PC_PLUS4),
-            BR_LTU -> Mux(brLtu, PC_BRJMP, PC_PLUS4),
-            BR_J -> PC_BRJMP,
-            BR_JR -> PC_JALR
+            BR_LT  -> Mux( brLt , PC_BRJMP, PC_PLUS4),
+            BR_LTU -> Mux( brLtu, PC_BRJMP, PC_PLUS4),
+            BR_J   -> PC_BRJMP,
+            BR_JR  -> PC_JALR
         )
     )
 
@@ -137,14 +135,14 @@ class ALUUnit(
     val isBr = io.req.valid && !killed && uop.isBr && !uop.isSFB
     val isJalr = io.req.valid && !killed && uop.isJalr
 
+    val mispredict = WireInit(false.B)
     when (isBr || isJalr) {
         if (!isJmpUnit) {
-            assert(pcSel =/= PC_PLUS4)
+            assert(pcSel =/= PC_JALR)
         }
         when (pcSel === PC_PLUS4) {
             mispredict := uop.taken
-        }
-        when (pcSel === PC_BRJMP) {
+        } .elsewhen (pcSel === PC_BRJMP) {
             mispredict := !uop.taken
         }
     }
@@ -159,35 +157,31 @@ class ALUUnit(
     brInfo.pcSel := pcSel
     brInfo.jalrTarget := DontCare
 
-    val targetOffset = imm
     if (isJmpUnit) {
         val jalrTargetBase = io.req.bits.rs1Data.asSInt
-        val jalrTarget = (jalrTargetBase + targetOffset).asUInt
+        val jalrTarget = (jalrTargetBase + imm).asUInt
         brinfo.jalrTarget := jalrTarget
 
-        val cfiIdx = ((uop.pc_lob ^ Mux(io.getFtqPC.entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth),1)
+        val cfiIdx = ((uop.pcLowBits ^ Mux(io.getFtqPC.entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth), 2)
 
         when (pc_sel === PC_JALR) {
-        mispredict := !io.getFtqPC.next_val ||
-                        (io.getFtqPC.next_pc =/= jalrTarget) ||
-                        !io.getFtqPC.entry.cfiIdx.valid ||
-                        (io.getFtqPC.entry.cfiIdx.bits =/= cfiIdx)
+            mispredict := !io.getFtqPC.next_val || (io.getFtqPC.next_pc =/= jalrTarget) ||
+                        !io.getFtqPC.entry.cfiIdx.valid || (io.getFtqPC.entry.cfiIdx.bits =/= cfiIdx)
         }
     }
-    brinfo.target_offset := target_offset
+    brinfo.target_offset := imm
     io.brInfo := brInfo
 
-    val rValids = RegInit(VecInit(Seq.fill(numStages){ false.B }))
     val rData = Reg(Vec(numStages, UInt(xLen.W)))
     val rPred = Reg(Vec(numStages, Bool()))
-    val aluOut = Mux(io.req.bits.uop.is_sfb_shadow && io.req.bits.predData,
+    val aluOut = Mux(
+        io.req.bits.uop.is_sfb_shadow && io.req.bits.predData,
         Mux(io.req.bits.uop.ldst_is_rs1, io.req.bits.rs1Data, io.req.bits.rs2Data),
-        alu.io.out)
-    rValids(0) := io.req.valid
+        alu.io.out
+    )
     rData(0) := Mux(io.req.bits.uop.is_sfb_br, pcSel === PC_BRJMP, aluOut)
     rPred(0) := io.req.bits.uop.is_sfb_shadow && io.req.bits.predData
     for (i <- 1 until numStages) {
-        rValids(i) := rValids(i - 1)
         rData(i) := rData(i - 1)
         rPred(i) := rPred(i - 1)
     }
@@ -204,11 +198,10 @@ class ALUUnit(
     }
 }
 
-// 乘法还可以bypass???
 class PipelinedMulUnit(numStages: Int = 3) extends PipelinedFuncUnit (
     numStages = numStages,
 ) {
-    val imult = Module(new MultStar())
+    val imult = Module(new MultStar)
 
     imult.io.req.valid := io.req.valid
     imult.io.req.bits.fn := io.req.bits.uop.ctrl.op_fcn
@@ -222,7 +215,6 @@ class MemAddrCalcUnit extends PipelinedFuncUnit(
     numStages = 0,
     isMemAddrCalcUnit = true
 ) {
-    // perform address calculation
     val imm = ImmGen(uop.immPacked, uop.ctrl.imms_el)
     val addr = (io.req.bits.rs1Data.asSInt + imm).asUInt
 
@@ -231,12 +223,12 @@ class MemAddrCalcUnit extends PipelinedFuncUnit(
     io.resp.bits.addr := addr
     io.resp.bits.data := store_data
 
-    // Handle misaligned exceptions
-    val size = io.req.bits.uop.mem_size
-    val misaligned =
-        (size === 1.U && (addr(0) =/= 0.U)) ||
-        (size === 2.U && (addr(1,0) =/= 0.U)) ||
-        (size === 3.U && (addr(2,0) =/= 0.U))
+    // TODO: CACOP?
+    // val size = io.req.bits.uop.mem_size
+    // val misaligned =
+    //     (size === 1.U && (addr(0) =/= 0.U)) ||
+    //     (size === 2.U && (addr(1,0) =/= 0.U)) ||
+    //     (size === 3.U && (addr(2,0) =/= 0.U))
 
     // val bkptu = Module(new BreakpointUnit(nBreakpoints))
     // bkptu.io.status   := io.status
@@ -246,38 +238,37 @@ class MemAddrCalcUnit extends PipelinedFuncUnit(
     // bkptu.io.mcontext := io.mcontext
     // bkptu.io.scontext := io.scontext
 
-    val ma_ld  = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
-    val ma_st  = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned
-    // val dbg_bp = io.req.valid && ((io.req.bits.uop.uopc === uopLD  && bkptu.io.debug_ld) ||
-    //                                 (io.req.bits.uop.uopc === uopSTA && bkptu.io.debug_st))
+    // val ma_ld  = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
+    // val ma_st  = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned
     // val bp     = io.req.valid && ((io.req.bits.uop.uopc === uopLD  && bkptu.io.xcpt_ld) ||
     //                                 (io.req.bits.uop.uopc === uopSTA && bkptu.io.xcpt_st))
 
-    def checkExceptions(x: Seq[(Bool, UInt)]) =
-        (x.map(_._1).reduce(_||_), PriorityMux(x))
-    val (xcpt_val, xcpt_cause) = checkExceptions(List(
-        (ma_ld,  (Causes.misaligned_load).U),   // TODO: change the cause code
-        (ma_st,  (Causes.misaligned_store).U),
-        (dbg_bp, (CSR.debugTriggerCause).U),
-        (bp,     (Causes.breakpoint).U)))
+    // def checkExceptions(x: Seq[(Bool, UInt)]) = {
+    //     (x.map(_._1).reduce(_||_), PriorityMux(x))
+    // }
+    // val (xcpt_val, xcpt_cause) = checkExceptions(List(
+    //     (ma_ld,  (Causes.misaligned_load).U ),   // TODO: change the cause code
+    //     (ma_st,  (Causes.misaligned_store).U),
+    //     (dbg_bp, (CSR.debugTriggerCause).U  ),
+    //     (bp,     (Causes.breakpoint).U      )
+    // ))
 
-    io.resp.bits.mxcpt.valid := xcpt_val
-    io.resp.bits.mxcpt.bits  := xcpt_cause
+    // io.resp.bits.mxcpt.valid := xcpt_val
+    // io.resp.bits.mxcpt.bits  := xcpt_cause
 
-    io.resp.bits.sfence.valid := io.req.valid && io.req.bits.uop.mem_cmd === M_SFENCE
-    io.resp.bits.sfence.bits.rs1 := io.req.bits.uop.mem_size(0)
-    io.resp.bits.sfence.bits.rs2 := io.req.bits.uop.mem_size(1)
-    io.resp.bits.sfence.bits.addr := io.req.bits.rs1_data
-    io.resp.bits.sfence.bits.asid := io.req.bits.rs2_data
+    // io.resp.bits.sfence.valid := io.req.valid && io.req.bits.uop.mem_cmd === M_SFENCE
+    // io.resp.bits.sfence.bits.rs1 := io.req.bits.uop.mem_size(0)
+    // io.resp.bits.sfence.bits.rs2 := io.req.bits.uop.mem_size(1)
+    // io.resp.bits.sfence.bits.addr := io.req.bits.rs1_data
+    // io.resp.bits.sfence.bits.asid := io.req.bits.rs2_data
 }
 
 abstract class IterativeFuncUnit extends FuncUnit (
     isPiplined = false,
     numStages = 1,
 ) {
-    val rUop = Reg(new MicroOp())
+    val rUop = Reg(new MicroOp)
     val doKill = Wire(Bool())
-    doKill := io.req.bits.kill
 
     when (io.req.fire) {
         doKill := IsKilledByBranch(io.brUpdate, io.req.bits.uop) || io.req.bits.kill
