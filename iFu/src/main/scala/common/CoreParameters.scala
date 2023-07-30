@@ -95,7 +95,8 @@ trait HasCoreParameters {
     val maxBrCount: Int = 20
     val numLRegs: Int = 32
     val lregSz: Int = log2Ceil(numLRegs)
-
+    val numPRegs: Int = 108
+    val pregSz: Int = log2Ceil(numPRegs)
     val frontendParams: FrontendParameters = new FrontendParameters
     val robParameters: ROBParameters = new ROBParameters
     val lsuParameters: LSUParameters = new LSUParameters
