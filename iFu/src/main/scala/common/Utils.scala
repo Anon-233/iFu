@@ -120,3 +120,11 @@ object AlignPCToBoundary
         ~(~pc | (b-1).U)
     }
 }
+
+object Sext
+{
+    def apply(x: UInt, length: Int): UInt = {
+        if (x.getWidth == length) return x
+        else return Cat(Fill(length-x.getWidth, x(x.getWidth-1)), x)
+    }
+}
