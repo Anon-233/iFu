@@ -1,6 +1,7 @@
 package backend.memSystem
 import chisel3._
 import chisel3.util._
+import iFu.common._
 
 
 
@@ -8,8 +9,7 @@ import chisel3.util._
 
 
 
-
-class MSHRdata extends Bundle with HasDcacheParameters{
+class MSHRdata extends CoreBundle with HasDcacheParameters{
     //该项是否有效
     val valid = Bool()
 
@@ -17,7 +17,7 @@ class MSHRdata extends Bundle with HasDcacheParameters{
     val id = UInt(log2Up(nFirstMSHRs).W)
 
     // 该项的请求
-    val req = new DCacheReq()
+    val req = new DCacheReq
 
     // 该项将来充填，必然命中于replaceway，replay的时候不用再进行命中判断，而是直接去找那个路
     val way = UInt(log2Ceil(nWays).W)
@@ -40,17 +40,17 @@ class MSHRdata extends Bundle with HasDcacheParameters{
 }
 
 
-class MSHR extends Module with HasDcacheParameters{
+class MSHR extends CoreModule with HasDcacheParameters{
     val io = IO{new Bundle{
         // 写入请求
-        val req = Flipped(Decoupled(Vec( memWidth , new DCacheReq())))
+        val req = Flipped(Decoupled(new DCacheReq))
         // 传进来时候的replacePos(missAllocWay)
         val replacePos = Output(UInt(log2Ceil(nWays).W)) 
         // 流水线号
         val pipeNumber = Input(UInt(1.W))
 
         // 传出请求
-        val replayReq = (Decoupled(new DCacheReq()))
+        val replayReq = Decoupled(new DCacheReq)
         // 传出时候的hitpos
         val hitPos = Output(UInt(log2Ceil(nWays).W)) 
         // 流水线号
@@ -186,12 +186,12 @@ class MSHR extends Module with HasDcacheParameters{
 }
 
 
-class MSHRFile extends Module with HasDcacheParameters{
+class MSHRFile extends CoreModule with HasDcacheParameters{
     val io = IO(new Bundle {
 
         // miss指令写回MSHR
             // 发生miss的请求
-            val req  = Flipped( Decoupled(new DCacheReq)) 
+            val req  = Flipped(Decoupled(new DCacheReq))
             // 发生miss的请求的replacePos，用于之后读取被替换的行以及发给RPU去使用,以及replace的时候用
             val replacePos = Input(UInt(log2Ceil(nWays).W)) 
             // 流水线号
@@ -275,7 +275,7 @@ class MSHRFile extends Module with HasDcacheParameters{
 
         firstAllocatable(i) := firstMSHRs(i).req.ready
 
-        firstMSHRs(i).newBlockAddr := io.req.bits.addr
+        firstMSHRs(i).newBlockAddr := getBlockAddr(io.req.bits.addr)
         newblockAddrMatches(i) := firstMSHRs(i).newblockAddrMatch
 
         firstMSHRs(i).brupdate := io.brupdate
