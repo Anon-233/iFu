@@ -115,4 +115,5 @@ trait HasCoreParameters {
         IssueParams(issueWidth = 2, numIssueSlots = 16, iqType = IQT_INT.litValue.toInt, dispatchWidth = 1))
 
     val BUBBLE = 0.U(32.W)
+    val enableSFBOpt: Boolean = true
 }
