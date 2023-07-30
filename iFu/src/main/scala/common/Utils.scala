@@ -2,6 +2,7 @@ package iFu.util
 
 import chisel3._
 import chisel3.util._
+import iFu.backend.memSystem.HasUop
 import iFu.common._
 
 object MaskLower {
@@ -94,15 +95,15 @@ object UpdateBrMask {
         out.brMask := GetNewBrMask(brupdate, uop)
         out
     }
-//    def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, bundle: T): T = {
-//        val out = WireInit(bundle)
-//        out.uop.brMmask := GetNewBrMask(brupdate, bundle.uop.brMask)
-//        out
-//    }
-//    def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, bundle: Valid[T]): Valid[T] = {
-//        val out = WireInit(bundle)
-//        out.bits.uop.brMask := GetNewBrMask(brupdate, bundle.bits.uop.brMask)
-//        out.valid := bundle.valid && !IsKilledByBranch(brupdate, bundle.bits.uop.brMask)
-//        out
-//    }
+    def apply[T <: HasUop](brupdate: BrUpdateInfo, bundle: T): T = {
+        val out = WireInit(bundle)
+        out.uop.brMask := GetNewBrMask(brupdate, bundle.uop.brMask)
+        out
+    }
+    def apply[T <: HasUop](brupdate: BrUpdateInfo, bundle: Valid[T]): Valid[T] = {
+        val out = WireInit(bundle)
+        out.bits.uop.brMask := GetNewBrMask(brupdate, bundle.bits.uop.brMask)
+        out.valid := bundle.valid && !IsKilledByBranch(brupdate, bundle.bits.uop.brMask)
+        out
+    }
 }
