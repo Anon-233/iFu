@@ -61,3 +61,8 @@ object SelectFirstN {
         sels
     }
 }
+
+object IsOlder
+{
+    def apply(i0: UInt, i1: UInt, head: UInt) = ((i0 < i1) ^ (i0 < head) ^ (i1 < head))
+}

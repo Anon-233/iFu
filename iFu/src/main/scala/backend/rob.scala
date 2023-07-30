@@ -3,6 +3,7 @@ package iFu.backend
 import chisel3._
 import chisel3.util._
 import iFu.common._
+import iFu.util._
 
 
 class RobIO(
@@ -20,9 +21,9 @@ class RobIO(
     val rob_pnr_idx = Output(UInt(robParameters.robAddrSz.W))
     val rob_head_idx = Output(UInt(robParameters.robAddrSz.W))
 
-    val brupdate = Input(new BrUpdataInfo())
+    val brupdate = Input(new BrUpdateInfo())
     //写回阶段
-    val wb_resps = Flipped(Vec(numWakeupPorts,Valid(new ExeUnitResp(xLen))))
+    val wb_resps = Flipped(Vec(numWakeupPorts,Valid(new ExeUnitResp)))
 
     //store stage
     val lsu_clr_bsy = Input(Vec(memWidth +1,Valid(UInt(robParameters.robAddrSz.W))))
@@ -55,7 +56,7 @@ class RobIO(
     //---------------------debug
     val debug_wb_valids = Input(Vec(numWakeupPorts, Bool()))
     val debug_wb_wdata  = Input(Vec(numWakeupPorts, Bits(xLen.W)))
-    val debug_wb_ldst = Input(Vec(numWakeupPorts,UInt(lregSz.W))
+    val debug_wb_ldst = Input(Vec(numWakeupPorts,UInt(lregSz.W)))
     val debug_tsc = Input(UInt(xLen.W))
 }
 
@@ -85,7 +86,7 @@ object FlushTypes
     def useSamePC(typ: UInt): Bool = typ === refetch
     def usePCplus4(typ: UInt): Bool = typ === next
 
-    def getType(valid: Bool, i_xcpt: Bool, i_eret: Bool, i_refetch: Bool):UInt = {
+    def getType(valid: Bool, i_xcpt: Bool, i_eret: Bool, i_refetch: Bool): UInt = {
         val ret = 
             Mux(!valid,none,
             Mux(i_eret,eret,
@@ -237,8 +238,8 @@ class Rob(
         for(i <- 0 until numWakeupPorts){
             val wbResp = io.wb_resps(i)
             val wbUop = wbResp.bits.uop
-            val rowIdx = GetRowIdx(wbUop.rob_idx)
-            when(wbResp.valid && MatchBank(GetBankIdx(wbUop.rob_idx))){
+            val rowIdx = GetRowIdx(wbUop.robIdx)
+            when(wbResp.valid && MatchBank(GetBankIdx(wbUop.robIdx))){
                 robBsy(rowIdx) := false.B
                 robUnsafe(rowIdx) := false.B
                 robPredicated(rowIdx) := wbResp.bits.predicated
@@ -263,8 +264,8 @@ class Rob(
 
 
         //----------------exception-----------------
-        when(io.lxcpt.valid && MatchBank(GetBankIdx(io.lxcpt.bits.uop.robidx))) {
-            robException(GetRowIdx(io.lxcpt.bits.uop.rob_idx)) := true.B
+        when(io.lxcpt.valid && MatchBank(GetBankIdx(io.lxcpt.bits.uop.robIdx))) {
+            robException(GetRowIdx(io.lxcpt.bits.uop.robIdx)) := true.B
                 //错误应该只可能是发生存储-加载顺序异常(Memory Ordering Failure)。当 store 指令与其后的 load 指令有共同的目标地址时，类似 RAW 冲突，若 load 指令在 store 之前发射(Issue)，load 命令将从内存中读取错误的值。
                 
         }
@@ -281,9 +282,9 @@ class Rob(
         
 
         when(io.brupdate.b2.mispredict &&
-            MatchBank(GetBankIdx(io.brupdate.b2.uop.rob_idx)) &&
-            GetRowIdx(io.brupdate.b2.uop.rob_idx) === comIdx) {
-                io.commit.uops(w).token := io.brupdate.b2.taken 
+            MatchBank(GetBankIdx(io.brupdate.b2.uop.robIdx)) &&
+            GetRowIdx(io.brupdate.b2.uop.robIdx) === comIdx) {
+                io.commit.uops(w).taken := io.brupdate.b2.taken
             }
 
         val rbkRow = robState === stateRollback && !full
@@ -299,20 +300,20 @@ class Rob(
         //------------------wrong branch-------------------
 
         for(i <- 0 until numRobRows){
-            var brMask = robUop(i).br_mask
+            var brMask = robUop(i).brMask
 
             when(IsKilledByBranch(io.brupdate,brMask))
             {
                 robVal(i) :=false.B
-                rob_uop(i.U).debug_inst := BUBBLE
+                robUop(i.U).debug_inst := BUBBLE
             } .elsewhen (robVal(i)){
-                robUop(i).br_mask := GetNewBrMask(io.brupdate,brMask)
+                robUop(i).brMask := GetNewBrMask(io.brupdate,brMask)
             }
         }
 
         when(io.brupdate.b2.mispredict &&
-        MatchBank(GetBankIdx(io.brupdate.b2.uop.rob_idx))){
-            robUop(GetRowIdx(io.brupdate.b2.uop.rob_idx)).taken := io.brupdate.b2.taken
+        MatchBank(GetBankIdx(io.brupdate.b2.uop.robIdx))){
+            robUop(GetRowIdx(io.brupdate.b2.uop.robIdx)).taken := io.brupdate.b2.taken
         }
 
 
@@ -325,8 +326,8 @@ class Rob(
         //--------------------output-----------------------
         robHeadVals(w) := robVal(robHead)
         robTailVals(w) := robVal(robTail)
-        robHeadUsesLdq(w) := robUop(robHead).uses_ldq
-        robHeadUsesStq(w) := robUop(robHead).uses_stq
+        robHeadUsesLdq(w) := robUop(robHead).use_ldq
+        robHeadUsesStq(w) := robUop(robHead).use_stq
 
 
         for( i<- 0 until numRobRows){
@@ -342,12 +343,12 @@ class Rob(
             }
 
         for (i <- 0 until numWakeupPorts) {
-            val rob_idx = io.wb_resps(i).bits.uop.rob_idx
+            val rob_idx = io.wb_resps(i).bits.uop.robIdx
             when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx))) {
                 rob_debug_wdata(GetRowIdx(rob_idx)) := io.debug_wb_wdata(i)
                 rob_debug_ldst(GetRowIdx(rob_idx))  := io.debug_wb_ldst(i)
             }
-            val temp_uop = rob_uop(GetRowIdx(rob_idx))
+            val temp_uop = robUop(GetRowIdx(rob_idx))
 
             assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
                     !robVal(GetRowIdx(rob_idx))),
@@ -367,9 +368,9 @@ class Rob(
     }
 
 
-    val blockCommit = (robState =/= stateNormal) && (robState =/= stateWatiTillEmpty) || RegNext(exceptionThrown) ||RegNext(RegNext(exceptionThrown))
-    val willThrowException = false.B
-    val blockXcpt = false.B
+    var blockCommit = (robState =/= stateNormal) && (robState =/= stateWatiTillEmpty) || RegNext(exceptionThrown) ||RegNext(RegNext(exceptionThrown))
+    var willThrowException = false.B
+    var blockXcpt = false.B
 
     for(w<- 0 until coreWidth) {
         willThrowException = (canThrowException(w) && !blockCommit && !blockXcpt) || willThrowException
@@ -388,10 +389,10 @@ class Rob(
     
     val refetchInst = exceptionThrown || insnSysPc2epc
     val comXcptUop = PriorityMux(robHeadVals,io.commit.uops)
-    io.com_xcpt.bits.ftq_idx := comXcptUop.ftq_idx
+    io.com_xcpt.bits.ftq_idx := comXcptUop.ftqIdx
     //io.com_xcpt.bits.edge_inst := comXcptUop.edge_inst
     //io.com_xcpt.bits.is_rvc := comXcptUop.is_rvc
-    io.com_xcpt.bits.pc_lob := comXcptUop.pc_lob
+    io.com_xcpt.bits.pc_lob := comXcptUop.pcLowBits
 
 
     //------------------flush-------------------
@@ -404,8 +405,8 @@ class Rob(
 
     //优化时序，延迟一个周期
     io.flush.valid := flushVal
-    io.flush.bits.ftq_idx := flushUop.ftq_idx
-    io.flush.bits.pc_lob := flushUop.pc_lob
+    io.flush.bits.ftq_idx := flushUop.ftqIdx
+    io.flush.bits.pc_lob := flushUop.pcLowBits
     //io.flush.bits.edge_inst := flushUop.edge_inst
     //io.flush.bits.is_rvc := flushUop.is_rvc
     io.flush.bits.flush_typ := FlushTypes.getType(flushVal,
@@ -427,7 +428,7 @@ class Rob(
         when(io.lxcpt.valid){
             val newXcptUop = io.lxcpt.bits.uop
 
-            when(!rXcptVal || IsOlder(newXcptUop.rob_idx,rXcptUop.rob_idx,robHeadIdx)){
+            when(!rXcptVal || IsOlder(newXcptUop.robIdx,rXcptUop.robIdx,robHeadIdx)){
                 rXcptVal := true.B
                 nextXcptUop := newXcptUop
                 nextXcptUop.exc_cause := io.lxcpt.bits.cause
@@ -437,13 +438,13 @@ class Rob(
             val idx = enqXcpts.indexWhere{i: Bool => i}
 
             rXcptVal := true.B
-            nextXcptUop := io.enq_uop(idx)
-            rXcptBadvaddr := AlignPCToBoundary(io.xcpt_fetch_pc,icBlockBytes) | io.enq_uop(idx).pc_lob
+            nextXcptUop := io.enq_uops(idx)
+            rXcptBadvaddr := AlignPCToBoundary(io.xcpt_fetch_pc,icBlockBytes) | io.enq_uops(idx).pcLowBits
         }
     }
 
     rXcptUop := nextXcptUop
-    rXcptUop.br_mask := GetNewBrMask(io.brupdate,nextXcptUop)
+    rXcptUop.brMask := GetNewBrMask(io.brupdate,nextXcptUop)
     when(io.flush.valid || IsKilledByBranch(io.brupdate,nextXcptUop)){
         rXcptVal := false.B
     }
@@ -454,7 +455,7 @@ class Rob(
     assert (!(empty && rXcptVal),
     "ROB is empty, but believes it has an outstanding exception.")
 
-    assert (!(willThrowException && (GetRowIdx(rXcptUop.rob_idx) =/= robHead)),
+    assert (!(willThrowException && (GetRowIdx(rXcptUop.robIdx) =/= robHead)),
     "ROB is throwing an exception, but the stored exception information's " +
     "rob_idx does not match the rob_head")
 
@@ -491,9 +492,9 @@ class Rob(
     } .elsewhen(robState === stateRollback && (robTail === robHead) && !maybeFull){
         robTailLsb :=robHeadLsb
     }.elsewhen(io.brupdate.b2.mispredict){
-        robTail := WrapInc(GetRowIdx(io.brupdate.b2.uop.rob_idx),numRobRows)
+        robTail := WrapInc(GetRowIdx(io.brupdate.b2.uop.robIdx),numRobRows)
         robTailLsb := 0.U
-    } .elsewhen(io.enq_valids.asUInt =/= 0.U !io.enq_partial_stall){
+    } .elsewhen(io.enq_valids.asUInt =/= 0.U && !io.enq_partial_stall){
         robTail := WrapInc(robTail,numRobRows)
         robTailLsb := 0.U
         robEnq := true.B
@@ -502,7 +503,7 @@ class Rob(
     }
 
     //----------------------maybefull--------------------
-    maybeFull := !robDeq &&(robEnq||maybeFull) || io.brupdate.b1.mispredict_mask =/= 0.U
+    maybeFull := !robDeq &&(robEnq||maybeFull) || io.brupdate.b1.mispredictMask =/= 0.U
     full := robTail === robHead && maybeFull
     empty :=(robHead === robTail) && (robHeadVals.asUInt ===0.U)
 

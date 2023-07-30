@@ -98,6 +98,8 @@ class MicroOp extends CoreBundle with MicroOpCode {
     def rf_wen = dst_rtype =/= RT_X
     def unsafe = use_ldq || (use_stq && !is_fence) || isBr || isJalr
     def fu_code_is(_fu: UInt) = (fuCode & _fu) =/= 0.U
+
+    val debug_inst = UInt(/*TODO*/)
 }
 
 class CtrlSignals extends Bundle {
