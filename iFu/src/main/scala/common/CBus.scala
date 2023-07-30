@@ -5,7 +5,7 @@ import chisel3.util._
 
 import iFu.common.Consts._
 
-class CBusReq(val s: Int, val ml: Int) extends CoreBundle {
+class CBusReq(val s: Int = MSIZE4, val ml: Int = MLEN16) extends CoreBundle {
     val dataWidth = s match {
         case MSIZE1   => 8
         case MSIZE2   => 16
@@ -38,7 +38,7 @@ class CBusReq(val s: Int, val ml: Int) extends CoreBundle {
     val axiLen = UInt(MLEN1.getWidth.W)
 }
 
-class CBusResp(val s: Int) extends CoreBundle{
+class CBusResp(val s: Int = MSIZE4) extends CoreBundle{
     val dataWidth = s match {
         case MSIZE1   => 8
         case MSIZE2   => 16
@@ -53,8 +53,3 @@ class CBusResp(val s: Int) extends CoreBundle{
     val isLast = Bool()
     val ready = Bool()
 }
-
-class iCBusReq extends CBusReq(MSIZE4, MLEN16)
-class dCBusReq extends CBusReq(MSIZE4, MLEN16)
-class iCBusResp extends CBusResp(MSIZE4)
-class dCBusResp extends CBusResp(MSIZE4)

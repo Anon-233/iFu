@@ -75,16 +75,11 @@ object Consts {
     val MLEN2   = 0x1.U(8.W)
     val MLEN4   = 0x3.U(8.W)
     val MLEN8   = 0x7.U(8.W)
-    val MLEN16  = 0xf.U(8.W) // 最大是16拍???
+    val MLEN16  = 0xf.U(8.W)  // 最大是16拍???
     val MLEN32  = 0x1f.U(8.W)
     val MLEN64  = 0x3f.U(8.W)
     val MLEN128 = 0x7f.U(8.W)
     val MLEN256 = 0xff.U(8.W)
-
-    val AXI_BURST_NUM = 16.U // 待确定??????
-
-    // 可以取Len的长度是1 2 4 8 16 (能扩展???)
-    val AXI_BURST_LEN = if (AXI_BURST_NUM.litValue() == 16) MLEN16 else MLEN1
 
     // bytes per beat
     val MSIZE1   = 0.U(3.W)
