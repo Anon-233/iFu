@@ -48,7 +48,7 @@ class RenameMapTable (
     val remapTable = Wire(Vec(plWidth + 1, Vec(numLregs, UInt(pregSize.W))))
 
     val remapPdsts = io.remap_reqs map (_.pdst)
-    val remap_ldsts_oh = io.remap_reqs (req => UIntToOH(req.ldst) & Fill(numLregs, req.valid.asUInt))
+    val remap_ldsts_oh = io.remap_reqs map (req => UIntToOH(req.ldst) & Fill(numLregs, req.valid.asUInt))
 
     //更新映射关系
     for (i <- 0 until numLregs) { //遍历每一个寄存器
