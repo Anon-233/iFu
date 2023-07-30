@@ -23,7 +23,7 @@ class BusyTable (
         val rebusy_reqs = Input(Vec(plWidth, Bool()))
 
         val wakeup_valids = Input(Vec(numWbPorts, Bool()))
-        val wakeupup_pdsts = Input(Vec(numWbPorts, UInt(pregSize.W)))
+        val wakeup_pdsts = Input(Vec(numWbPorts, UInt(pregSize.W)))
     })
 
     val busyTable = RegInit(0.U(numPregs.W))

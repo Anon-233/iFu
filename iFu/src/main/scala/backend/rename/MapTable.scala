@@ -75,7 +75,7 @@ class RenameMapTable (
 
     //更新maptable
     when (io.brupdate.b2.mispredict) {
-        mapTable := brShotMap(io.brupdate.b2.uop.br_tag)
+        mapTable := brShotMap(io.brupdate.b2.uop.brTag)
     } .otherwise {
         mapTable := remapTable(plWidth)
     }

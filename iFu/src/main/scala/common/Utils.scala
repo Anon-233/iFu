@@ -2,6 +2,7 @@ package iFu.util
 
 import chisel3._
 import chisel3.util._
+import iFu.common._
 
 object MaskLower {
     def apply(in: UInt): UInt = {
@@ -43,7 +44,7 @@ object MaskUpper {
 object GetNewUopAndBrMask {
     def apply(uop: MicroOp, brupdate: BrUpdateInfo): MicroOp = {
         val newuop = WireInit(uop)
-        newuop.br_mask := uop.br_mask & ~brupdate.b1.resolve_mask
+        newuop.brMask := uop.brMask & ~brupdate.b1.resolveMask
         newuop
     }
 }

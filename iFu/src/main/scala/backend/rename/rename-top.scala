@@ -62,7 +62,7 @@ abstract class AbsRenameStage (
         nextUop := rUop
         //if kill
         when(io.kill){
-            rValid = false.B
+            rValid := false.B
         } .elsewhen (ren2Ready) {
             rValid := ren1Fire(w)
             //kill 信号无效，派遣级准备好接受新的微指令时，r_valid 与译码级的输入的指令有效信号(ren1_fire) 保持一致，并将 next_uop 置为 decode 阶段输入的微指令 (ren1_uop)
@@ -146,7 +146,7 @@ class RenameStage (
     for (w <- 0 until plWidth) {
         ren2AllocReqs(w) := ren2Uops(w).ldst_val && ren2Uops(w).dst_rtype === RT_FIX && ren2Fire(w)
         ren2BrTags(w).valid := ren2Fire(w) && ren2Uops(w).allocate_brtag
-        ren2BrTags(w).bits  := ren2Uops(w).br_tag
+        ren2BrTags(w).bits  := ren2Uops(w).brTag
         comValids(w) := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FIX && io.com_valids(w)
         rbkValids(w) := io.com_uops(w).ldst_val && io.com_uops(w).dst_rtype === RT_FIX && io.rbk_valids(w)
     }
