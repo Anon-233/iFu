@@ -32,6 +32,8 @@ object Consts {
     val FU_MUL = 8.U(FUC_SZ.W)
     val FU_DIV = 16.U(FUC_SZ.W)
     val FU_CSR = 32.U(FUC_SZ.W)
+    // val FN_CNT = 64.U(FUC_SZ.W)
+    // val FN_TLB = 128.U(FUC_SZ.W)
 
     val RT_X   = 0.U(1.W)
     val RT_FIX = 1.U(1.W)
