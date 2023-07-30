@@ -111,8 +111,8 @@ trait HasCoreParameters {
     val lsuParameters: LSUParameters = new LSUParameters
     val dcacheParameters: DcacheParameters = new DcacheParameters
     val issueParams: Seq[IssueParams] = Seq(
-        IssueParams(issueWidth = 1, numIssueSlots = 16, iqType = IQT_MEM.litValue, dispatchWidth = 1),
-        IssueParams(issueWidth = 2, numIssueSlots = 16, iqType = IQT_INT.litValue, dispatchWidth = 1))
+        IssueParams(issueWidth = 1, numIssueSlots = 16, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 1),
+        IssueParams(issueWidth = 2, numIssueSlots = 16, iqType = IQT_INT.litValue.toInt, dispatchWidth = 1))
 
     val BUBBLE = 0.U(32.W)
 }

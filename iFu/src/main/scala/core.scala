@@ -4,7 +4,9 @@ package iFu
 import chisel3._
 import chisel3.util._
 import iFu.common._
+import iFu.common.Consts._
 import iFu.backend._
+import iFu.frontend.FrontendUtils.bankAlign
 import iFu.frontend._
 import iFu.util._
 
@@ -21,15 +23,17 @@ class Core extends CoreModule {
     })
     //**********************************
     // construct all of the modules
-
+    val fetchWidth  = frontendParams.fetchWidth
+    val decodeWidth = coreWidth
+    val bankBytes   = frontendParams.iCacheParams.bankBytes
     // Only holds integer-registerfile execution units.
-    val exe_units = new boom.exu.ExecutionUnits(fpu = false)
+    val exe_units = new ExecutionUnits
     val jmp_unit_idx = exe_units.jmp_unit_idx
     val jmp_unit = exe_units(jmp_unit_idx)
 
 
     val numIrfWritePorts = exe_units.numIrfWritePorts + memWidth
-    val numLlIrfWritePorts = exe_units.numLlIrfWritePorts
+    val numMemIrfWritePorts = exe_units.numMemIrfWritePorts
     val numIrfReadPorts = exe_units.numIrfReadPorts
 
     val numFastWakeupPorts = exe_units.count(_.bypassable)
@@ -41,21 +45,23 @@ class Core extends CoreModule {
     val decode_units = for (w <- 0 until decodeWidth) yield {
         val d = Module(new DecodeUnit); d
     }
-    val dec_brmask_logic = Module(new BranchMaskGenerationLogic(coreWidth))
-    val rename_stage = Module(new RenameStage(coreWidth, numIntPhysRegs, numIntRenameWakeupPorts, false))
+    val dec_brmask_logic = Module(new BranchMaskGenerationLogic)
+    val rename_stage = Module(new RenameStage(coreWidth, numPRegs, numIntRenameWakeupPorts))
     val pred_rename_stage = Module(new PredRenameStage(coreWidth, ftqSz, 1))
     val rename_stages = Seq(rename_stage, pred_rename_stage)
 
-    val mem_iss_unit = Module(new IssueUnitCollapsing(memIssueParam, numIntIssueWakeupPorts))
-    mem_iss_unit.suggestName("mem_issue_unit")
-    val int_iss_unit = Module(new IssueUnitCollapsing(intIssueParam, numIntIssueWakeupPorts))
-    int_iss_unit.suggestName("int_issue_unit")
+    val memIssueParam = issueParams.filter(_.iqType == IQT_MEM)(0)
+    val intIssueParam = issueParams.filter(_.iqType == IQT_INT)(0)
+    val mem_iss_unit = Module(new IssueUnitAgeOrdered(memIssueParam, numIntIssueWakeupPorts))
+    /*mem_iss_unit.suggestName("mem_issue_unit")*/
+    val int_iss_unit = Module(new IssueUnitAgeOrdered(intIssueParam, numIntIssueWakeupPorts))
+    /*int_iss_unit.suggestName("int_issue_unit")*/
 
     val issue_units = Seq(mem_iss_unit, int_iss_unit)
     val dispatcher = Module(new BasicDispatcher)
-
+    val ftqSz      = frontendParams.numFTQEntries
     val iregfile = Module(new RegisterFileSynthesizable(
-        numIntPhysRegs,
+        numPRegs,
         numIrfReadPorts,
         numIrfWritePorts,
         xLen,
@@ -82,12 +88,12 @@ class Core extends CoreModule {
         numIrfReadPorts,
         exe_units.withFilter(_.readsIrf).map(x => 2).toSeq,
         exe_units.numTotalBypassPorts,
-        jmp_unit.numBypassStages,
+        jmp_unit.numStages,
         xLen))
     val rob = Module(new Rob(numIrfWritePorts))
     // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
-    val int_iss_wakeups = Wire(Vec(numIntIssueWakeupPorts, Valid(new ExeUnitResp(xLen))))
-    val int_ren_wakeups = Wire(Vec(numIntRenameWakeupPorts, Valid(new ExeUnitResp(xLen))))
+    val int_iss_wakeups = Wire(Vec(numIntIssueWakeupPorts, Valid(new ExeUnitResp)))
+    val int_ren_wakeups = Wire(Vec(numIntRenameWakeupPorts, Valid(new ExeUnitResp)))
     val pred_wakeup = Wire(Valid(new ExeUnitResp(1)))
 
     require(exe_units.length == issue_units.map(_.issueWidth).sum)
@@ -114,7 +120,7 @@ class Core extends CoreModule {
     val iss_valids = Wire(Vec(exe_units.numIrfReaders, Bool()))
     val iss_uops = Wire(Vec(exe_units.numIrfReaders, new MicroOp()))
     val bypasses = Wire(Vec(exe_units.numTotalBypassPorts, Valid(new ExeUnitResp(xLen))))
-    val pred_bypasses = Wire(Vec(jmp_unit.numBypassStages, Valid(new ExeUnitResp(1))))
+    val pred_bypasses = Wire(Vec(jmp_unit.numStages, Valid(new ExeUnitResp(1))))
     require(jmp_unit.bypassable)
 
     // --------------------------------------
@@ -157,7 +163,7 @@ class Core extends CoreModule {
     b2.taken := oldest_mispredict.taken
     b2.pcSel := oldest_mispredict.pcSel
     b2.uop := UpdateBrMask(brupdate, oldest_mispredict.uop)
-    b2.jalrTarget := RegNext(jmp_unit.io.brinfo.jalr_target)
+    b2.jalrTarget := RegNext(jmp_unit.io.brinfo.jalrTarget)
     b2.targetOffset := oldest_mispredict.targetOffset
 
     val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftqIdx
@@ -175,7 +181,7 @@ class Core extends CoreModule {
 
     // Load/Store Unit & ExeUnits
     val mem_units = exe_units.memory_units
-    val mem_resps = mem_units.map(_.io.ll_iresp)
+    val mem_resps = mem_units.map(_.io.mem_iresp)
     for (i <- 0 until memWidth) {
         mem_units(i).io.lsu_io <> io.lsu.exe(i)
     }
@@ -201,28 +207,28 @@ class Core extends CoreModule {
     //    io.ifu.scontext := csr.io.scontext
 
     io.ifu.flush_icache := (0 until coreWidth).map { i =>
-        (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_fencei) ||
-                (RegNext(dec_valids(i) && dec_uops(i).isJalr && csr.io.status.debug))
+        (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_fencei) /*||
+                (RegNext(dec_valids(i) && dec_uops(i).isJalr && csr.io.status.debug))*/
     }.reduce(_ || _)
 
-
+    val icBlockBytes = frontendParams.iCacheParams.lineBytes
     when(RegNext(rob.io.flush.valid)) {
         io.ifu.redirect_val := true.B
         io.ifu.redirect_flush := true.B
         val flush_typ = RegNext(rob.io.flush.bits.flush_typ)
         // Clear the global history when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
         val new_ghist = WireInit((0.U).asTypeOf(new GlobalHistory))
-        new_ghist.current_saw_branch_not_taken := true.B
-        new_ghist.rasIdx := io.ifu.get_pc(0).entry.ras_idx
+        new_ghist.currentSawBranchNotTaken := true.B
+        new_ghist.rasIdx := io.ifu.getFtqPc(0).entry.rasIdx
         io.ifu.redirect_ghist := new_ghist
         when(FlushTypes.useCsrEvec(flush_typ)) {
             io.ifu.redirect_pc := Mux(flush_typ === FlushTypes.eret,
                 RegNext(RegNext(csr.io.evec)),
                 csr.io.evec)
         }.otherwise {
-            val flush_pc = (AlignPCToBoundary(io.ifu.get_pc(0).pc, icBlockBytes)
-                    + RegNext(rob.io.flush.bits.pc_lob)
-                    - Mux(RegNext(rob.io.flush.bits.edge_inst), 2.U, 0.U))
+            val flush_pc = (AlignPCToBoundary(io.ifu.getFtqPc(0).pc, icBlockBytes)
+                    + RegNext(rob.io.flush.bits.pc_lob))
+
             val flush_pc_next = flush_pc + Mux(RegNext(rob.io.flush.bits.is_rvc), 2.U, 4.U)
             io.ifu.redirect_pc := Mux(FlushTypes.useSamePC(flush_typ),
                 flush_pc, flush_pc_next)
@@ -230,25 +236,25 @@ class Core extends CoreModule {
         }
         io.ifu.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
     }.elsewhen(brupdate.b2.mispredict && !RegNext(rob.io.flush.valid)) {
-        val block_pc = AlignPCToBoundary(io.ifu.get_pc(1).pc, icBlockBytes)
+        val block_pc = AlignPCToBoundary(io.ifu.getFtqPc(1).pc, icBlockBytes)
         val uop_maybe_pc = block_pc | brupdate.b2.uop.pcLowBits
-        val npc = uop_maybe_pc + Mux(brupdate.b2.uop.is_rvc || brupdate.b2.uop.edge_inst, 2.U, 4.U)
-        val jal_br_target = Wire(UInt(vaddrBitsExtended.W))
+        val npc = uop_maybe_pc +  4.U
+        val jal_br_target = Wire(UInt(vaddrBits.W))
         jal_br_target := (uop_maybe_pc.asSInt + brupdate.b2.targetOffset +
-                (Fill(vaddrBitsExtended - 1, brupdate.b2.uop.edge_inst) << 1).asSInt).asUInt
+                (Fill(vaddrBits - 1, brupdate.b2.uop.edge_inst) << 1).asSInt).asUInt
         val bj_addr = Mux(brupdate.b2.cfiType === CFI_JALR, brupdate.b2.jalrTarget, jal_br_target)
         val mispredict_target = Mux(brupdate.b2.pcSel === PC_PLUS4, npc, bj_addr)
         io.ifu.redirect_val := true.B
         io.ifu.redirect_pc := mispredict_target
         io.ifu.redirect_flush := true.B
         io.ifu.redirect_ftq_idx := brupdate.b2.uop.ftqIdx
-        val use_same_ghist = (brupdate.b2.cfi_type === CFI_BR &&
+        val use_same_ghist = (brupdate.b2.cfiType === CFI_BR &&
                 !brupdate.b2.taken &&
                 bankAlign(block_pc) === bankAlign(npc))
-        val ftq_entry = io.ifu.get_pc(1).entry
+        val ftq_entry = io.ifu.getFtqPc(1).entry
         val cfi_idx = (brupdate.b2.uop.pcLowBits ^
-                Mux(ftq_entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
-        val ftq_ghist = io.ifu.get_pc(1).ghist
+                Mux(ftq_entry.startBank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
+        val ftq_ghist = io.ifu.getFtqPc(1).ghist
         val next_ghist = ftq_ghist.update(
             ftq_entry.br_mask.asUInt,
             brupdate.b2.taken,

@@ -42,9 +42,9 @@ class FuncUnitResp extends CoreBundle {
     // val sfence = // TODO
 }
 
-class ExeUnitResp extends CoreBundle {
+class ExeUnitResp(val len: Int = 32) extends CoreBundle {
     val uop = new MicroOp
-    val data = Bits(xLen.W)
+    val data = Bits(len.W)
     val predicated = Bool() // Was this predicated off?
 }
 

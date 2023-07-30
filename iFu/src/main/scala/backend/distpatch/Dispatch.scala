@@ -1,4 +1,4 @@
-package backend.distpatch
+package iFu.backend
 
 import chisel3._
 import chisel3.util._
@@ -19,7 +19,7 @@ abstract class Dispatcher extends CoreModule {
     val io = IO(new DispatchIO)
 }
 
-class BasicDispatcher extends Consts with Dispatcher {
+class BasicDispatcher extends Dispatcher {
     issueParams.map(ip => require(ip.dispatchWidth == coreWidth))
 
     // both int issue queue and mem issue queue must be ready

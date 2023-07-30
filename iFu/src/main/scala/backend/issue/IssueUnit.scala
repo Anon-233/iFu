@@ -83,11 +83,11 @@ abstract class AbsIssueUnit (
     val issueSlots = VecInit(slots.map(_.io))
 
     for (w <- 0 until numIssueSlots) {
-        issueSlots(i).wakeupPorts       := io.wakeupPorts
-        issueSlots(i).predWakeupPorts   := io.predWakeupPorts
-        issueSlots(i).specLdWakeupPorts := io.specLdWakeupPorts
-        issueSlots(i).ldSpecMiss        := io.ldMiss
-        issueSlots(i).brUpdate          := io.brUpdate
-        issueSlots(i).kill              := io.flushPipeline
+        issueSlots(w).wakeupPorts       := io.wakeupPorts
+        issueSlots(w).predWakeupPorts   := io.predWakeupPorts
+        issueSlots(w).specLdWakeupPorts := io.specLdWakeupPorts
+        issueSlots(w).ldSpecMiss        := io.ldMiss
+        issueSlots(w).brUpdate          := io.brUpdate
+        issueSlots(w).kill              := io.flushPipeline
     }
 }

@@ -9,7 +9,7 @@ import iFu.common.Consts._
 class IssueUnitAgeOrdered (
     issParams: IssueParams,
     numWakeupPorts: Int
-) extends IssueUnit (
+) extends AbsIssueUnit (
     issParams.iqType,
     issParams.numIssueSlots,
     issParams.dispatchWidth,
@@ -35,7 +35,7 @@ class IssueUnitAgeOrdered (
         case i => shamtOH(i) := getShamtOH(shamtOH(i - 1), vacants(i - 1))
     }
 
-    val willBeValid = (0 until numIssueSlots),map(i => issueSlots(i).willBeValid) ++
+    val willBeValid = (0 until numIssueSlots).map(i => issueSlots(i).willBeValid) ++
                       (0 until dispatchWidth).map(i =>
                         io.disUops(i).valid && !disUops(i).exception &&
                         !disUops(i).is_fence && !disUops(i).is_fencei
@@ -45,7 +45,7 @@ class IssueUnitAgeOrdered (
     
     for (i <- 0 until numIssueSlots) {
         issueSlots(i).inUop.valid := false.B
-        issueSlots(i).inUop.bits := uop(i + 1)
+        issueSlots(i).inUop.bits := uops(i + 1)
         
         for (j <- 1 to maxShift) {
             when (shamtOH(i + j) === (1 << (j - 1)).U) {
@@ -82,7 +82,7 @@ class IssueUnitAgeOrdered (
         var uopIssued = false.B
 
         for (w <- 0 until issueWidth) {
-            val canAllocate = (issueSlots(i).uop.fu_code & io.fuTypes(w)) =/= 0.U
+            val canAllocate = (issueSlots(i).uop.fuCode & io.fuTypes(w)) =/= 0.U
             when (canAllocate && requests(i) && !uopIssued && !portIssued(w)) {
                 issueSlots(i).grant := true.B
                 io.issueValids(w) := true.B
