@@ -14,11 +14,11 @@ class CBusArbiter extends CoreModule{
     })
 
     val busy = RegInit(false.B)
-    val index = RegInit(0.U(log2Ceil(ireqs.size).W)) 
+    val index = RegInit(0.U(log2Ceil(io.ireqs.size).W))
 
-    val select = Mux(io.ireqs(0).valid, 0.U(log2Ceil(ireqs.size).W), 
-                 Mux(io.ireqs(1).valid, 1.U(log2Ceil(ireqs.size).W),
-                                        0.U(log2Ceil(ireqs.size).W)))
+    val select = Mux(io.ireqs(0).valid, 0.U(log2Ceil(io.ireqs.size).W),
+                 Mux(io.ireqs(1).valid, 1.U(log2Ceil(io.ireqs.size).W),
+                                        0.U(log2Ceil(io.ireqs.size).W)))
     val selectedReq = io.ireqs(select)
 
     io.oreq := Mux(busy, io.ireqs(index), 0.U.asTypeOf(new CBusReq))
