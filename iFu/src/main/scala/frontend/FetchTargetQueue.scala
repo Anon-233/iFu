@@ -6,7 +6,6 @@ import chisel3.util._
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
-import backend.memSystem.BrUpdateInfo
 import iFu.frontend.FrontendUtils._
 class FTQBundle extends CoreBundle {
     val fetchWidth      = frontendParams.fetchWidth
@@ -179,7 +178,7 @@ class FetchTargetQueue extends CoreModule {
         bpdUpdateRepair     := false.B
     } .elsewhen (RegNext(io.brUpdate.b2.mispredict)) {
         bpdUpdateMispredict := true.B
-        bpdRepairIdx        := RegNext(io.brUpdate.b2.uop.ftq_idx)
+        bpdRepairIdx        := RegNext(io.brUpdate.b2.uop.ftqIdx)
         bpdEndIdx           := RegNext(enqPtr)
     } .elsewhen (bpdUpdateMispredict) {
         bpdUpdateMispredict := false.B
@@ -258,7 +257,7 @@ class FetchTargetQueue extends CoreModule {
         enqPtr := WrapInc(io.redirect.bits, numFTQEntries)
         when (io.brUpdate.b2.mispredict) {
             val newCfiIdx = (
-                io.brUpdate.b2.uop.pc_lob ^
+                io.brUpdate.b2.uop.pcLowBits ^
                 Mux(redirectEntry.startBank === 1.U, (1.U << log2Ceil(bankBytes)).asUInt, 0.U)
             )(log2Ceil(fetchWidth) + 1, 2)
             redirectNewEntry.cfiIdx.valid    := true.B
