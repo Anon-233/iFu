@@ -102,7 +102,7 @@ class Exception extends CoreBundle
 {
     val uop = new MicroOp()
     //TODO:update cause to loogarch
-    val cause = Bits(log2Ceil(freechips.rocketchip.rocket.Causes.all.max+2).W)
+    val cause = Bits(CauseCode.causeCodeBits.W)
     val badvaddr = UInt(paddrBits.W)
 }
 
