@@ -101,6 +101,7 @@ trait HasCoreParameters {
     val coreWidth = 4
     val memWidth = 2
     val maxBrCount: Int = 20
+    val brTagSz: Int = log2Ceil(maxBrCount)
     val numLRegs: Int = 32
     val lregSz: Int = log2Ceil(numLRegs)
     val numPRegs: Int = 108

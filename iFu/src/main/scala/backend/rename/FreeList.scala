@@ -34,7 +34,7 @@ class FreeList (
     val selPregFire = Wire(Vec(plWidth, Bool()))
 
     val allocPreg = io.alloc_pregs map (a => UIntToOH(a.bits))
-    val allocPregMask = (allocPreg zip io.reqs).scanRight(0.U(n.W)){ case ((a,r),m) => m | a & Fill(n,r) }
+    val allocPregMask = (allocPreg zip io.reqs).scanRight(0.U(numPregs.W)){ case ((a,r),m) => m | a & Fill(numPregs,r) }
 
     //标记分配mask
     val selMask = (selPreg zip selPregFire) map { case (s,f) => s & Fill(numPregs,f) }.reduce(_|_)

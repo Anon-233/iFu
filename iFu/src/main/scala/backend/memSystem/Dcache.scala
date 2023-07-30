@@ -5,6 +5,7 @@ import iFu.common._
 import chisel3._
 import chisel3.util._
 import iFu.common.HasCoreParameters
+import iFu.util._
 /*
 各部件行为：
 DcacheMeta：
@@ -697,7 +698,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
 
     val s1valid = RegNext(s0valid               &&
-      !(io.lsu.exception && s0req(0).uop.usesLdq),
+      !(io.lsu.exception && s0req(0).uop.use_ldq),
         init=false.B)
     val s1req = RegNext(s0req)
     val s1replayPipeNumber = RegNext(s0replayPipeNumber)
@@ -732,7 +733,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s1replacedMetaLine = new MetaLine
 
 
-    io.lsu.ordered := io.lsu.forceOrder && !meta.io.hasDirty //只要没有dirty位,就返回forceOrder
+    io.lsu.ordered := io.lsu.force_order && !meta.io.hasDirty //只要没有dirty位,就返回forceOrder
 
     when(s1state === lsu  && s1valid ){
         for(w <- 0 until memWidth){
@@ -820,7 +821,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s2replayPipeNumber = RegNext(s1replayPipeNumber)
     val s2state = RegNext(s1state)
     val s2valid = RegNext(s1valid                                      &&
-      !(io.lsu.exception && s1req(0).uop.usesLdq),
+      !(io.lsu.exception && s1req(0).uop.use_ldq),
         init=false.B)
 
     val s2kill = RegNext(s1_kill)
