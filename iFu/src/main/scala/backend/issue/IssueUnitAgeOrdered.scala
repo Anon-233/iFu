@@ -6,7 +6,7 @@ import chisel3.util._
 import iFu.common._
 import iFu.common.Consts._
 
-class IssueUnitCompressed(
+class IssueUnitCompressed (
     issParams: IssueParams,
     numWakeupPorts: Int
 ) extends IssueUnit (
