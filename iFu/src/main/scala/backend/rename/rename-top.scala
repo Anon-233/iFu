@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import iFu.common._
+import iFu.common.Consts._
 import iFu.util._
 
 //TODO: move指令优化
@@ -86,7 +87,6 @@ class RenameStage (
     numWbPorts: Int
 ) extends  AbsRenameStage(plWidth, numPhysRegs, numWbPorts) {
     val pregSize = log2Ceil(numPhysRegs)
-    
     //转发逻辑，避免数据冒险
     def DoBypass(uop:MicroOp, older:Seq[MicroOp], allocReqs:Seq[Bool]): MicroOp = {
         val bypassedUop = Wire(new MicroOp)
@@ -244,22 +244,24 @@ class PredRenameStage (
     numPhysRegs : Int,
     numWbPorts: Int
 ) extends AbsRenameStage(plWidth, numPhysRegs, numWbPorts) {
+
+    val numFTQEntries = frontendParams.numFTQEntries
     def DoBypass(uop: MicroOp, older: Seq[MicroOp], allocReqs: Seq[Bool]): MicroOp = { uop }
 
     ren2AllocReqs := DontCare
 
-    val busyTable = RegInit(VecInit(0.U(ftqSz.W).asBools))
-    val toBusy = WireInit(VecInit(0.U(ftqSz.W).asBools))
-    val unbusy = WireInit(VecInit(0.U(ftqSz.W).asBools))
+    val busyTable = RegInit(VecInit(0.U(numFTQEntries.W).asBools))
+    val toBusy = WireInit(VecInit(0.U(numFTQEntries.W).asBools))
+    val unbusy = WireInit(VecInit(0.U(numFTQEntries.W).asBools))
 
-    val currentFtqIdx = Reg(UInt(log2Ceil(ftqSz).W))
+    val currentFtqIdx = Reg(UInt(log2Ceil(numFTQEntries).W))
     var nextFtqIdx = currentFtqIdx
 
     for(w <- 0 until plWidth){
         io.ren2_uops(w) := ren2Uops(w)
 
-        val isSfbBr = ren2Uops(w).isSfbBr && ren2Fire(w)
-        val isSfbShadow = ren2Uops(w).isSfbShadow && ren2Fire(w)
+        val isSfbBr = ren2Uops(w).is_sfb_br && ren2Fire(w)
+        val isSfbShadow = ren2Uops(w).is_sfb_shadow && ren2Fire(w)
 
         val ftqIdx = ren2Uops(w).ftqIdx
         when(isSfbBr){

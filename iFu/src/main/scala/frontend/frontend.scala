@@ -1,6 +1,5 @@
 package iFu.frontend
 
-import backend.memSystem.BrUpdateInfo
 import chisel3._
 import chisel3.util._
 import iFu.common._
