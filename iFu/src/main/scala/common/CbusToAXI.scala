@@ -332,13 +332,13 @@ class CBusToAXI extends CoreModule {
         io.wvalid := 1.U
         io.wdata  := saved_req.data
         io.wstrb  := saved_req.mask
+        assert(saved_req.mask === 0.U || saved_req.mask === 0xf.U)
         io.wlast  := is_last
     }
 
     when (in_issue(b)) {
         io.bready := 1.U
     }
-
 
     when(busy) {
         when(io.cresp.ready && !io.cresp.isLast) {
