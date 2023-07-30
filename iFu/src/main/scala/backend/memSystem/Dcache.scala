@@ -4,7 +4,7 @@ package backend.memSystem
 import iFu.common._
 import chisel3._
 import chisel3.util._
-
+import iFu.common.HasCoreParameters
 /*
 各部件行为：
 DcacheMeta：
@@ -66,7 +66,28 @@ s0阶段，在各种请求之间选择
     对miss的store，必然传回nack，对miss的load，如果mshr未满，什么都不穿，满了传nack
 */
 
-class MetaLine extends Bundle with HasDcacheParameters{
+trait HasDcacheParameters extends HasCoreParameters{
+    val nTagBits = dcacheParameters.nTagBits
+    val nIdxBits = dcacheParameters.nIdxBits
+    val nOffsetBits = dcacheParameters.nOffsetBits
+    val nRowBits = dcacheParameters.nRowBits
+    val nRowBytes = dcacheParameters.nRowBytes
+    val nRowWords = dcacheParameters.nRowWords
+    val nSets = dcacheParameters.nSets
+    val nWays = dcacheParameters.nWays
+    val coreDataBits = dcacheParameters.coreDataBits
+    val nBlockAddrBits = dcacheParameters.nBlockAddrBits
+    val nFirstMSHRs = dcacheParameters.nFirstMSHRs
+    val nSecondMSHRs = dcacheParameters.nSecondMSHRs
+
+    def getIdx(vaddr: UInt): UInt = dcacheParameters.getIdx(vaddr)
+    def getTag(vaddr: UInt): UInt = dcacheParameters.getTag(vaddr)
+    def getBlockAddr(vaddr: UInt): UInt = dcacheParameters.getBlockAddr(vaddr)
+    def isStore(req : DCacheReq): Bool = dcacheParameters.isStore(req)
+
+}
+
+class MetaLine extends CoreBundle with HasDcacheParameters{
     val valid = Bool()
     val dirty = Bool()
     val tag = UInt(nTagBits.W)
@@ -74,7 +95,7 @@ class MetaLine extends Bundle with HasDcacheParameters{
 }
 
 
-class MetaReq extends Bundle with HasDcacheParameters{
+class MetaReq extends CoreBundle with HasDcacheParameters{
     val idx    = UInt(nIdxBits.W)
     val tag    = UInt(nTagBits.W)
     val wayMask = UInt(nWays.W)
@@ -87,7 +108,7 @@ class MetaReq extends Bundle with HasDcacheParameters{
     val hitPos = UInt(log2Ceil(nWays).W)
 }
 
-class MetaResp extends Bundle with HasDcacheParameters{
+class MetaResp extends CoreBundle with HasDcacheParameters{
     // 用valid来表示是否命中
     val rmeta  = new MetaLine
     // 如果一个store命中了一个readOnly，就认为是miss
@@ -97,7 +118,7 @@ class MetaResp extends Bundle with HasDcacheParameters{
     val replacePos = UInt(log2Ceil(nWays).W)
 }
 
-class DataReq extends Bundle with HasDcacheParameters{
+class DataReq extends CoreBundle with HasDcacheParameters{
     val wayMask = UInt(nWays.W)
     val wdata = Vec(nRowWords,UInt(32.W))
     val idx = UInt(nIdxBits.W)
@@ -109,18 +130,18 @@ class DataReq extends Bundle with HasDcacheParameters{
     val hitPos = UInt(log2Ceil(nWays).W)
 }
 
-class DataResp extends Bundle with HasDcacheParameters{
+class DataResp extends CoreBundle with HasDcacheParameters{
     val rdata = Vec(nRowWords,UInt(32.W))
 }
 
-class DcacheMetaIO extends Bundle with HasDcacheParameters{
+class DcacheMetaIO extends CoreBundle with HasDcacheParameters{
     val req = Input(Valid(new MetaReq))
     val resp = Output(Valid(new MetaResp))
 }
 
 
 class DcacheMeta extends Module with HasDcacheParameters{
-    val io = IO(new Bundle{
+    val io = IO(new CoreBundle{
         val lsuRead = Vec( memWidth ,new DcacheMetaIO)
         val lsuWrite = Vec( memWidth ,new DcacheMetaIO)
         val mshrRead = new DcacheMetaIO
@@ -272,14 +293,14 @@ class DcacheMeta extends Module with HasDcacheParameters{
 }
 
 
-class DcacheDataIO extends Bundle with HasDcacheParameters{
+class DcacheDataIO extends CoreBundle with HasDcacheParameters{
     val req = Input(Valid(new DataReq))
     val resp = Output(Valid(new DataResp))
 }
 
 
 class DcacheData extends Module with HasDcacheParameters{
-    val io = IO(new Bundle{
+    val io = IO(new CoreBundle{
         val lsuRead = Vec( memWidth ,new DcacheDataIO)
         val lsuWrite = Vec( memWidth ,new DcacheDataIO)
         val mshrRead = new DcacheDataIO
@@ -352,17 +373,17 @@ class DcacheData extends Module with HasDcacheParameters{
 }
 
 
-class DCacheErrors  extends Bundle with HasDcacheParameters{
+class DCacheErrors  extends CoreBundle with HasDcacheParameters{
 
 }
 
-class DCacheBundle  extends Bundle with HasDcacheParameters{
+class DCacheBundle  extends CoreBundle with HasDcacheParameters{
     val error = new DCacheErrors
-    val lsu = Flipped(new lsuDMemIO)
+    val lsu = Flipped(new LSUDMemIO)
 }
 
 class ReplaceUnit extends Module  with HasDcacheParameters{
-    val io = IO(new Bundle{
+    val io = IO(new CoreBundle{
         // 告诉外界是否准备好新的cbus请求（mshr取好判断只需 ready&&!RegNext(ready)）
         val ready = Output(Bool())
 
@@ -389,8 +410,8 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
         val isFence = Input(Bool())
 
         // c线
-        val cbusResp = Input(new CbusResp)
-        val cbusReq = Output(new CbusReq)
+        val cbusResp = Input(new CBusResp)
+        val cbusReq = Output(new CBusReq)
 
     })
 
@@ -523,7 +544,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     mshrReplayValid := mshrs.io.replay.valid
 
-    fenceValid := io.lsu.forceOrder
+    fenceValid := io.lsu.force_order
     // 只要meta没有dirty，就可以回应fence，不需要管流水线和mshr状态（如果里面有没做完的指令，lsu肯定非空，unique仍然会停留在dispatch）
     io.lsu.ordered := (fenceValid && !meta.io.hasDirty)
 
@@ -579,7 +600,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                                             nil))))))
 
     var s0kill = Vec(memWidth, Bool())
-    s0kill = io.lsu.s1kill
+    s0kill = io.lsu.s1_kill
 
 
     //rpu拿到的新的写回信息 
@@ -698,7 +719,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s1replayHitPos = RegNext(s0replayHitPos)
     val s1replayIdx = RegNext(s0replayIdx)
 
-    var s1kill = RegNext(s0kill)
+    var s1_kill = RegNext(s0kill)
     // 如果miss，记录下将要去替换的Pos
     val s1missAllocPos = Wire(Vec(memWidth , UInt(log2Ceil(nWays).W)))
     // 如果hit,记录下hit的Pos
@@ -716,7 +737,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     when(s1state === lsu  && s1valid ){
         for(w <- 0 until memWidth){
             when((s2StoreFailed && isStore(s1req(w))) || IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)){
-                s1kill(w) := true.B
+                s1_kill(w) := true.B
             }.otherwise{
                 when(lsuMetaRead(w).resp.valid){
                     s1handleMetaLine(w) := lsuMetaRead(w).resp.bits.rmeta
@@ -743,7 +764,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // 只保存读出的meta，然后根据他自己的信息去读data
         for(w <- 0 until memWidth){
             when(IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)){
-                s1kill(w) := true.B
+                s1_kill(w) := true.B
             }.otherwise{
                 when(replayMetaRead.resp.valid){
                     s1handleMetaLine(w) := replayMetaRead.resp.bits.rmeta
@@ -802,7 +823,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
       !(io.lsu.exception && s1req(0).uop.usesLdq),
         init=false.B)
 
-    val s2kill = RegNext(s1kill)
+    val s2kill = RegNext(s1_kill)
     val s2hit = RegNext(s1hit)
 
 
