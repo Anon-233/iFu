@@ -67,3 +67,39 @@ object IsOlder
 {
     def apply(i0: UInt, i1: UInt, head: UInt) = ((i0 < i1) ^ (i0 < head) ^ (i1 < head))
 }
+
+object maskMatch {
+    def apply(msk1: UInt, msk2: UInt): Bool = (msk1 & msk2) =/= 0.U
+}
+
+def IsKilledByBranch(brupdate: BrUpdateInfo, uop: MicroOp): Bool = {
+    return maskMatch(brupdate.b1.mispredictMask, uop.brMask)
+}
+object GetNewBrMask {
+    def apply(brupdate: BrUpdateInfo, uop: MicroOp): UInt = {
+        return uop.brMask & ~brupdate.b1.resolveMask
+    }
+
+    def apply(brupdate: BrUpdateInfo, br_mask: UInt): UInt = {
+        return br_mask & ~brupdate.b1.resolveMask
+    }
+}
+
+object UpdateBrMask {
+    def apply(brupdate: BrUpdateInfo, uop: MicroOp): MicroOp = {
+        val out = WireInit(uop)
+        out.brMask := GetNewBrMask(brupdate, uop)
+        out
+    }
+//    def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, bundle: T): T = {
+//        val out = WireInit(bundle)
+//        out.uop.brMmask := GetNewBrMask(brupdate, bundle.uop.brMask)
+//        out
+//    }
+//    def apply[T <: boom.common.HasBoomUOP](brupdate: BrUpdateInfo, bundle: Valid[T]): Valid[T] = {
+//        val out = WireInit(bundle)
+//        out.bits.uop.brMask := GetNewBrMask(brupdate, bundle.bits.uop.brMask)
+//        out.valid := bundle.valid && !IsKilledByBranch(brupdate, bundle.bits.uop.brMask)
+//        out
+//    }
+}

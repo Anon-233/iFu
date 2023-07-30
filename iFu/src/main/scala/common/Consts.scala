@@ -24,6 +24,15 @@ object Consts {
     val IQT_INT = 1.U(IQT_SZ.W)
     val IQT_MEM = 2.U(IQT_SZ.W)
 
+    val FUC_SZ = 8 // TODO
+    val FU_X = BitPat.dontCare(FUC_SZ)
+    val FU_ALU = 1.U(FUC_SZ.W)
+    val FU_JMP = 2.U(FUC_SZ.W)
+    val FU_MEM = 4.U(FUC_SZ.W)
+    val FU_MUL = 8.U(FUC_SZ.W)
+    val FU_DIV = 16.U(FUC_SZ.W)
+    val FU_CSR = 32.U(FUC_SZ.W)
+
     val RT_X   = 0.U(1.W)
     val RT_FIX = 1.U(1.W)
 
