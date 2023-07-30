@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import iFu.common._
+import iFu.common.Consts._
 import iFu.util._
 
 //TODO: move指令优化
@@ -86,7 +87,6 @@ class RenameStage (
     numWbPorts: Int
 ) extends  AbsRenameStage(plWidth, numPhysRegs, numWbPorts) {
     val pregSize = log2Ceil(numPhysRegs)
-    val RT_FIX = Consts.RT_FIX
     //转发逻辑，避免数据冒险
     def DoBypass(uop:MicroOp, older:Seq[MicroOp], allocReqs:Seq[Bool]): MicroOp = {
         val bypassedUop = Wire(new MicroOp)
