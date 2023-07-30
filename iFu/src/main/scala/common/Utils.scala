@@ -2,7 +2,7 @@ package iFu.util
 
 import chisel3._
 import chisel3.util._
-import iFu.backend.memSystem.HasUop
+import iFu.backend.HasUop
 import iFu.common._
 
 object MaskLower {
@@ -76,6 +76,10 @@ object maskMatch {
 object IsKilledByBranch{
     def apply(brupdate: BrUpdateInfo, uop: MicroOp): Bool = {
         return maskMatch(brupdate.b1.mispredictMask, uop.brMask)
+    }
+
+    def apply(brupdate: BrUpdateInfo, uop_mask: UInt): Bool = {
+        return maskMatch(brupdate.b1.mispredictMask, uop_mask)
     }
 }
 
