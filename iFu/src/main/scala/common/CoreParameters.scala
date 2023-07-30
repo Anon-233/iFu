@@ -113,4 +113,6 @@ trait HasCoreParameters {
     val issueParams: Seq[IssueParams] = Seq(
         IssueParams(issueWidth = 1, numIssueSlots = 16, iqType = IQT_MEM.litValue, dispatchWidth = 1),
         IssueParams(issueWidth = 2, numIssueSlots = 16, iqType = IQT_INT.litValue, dispatchWidth = 1))
+
+    val BUBBLE = 0.U(32.W)
 }

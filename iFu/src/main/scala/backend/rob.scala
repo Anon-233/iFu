@@ -119,7 +119,7 @@ class DebugRobSignals extends CoreBundle
 
 class Rob(
     val numWakeupPorts: Int
-) extends CoreModule
+) extends CoreModule with MicroOpCode
 {
     val io = IO(new RobIO(numWakeupPorts))
 
@@ -382,7 +382,7 @@ class Rob(
     exceptionThrown := willThrowException
     val isMiniException = io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING
     io.com_xcpt.valid := exceptionThrown && !isMiniException
-    io.com_xcpt.bits.cause := rXcptUop.exc_cause
+    io.com_xcpt.bits.cause := rXcptUop.excCause
 
     io.com_xcpt.bits.badvaddr := Sext(rXcptBadvaddr, xLen)
     val insnSysPc2epc = robHeadVals.reduce(_||_) && PriorityMux(robHeadVals,io.commit.uops.map{u => u.is_sys_pc2epc})
@@ -412,7 +412,7 @@ class Rob(
     io.flush.bits.flush_typ := FlushTypes.getType(flushVal,
                                                 exceptionThrown && !isMiniException,
                                                 flushCommit && flushUop.uopc === uopERET,
-                                                refetch_inst)
+                                                refetchInst)
 
     
 
@@ -431,7 +431,7 @@ class Rob(
             when(!rXcptVal || IsOlder(newXcptUop.robIdx,rXcptUop.robIdx,robHeadIdx)){
                 rXcptVal := true.B
                 nextXcptUop := newXcptUop
-                nextXcptUop.exc_cause := io.lxcpt.bits.cause
+                nextXcptUop.excCause := io.lxcpt.bits.cause
                 rXcptBadvaddr := io.lxcpt.bits.badvaddr
             }
         } .elsewhen (!rXcptVal && enqXcpts.reduce(_|_)){
@@ -439,7 +439,7 @@ class Rob(
 
             rXcptVal := true.B
             nextXcptUop := io.enq_uops(idx)
-            rXcptBadvaddr := AlignPCToBoundary(io.xcpt_fetch_pc,icBlockBytes) | io.enq_uops(idx).pcLowBits
+            rXcptBadvaddr := AlignPCToBoundary(io.xcpt_fetch_pc,frontendParams.iCacheParams.lineBytes) | io.enq_uops(idx).pcLowBits
         }
     }
 
