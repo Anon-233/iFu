@@ -2,9 +2,10 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
-
 import iFu.common._
 import iFu.common.Consts._
+import iFu.util._
+import iFu.frontend.GetPCFromFtqIO
 
 abstract class FuncUnit (
     val isPiplined: Boolean,
@@ -17,7 +18,7 @@ abstract class FuncUnit (
         val req = Flipped(Decoupled(new FuncUnitReq))
         val resp = Decoupled(new FuncUnitResp)
         val brUpdate = Input(new BrUpdateInfo)
-        val bypass = Output(Vec(numStages, new ExeUnitResp))
+        val bypass = Output(Vec(numStages, Valid(new ExeUnitResp)))
 
         val brInfo = if (isAluUnit) Output(new BrResolutionInfo) else null
         val getFtqPC = if (isJmpUnit) Flipped(new GetPCFromFtqIO) else null
@@ -43,9 +44,11 @@ abstract class PipelinedFuncUnit (
 ) {
     io.req.ready := true.B
 
+    var rValids: Vec[Bool]  = null
+    var rUops: Vec[MicroOp] = null
     if (numStages > 0) {
-        val rValids = RegInit(VecInit(Seq.fill(numStages){ false.B }))
-        val rUops = Reg(Vec(numStages, new MicroOp()))
+        rValids = RegInit(VecInit(Seq.fill(numStages){ false.B }))
+        rUops = Reg(Vec(numStages, new MicroOp()))
 
         rValids(0) := io.req.valid && !IsKilledByBranch(io.brUpdate, io.req.bits.uop) && !io.req.bits.kill
         rUops(0) := io.req.bits.uop
@@ -85,7 +88,7 @@ class ALUUnit(
 ) {
     val uop = io.req.bits.uop
 
-    val imm = ImmGen(uop.immPacked, uop.ctrl.imms_el)
+    val imm = immGen(uop.immPacked, uop.ctrl.imm_sel)
 
     var op1Data: UInt = null
     if (isJmpUnit) {
@@ -113,7 +116,7 @@ class ALUUnit(
     val rs2 = io.req.bits.rs2Data
     val brEq = rs1 === rs2
     val brLtu = rs1.asUInt < rs2.asUInt
-    val brLt = (~(rs1(xLen - 1) ^ rs2(xLen - 1)) & br_ltu |
+    val brLt = (~(rs1(xLen - 1) ^ rs2(xLen - 1)) & brLtu |
                 rs1(xLen - 1) & ~rs2(xLen - 1)).asBool
 
     val pcSel = MuxLookup(uop.ctrl.br_type, PC_PLUS4,
@@ -156,20 +159,21 @@ class ALUUnit(
     brInfo.taken := isTaken
     brInfo.pcSel := pcSel
     brInfo.jalrTarget := DontCare
-
+    val bankBytes = frontendParams.iCacheParams.bankBytes
+    val fetchWidth= frontendParams.fetchWidth
     if (isJmpUnit) {
         val jalrTargetBase = io.req.bits.rs1Data.asSInt
         val jalrTarget = (jalrTargetBase + imm).asUInt
-        brinfo.jalrTarget := jalrTarget
+        brInfo.jalrTarget := jalrTarget
 
-        val cfiIdx = ((uop.pcLowBits ^ Mux(io.getFtqPC.entry.start_bank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth), 2)
+        val cfiIdx = ((uop.pcLowBits ^ Mux(io.getFtqPC.entry.startBank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth), 2)
 
-        when (pc_sel === PC_JALR) {
-            mispredict := !io.getFtqPC.next_val || (io.getFtqPC.next_pc =/= jalrTarget) ||
+        when (pcSel === PC_JALR) {
+            mispredict := !io.getFtqPC.nextVal || (io.getFtqPC.nextpc =/= jalrTarget) ||
                         !io.getFtqPC.entry.cfiIdx.valid || (io.getFtqPC.entry.cfiIdx.bits =/= cfiIdx)
         }
     }
-    brinfo.target_offset := imm
+    brInfo.targetOffset := imm
     io.brInfo := brInfo
 
     val rData = Reg(Vec(numStages, UInt(xLen.W)))
@@ -215,7 +219,8 @@ class MemAddrCalcUnit extends PipelinedFuncUnit(
     numStages = 0,
     isMemAddrCalcUnit = true
 ) {
-    val imm = ImmGen(uop.immPacked, uop.ctrl.imms_el)
+    val uop = io.req.bits.uop
+    val imm = immGen(uop.immPacked, uop.ctrl.imm_sel)
     val addr = (io.req.bits.rs1Data.asSInt + imm).asUInt
 
     val store_data = io.req.bits.rs2Data
@@ -266,6 +271,9 @@ class MemAddrCalcUnit extends PipelinedFuncUnit(
 abstract class IterativeFuncUnit extends FuncUnit (
     isPiplined = false,
     numStages = 1,
+    isJmpUnit = false,
+    isAluUnit = false,
+    isMemAddrCalcUnit = false
 ) {
     val rUop = Reg(new MicroOp)
     val doKill = Wire(Bool())
@@ -275,7 +283,7 @@ abstract class IterativeFuncUnit extends FuncUnit (
         rUop := io.req.bits.uop
         rUop.brMask := GetNewBrMask(io.brUpdate, io.req.bits.uop)
     } .otherwise {
-        doKill = IsKilledByBranch(io.brUpdate, rUop) || io.req.bits.kill
+        doKill := IsKilledByBranch(io.brUpdate, rUop) || io.req.bits.kill
         rUop.brMask := GetNewBrMask(io.brUpdate, rUop)
     }
     io.resp.bits.uop := rUop

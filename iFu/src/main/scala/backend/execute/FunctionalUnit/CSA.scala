@@ -2,6 +2,7 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
+import iFu.common._
 
 abstract class CarrySaveAdderMToN(m: Int, n: Int)(len: Int) extends Module{
     val io = IO(new Bundle() {

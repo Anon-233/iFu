@@ -58,6 +58,10 @@ object Consts {
     val BR_J   = 7.U(4.W) // Jump
     val BR_JR  = 8.U(4.W) // Jump Register
 
+    val PC_PLUS4 = 0.U(2.W)
+    val PC_BRJMP = 1.U(2.W)
+    val PC_JALR  = 2.U(2.W)
+
     val OP1_X    = BitPat("b??")
     val OP1_RS1  = 0.U(2.W) // Register Source #1
     val OP1_ZERO = 1.U(2.W)

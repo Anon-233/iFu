@@ -128,3 +128,10 @@ object Sext
         else return Cat(Fill(length-x.getWidth, x(x.getWidth-1)), x)
     }
 }
+object immGen
+{
+    def apply(x: UInt, immType: UInt): SInt = {
+        require(false)
+        0.S
+    }
+}

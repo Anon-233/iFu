@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import iFu.common._
+import iFu.common.Consts._
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -84,7 +85,7 @@ class ExecutionUnits extends CoreModule {
     val numIrfReadPorts     = exe_units.count(_.readsIrf) * 2
     val numIrfWritePorts    = exe_units.count(_.writesIrf)
     val numMemIrfWritePorts = exe_units.count(_.writesMemIrf)
-    val numTotalBypassPorts = exe_units.withFilter(_.bypassable).map(_.numBypassStages).foldLeft(0)(_ + _)
+    val numTotalBypassPorts = exe_units.withFilter(_.bypassable).map(_.numStages).foldLeft(0)(_ + _)
 
     val bypassable_write_port_mask = exe_units.withFilter(x => x.writesIrf).map(u => u.bypassable)
 }

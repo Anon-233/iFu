@@ -35,7 +35,7 @@ abstract class ExecutionUnit (
         val brupdate = Input(new BrUpdateInfo)
 
         val brinfo     = if (hasAlu) Output(new BrResolutionInfo) else null
-        val get_ftq_pc = if (hasJmpUnit) Flipped(new GetPCFromFtqIO) else null
+        val getFtqPc = if (hasJmpUnit) Flipped(new GetPCFromFtqIO) else null
         // val status     = Input(new freechips.rocketchip.rocket.MStatus())
 
         // only used by the mem unit
@@ -88,7 +88,7 @@ class ALUExeUnit(
     hasMul           = hasMul,
     hasDiv           = hasDiv,
     numStages        = if (hasAlu && hasMul) 3 else if (hasAlu) 1 else 0
-) with CoreModule {
+) {
     val div_busy  = WireInit(false.B)
 
     val iresp_fu_units = ArrayBuffer[FuncUnit]()
@@ -121,7 +121,7 @@ class ALUExeUnit(
         alu.io.brUpdate          := io.brupdate
         io.bypass                := alu.io.bypass
         io.brinfo                := alu.io.brInfo   
-        if (hasJmpUnit) { alu.io.getFtqPC <> io.get_ftq_pc }
+        if (hasJmpUnit) { alu.io.getFtqPC <> io.getFtqPc }
 
         iresp_fu_units += alu
     }
