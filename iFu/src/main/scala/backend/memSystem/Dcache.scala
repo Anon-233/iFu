@@ -5,6 +5,7 @@ import iFu.common._
 import chisel3._
 import chisel3.util._
 import iFu.common.HasCoreParameters
+import iFu.util._
 /*
 各部件行为：
 DcacheMeta：
