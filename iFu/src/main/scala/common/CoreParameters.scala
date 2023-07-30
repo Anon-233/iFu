@@ -63,7 +63,7 @@ trait HasCoreParameters {
 
     val frontendParams: FrontendParameters = new FrontendParameters
     val robParameters: ROBParameters = new ROBParameters
-    val lSUParameters: LSUParameters = new LSUParameters
+    val lsuParameters: LSUParameters = new LSUParameters
     val issueParams: Seq[IssueParams] = Seq(
         IssueParams(issueWidth = 1, numIssueSlots = 16, iqType = IQT_MEM.litValue, dispatchWidth = 1),
         IssueParams(issueWidth = 2, numIssueSlots = 16, iqType = IQT_INT.litValue, dispatchWidth = 1))
