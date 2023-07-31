@@ -2,9 +2,7 @@ package iFu.backend
 
 import backend.memSystem.DTlb
 import chisel3._
-import chisel3.stage.ChiselGeneratorAnnotation
 import chisel3.util._
-import firrtl.options.TargetDirAnnotation
 import iFu.backend.CSR
 import iFu.common._
 import iFu.common.Consts._
@@ -1190,7 +1188,7 @@ class Lsu extends CoreModule {
 object GenByteMask {
     def apply(addr: UInt, size: UInt): UInt = {
         val mask = Wire(UInt(4.W))
-        mask := MuxCase(15.U(4.W), Array(
+        mask := MuxCase(15.U(4.W), Seq(
             (size === 0.U) -> (1.U(4.W) << addr(1, 0)),
             (size === 1.U) -> (3.U(4.W) << (addr(1) << 1.U)),
             (size === 2.U) -> 15.U(4.W)

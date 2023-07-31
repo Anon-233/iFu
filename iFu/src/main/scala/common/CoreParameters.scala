@@ -38,10 +38,10 @@ class FrontendParameters{
 
 class ROBParameters {
     val coreWidth: Int = 4
-    val robAddrSz: Int = log2Ceil(numRobRows) + log2Ceil(coreWidth)
     val retireWidth: Int = 4 //decodeWidth
-    val numRobRows: Int = numRobEntries/coreWidth
     val numRobEntries:Int = 128
+    val numRobRows: Int = numRobEntries/coreWidth
+    val robAddrSz: Int = log2Ceil(numRobRows) + log2Ceil(coreWidth)
 }
 
 class LSUParameters{
