@@ -378,7 +378,7 @@ class Rob(
     }
 
     exceptionThrown := willThrowException
-    val isMiniException = io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING
+    val isMiniException = io.com_xcpt.bits.cause === 2.U//TODO:关联到MINI_EXCEPTION_MEM_ORDERING，注意到其值为2.U，如果更改需要同步更改
     io.com_xcpt.valid := exceptionThrown && !isMiniException
     io.com_xcpt.bits.cause := rXcptUop.excCause
 
