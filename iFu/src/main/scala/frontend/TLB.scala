@@ -3,7 +3,6 @@ package iFu.frontend
 import chisel3._
 import chisel3.util._
 
-import backend.decode.common.M_SZ
 import iFu.common._
 
 class SFenceReq extends CoreBundle {
@@ -23,7 +22,7 @@ class TLBReq(lgMaxSize: Int) extends CoreBundle {
     /** granularity */
     val size = UInt(log2Ceil(lgMaxSize + 1).W)
     /** memory command. */
-    val cmd  = Bits(M_SZ.W)
+    // val cmd  = Bits(M_SZ.W)
     val prv = UInt(2.W)
     /** virtualization mode */
     val v = Bool()
