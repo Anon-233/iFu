@@ -12,7 +12,7 @@ class BranchPredictionRequest extends CoreBundle
   val gHist = new GlobalHistory
 }
 
-class BranchPredictor extends CoreModule
+class BranchPredictor extends Module
  with HasBPUParameters
 {
   val io = IO(new Bundle {
