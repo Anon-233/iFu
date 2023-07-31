@@ -13,7 +13,7 @@ class BusyTableResp extends Bundle {
 class BusyTable (
     val plWidth : Int,
     val numPregs: Int,
-    val numWbPorts: Int
+    val numWakeupPorts: Int
 ) extends CoreModule {
     val pregSize = log2Ceil(numPregs)
 
@@ -22,8 +22,8 @@ class BusyTable (
         val busy_resps = Output(Vec(plWidth, new BusyTableResp))
         val rebusy_reqs = Input(Vec(plWidth, Bool()))
 
-        val wakeup_valids = Input(Vec(numWbPorts, Bool()))
-        val wakeup_pdsts = Input(Vec(numWbPorts, UInt(pregSize.W)))
+        val wakeup_valids = Input(Vec(numWakeupPorts, Bool()))
+        val wakeup_pdsts = Input(Vec(numWakeupPorts, UInt(pregSize.W)))
     })
 
     val busyTable = RegInit(0.U(numPregs.W))

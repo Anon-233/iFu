@@ -12,7 +12,7 @@ import iFu.util._
 abstract class AbsRenameStage (
     plWidth: Int,
     numPhysRegs: Int,
-    numWbPorts: Int
+    numWakeupPorts: Int
 ) extends CoreModule {
     val io = IO(new Bundle{
         val ren_stalls = Output(Vec(plWidth, Bool())) //流水线暂停
@@ -30,7 +30,7 @@ abstract class AbsRenameStage (
         val dis_fire  = Input(Vec(coreWidth, Bool())) //派遣级各支完成指令派遣的信号
         val dis_ready = Input(Bool())  //派遣级可以接收数据的ready信号
 
-        val wakeups = Flipped(Vec(numWbPorts, Valid(new ExeUnitResp)))
+        val wakeups = Flipped(Vec(numWakeupPorts, Valid(new ExeUnitResp)))
         //从commit阶段输入的信息
         val com_valids = Input(Vec(plWidth, Bool()))
         val com_uops   = Input(Vec(plWidth, new MicroOp))
@@ -84,8 +84,8 @@ abstract class AbsRenameStage (
 class RenameStage (
     plWidth : Int,
     numPhysRegs: Int,
-    numWbPorts: Int
-) extends  AbsRenameStage(plWidth, numPhysRegs, numWbPorts) {
+    numWakeupPorts: Int
+) extends  AbsRenameStage(plWidth, numPhysRegs, numWakeupPorts) {
     val pregSize = log2Ceil(numPhysRegs)
     //转发逻辑，避免数据冒险
     def DoBypass(uop:MicroOp, older:Seq[MicroOp], allocReqs:Seq[Bool]): MicroOp = {
@@ -135,7 +135,7 @@ class RenameStage (
     val busytable = Module(new BusyTable(
         plWidth,
         numPhysRegs,
-        numWbPorts
+        numWakeupPorts
     ))
 
     val ren2BrTags = Wire(Vec(plWidth, Valid(UInt(brTagSz.W))))
@@ -242,8 +242,8 @@ class RenameStage (
 class PredRenameStage (
     plWidth : Int,
     numPhysRegs : Int,
-    numWbPorts: Int
-) extends AbsRenameStage(plWidth, numPhysRegs, numWbPorts) {
+    numWakeupPorts: Int
+) extends AbsRenameStage(plWidth, numPhysRegs, numWakeupPorts) {
 
     val numFTQEntries = frontendParams.numFTQEntries
     def DoBypass(uop: MicroOp, older: Seq[MicroOp], allocReqs: Seq[Bool]): MicroOp = { uop }
@@ -276,7 +276,7 @@ class PredRenameStage (
         }
     }
 
-    for(w <- 0 until numWbPorts){
+    for(w <- 0 until numWakeupPorts){
         when(io.wakeups(w).valid){
             val pdst = io.wakeups(w).bits.uop.pdst
             unbusy(pdst) := true.B
