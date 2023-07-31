@@ -827,6 +827,7 @@ class iFuCore extends CoreModule {
         rob.io.debug_wb_valids(cnt) := mem_resps(i).valid && mem_uop.dst_rtype =/= RT_X
         rob.io.debug_wb_wdata(cnt)  := mem_resps(i).bits.data
         rob.io.debug_wb_ldst(cnt)   := mem_uop.ldst
+        rob.io.debug_wb_pc(cnt)     := mem_uop.debug_pc
         cnt += 1
     }
     for (eu <- exe_units) {
@@ -847,6 +848,7 @@ class iFuCore extends CoreModule {
             // } else {
                 rob.io.debug_wb_wdata(cnt) := data
                 rob.io.debug_wb_ldst(cnt)  := wb_uop.ldst
+                rob.io.debug_wb_pc(cnt)     := wb_uop.debug_pc
             // }
             cnt += 1
         }
