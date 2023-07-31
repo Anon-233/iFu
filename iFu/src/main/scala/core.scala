@@ -963,11 +963,17 @@ class Core extends CoreModule {
     val ll_uop = ll_wbarb.io.out.bits.uop
     rob.io.wb_resps(0).valid := ll_wbarb.io.out.valid && !(ll_uop.uses_stq && !ll_uop.is_amo)
     rob.io.wb_resps(0).bits <> ll_wbarb.io.out.bits
+    rob.io.debug_wb_valids(0) := ll_wbarb.io.out.valid && ll_uop.dst_rtype =/= RT_X
+    rob.io.debug_wb_wdata(0)  := ll_wbarb.io.out.bits.data
+    rob.io.debug_wb_ldst(0)   := ll_wbarb.io.out.bits.uop.ldst
     var cnt = 1
     for (i <- 1 until memWidth) {
         val mem_uop = mem_resps(i).bits.uop
         rob.io.wb_resps(cnt).valid := mem_resps(i).valid && !(mem_uop.use_stq && !mem_uop.is_amo)
         rob.io.wb_resps(cnt).bits := mem_resps(i).bits
+        rob.io.debug_wb_valids(cnt) := mem_resps(i).valid && mem_uop.dst_rtype =/= RT_X
+        rob.io.debug_wb_wdata(cnt) := mem_resps(i).bits.data
+        rob.io.debug_wb_ldst(cnt)   := mem_uop.ldst
         cnt += 1
     }
     var f_cnt = 0 // rob fflags port index
@@ -979,13 +985,15 @@ class Core extends CoreModule {
 
             rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.use_stq && !wb_uop.is_amo)
             rob.io.wb_resps(cnt).bits <> resp.bits
-            /*if (eu.hasCSR) {
+            rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
+            if (eu.hasCSR) {
                 rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N,
                     csr.io.rw.rdata,
                     data)
             } else {
                 rob.io.debug_wb_wdata(cnt) := data
-            }*/
+                rob.io.debug_wb_ldst(cnt)  := wb_uop.ldst
+            }
             cnt += 1
         }
     }
@@ -1033,5 +1041,13 @@ class Core extends CoreModule {
     //    io.ptw.status     := csr.io.status
     //    io.ptw.pmp        := csr.io.pmp
     //    io.ptw.sfence     := io.ifu.sfence
+
+    //-------------------------------------------------------------
+    // *** debug for difftest
+    //-------------------------------------------------------------
+    val diff = new debugDiff
+    val lregOut = Vec(lregSz,UInt(xLen.W))
+    diff.io.commit := rob.io.commit
+    lregOut := diff.io.lregOut   //use this for difftest
 }
 

@@ -7,6 +7,7 @@ import iFu.common._
 class debugDiff extends CoreModule {
   val io = IO(new Bundle {
     val commit = Input(new CommitSignals())
+    val lregOut = Output(Vec(lregSz,UInt(xLen.W)))
   })
 
   val debug_reg = Mem(lregSz,UInt(xLen.W))
@@ -17,5 +18,10 @@ class debugDiff extends CoreModule {
 
     debug_reg(lreg) := wdata
   }
+  for(w <-0 until lregSz){
+    io.lregOut(w) := debug_reg(w)
+  }
+
+
 
 }
