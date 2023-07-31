@@ -175,6 +175,7 @@ class Lsu extends CoreModule {
     val ldqAddrSz       = lsuParameters.ldqAddrSz
     val MINI_EXCEPTION_MEM_ORDERING = 2.U
     /** ************************************ */
+    val dcache  = Module(new NonBlockingDcache)
 
 
     val ldq = Reg(Vec(numLdqEntries, Valid(new LDQEntry)))
@@ -269,8 +270,8 @@ class Lsu extends CoreModule {
     // TODO: cacop? fence?
 
     val stqEmpty = (0 until numStqEntries).map{ i => stq(i).valid }.asUInt === 0.U
-    io.dmem.force_order := io.core.fence_dmem
-    io.core.fencei_rdy := stqEmpty && io.dmem.ordered
+    dcache.io.lsu.force_order := io.core.fence_dmem
+    io.core.fencei_rdy := stqEmpty && dcache.io.lsu.ordered
 
 /*=============================================================================*/
     //-------------------------------------------------------------
@@ -554,14 +555,14 @@ class Lsu extends CoreModule {
     // reading a physical address from the LDQ, STQ
 
     // defaults
-    io.dmem.brupdate := io.core.brupdate
-    io.dmem.exception := io.core.exception
-    io.dmem.rob_head_idx := io.core.rob_head_idx
+    dcache.io.lsu.brupdate := io.core.brupdate
+    dcache.io.lsu.exception := io.core.exception
+    dcache.io.lsu.rob_head_idx := io.core.rob_head_idx
 
     val dmem_req = Wire(Vec(memWidth, Valid(new DCacheReq)))
-    io.dmem.req.valid := dmem_req.map(_.valid).reduce(_||_)
-    io.dmem.req.bits := dmem_req
-    val dmem_req_fire = widthMap(w => dmem_req(w).valid && io.dmem.req.fire)
+    dcache.io.lsu.req.valid := dmem_req.map(_.valid).reduce(_||_)
+    dcache.io.lsu.req.bits := dmem_req
+    val dmem_req_fire = widthMap(w => dmem_req(w).valid && dcache.io.lsu.req.fire)
 
     val s0_executing_loads = WireInit(VecInit((0 until numLdqEntries).map(x => false.B)))
 
@@ -571,7 +572,7 @@ class Lsu extends CoreModule {
         dmem_req(w).bits.addr := 0.U
         dmem_req(w).bits.data := 0.U
 
-        io.dmem.s1_kill(w) := false.B
+        dcache.io.lsu.s1_kill(w) := false.B
 
         when(will_fire_load_incoming(w)) {
              dmem_req(w).valid := !exe_tlb_miss(w) /*&& !exe_tlb_uncacheable(w)*/
@@ -851,15 +852,15 @@ class Lsu extends CoreModule {
                 when(((lcam_mask(w) & write_mask) === lcam_mask(w)) && !s_uop.is_fence && word_addr_matches(w) && can_forward(w)) {
                     ldst_addr_matches(w)(i) := true.B
                     ldst_forward_matches(w)(i) := true.B
-                    io.dmem.s1_kill(w) := RegNext(dmem_req_fire(w))
+                    dcache.io.lsu.s1_kill(w) := RegNext(dmem_req_fire(w))
                     s1_set_execute(lcam_ldq_idx(w)) := false.B
                 } .elsewhen(((lcam_mask(w) & write_mask) =/= 0.U) && word_addr_matches(w)) {
                     ldst_addr_matches(w)(i) := true.B
-                    io.dmem.s1_kill(w) := RegNext(dmem_req_fire(w))
+                    dcache.io.lsu.s1_kill(w) := RegNext(dmem_req_fire(w))
                     s1_set_execute(lcam_ldq_idx(w)) := false.B
                 } .elsewhen(s_uop.is_fence || s_uop.is_amo) {
                     ldst_addr_matches(w)(i) := true.B
-                    io.dmem.s1_kill(w) := RegNext(dmem_req_fire(w))
+                    dcache.io.lsu.s1_kill(w) := RegNext(dmem_req_fire(w))
                     s1_set_execute(lcam_ldq_idx(w)) := false.B
                 }
             }
@@ -978,41 +979,41 @@ class Lsu extends CoreModule {
 
     for (w <- 0 until memWidth) {
         // Handle nacks
-        when(io.dmem.nack(w).valid) {
+        when(dcache.io.lsu.nack(w).valid) {
             // We have to re-execute this!
-            when(io.dmem.nack(w).bits.uop.use_ldq) {
-                assert(ldq(io.dmem.nack(w).bits.uop.ldqIdx).bits.executed)
+            when(dcache.io.lsu.nack(w).bits.uop.use_ldq) {
+                assert(ldq(dcache.io.lsu.nack(w).bits.uop.ldqIdx).bits.executed)
 
-                ldq(io.dmem.nack(w).bits.uop.ldqIdx).bits.executed := false.B
-                nacking_loads(io.dmem.nack(w).bits.uop.ldqIdx) := true.B
+                ldq(dcache.io.lsu.nack(w).bits.uop.ldqIdx).bits.executed := false.B
+                nacking_loads(dcache.io.lsu.nack(w).bits.uop.ldqIdx) := true.B
             } .otherwise {
-                assert(io.dmem.nack(w).bits.uop.use_stq)
+                assert(dcache.io.lsu.nack(w).bits.uop.use_stq)
 
-                when(IsOlder(io.dmem.nack(w).bits.uop.stqIdx, stq_execute_head, stq_head)) {
-                    stq_execute_head := io.dmem.nack(w).bits.uop.stqIdx
+                when(IsOlder(dcache.io.lsu.nack(w).bits.uop.stqIdx, stq_execute_head, stq_head)) {
+                    stq_execute_head := dcache.io.lsu.nack(w).bits.uop.stqIdx
                 }
             }
         }
         // Handle the response
-        when(io.dmem.resp(w).valid) {
-            when(io.dmem.resp(w).bits.uop.use_ldq) {
-                val ldq_idx = io.dmem.resp(w).bits.uop.ldqIdx
+        when(dcache.io.lsu.resp(w).valid) {
+            when(dcache.io.lsu.resp(w).bits.uop.use_ldq) {
+                val ldq_idx = dcache.io.lsu.resp(w).bits.uop.ldqIdx
                 val send_iresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FIX
 
                 io.core.exe(w).iresp.bits.uop := ldq(ldq_idx).bits.uop
                 io.core.exe(w).iresp.valid := send_iresp
-                io.core.exe(w).iresp.bits.data := io.dmem.resp(w).bits.data
+                io.core.exe(w).iresp.bits.data := dcache.io.lsu.resp(w).bits.data
 
                 dmem_resp_fired(w) := true.B
 
                 ldq(ldq_idx).bits.succeeded := io.core.exe(w).iresp.valid
-            } .elsewhen(io.dmem.resp(w).bits.uop.use_stq) {
-                stq(io.dmem.resp(w).bits.uop.stqIdx).bits.succeeded := true.B
-                when(io.dmem.resp(w).bits.uop.is_amo) {
+            } .elsewhen(dcache.io.lsu.resp(w).bits.uop.use_stq) {
+                stq(dcache.io.lsu.resp(w).bits.uop.stqIdx).bits.succeeded := true.B
+                when(dcache.io.lsu.resp(w).bits.uop.is_amo) {
                     dmem_resp_fired(w) := true.B
                     io.core.exe(w).iresp.valid := true.B
-                    io.core.exe(w).iresp.bits.uop := stq(io.dmem.resp(w).bits.uop.stqIdx).bits.uop
-                    io.core.exe(w).iresp.bits.data := io.dmem.resp(w).bits.data
+                    io.core.exe(w).iresp.bits.uop := stq(dcache.io.lsu.resp(w).bits.uop.stqIdx).bits.uop
+                    io.core.exe(w).iresp.bits.data := dcache.io.lsu.resp(w).bits.data
                 }
             }
         }
@@ -1140,11 +1141,11 @@ class Lsu extends CoreModule {
 
     // store has been committed AND successfully sent data to memory
     when(stq(stq_head).valid && stq(stq_head).bits.committed) {
-        when(stq(stq_head).bits.uop.is_fence && !io.dmem.ordered) {
-            io.dmem.force_order := true.B
+        when(stq(stq_head).bits.uop.is_fence && !dcache.io.lsu.ordered) {
+            dcache.io.lsu.force_order := true.B
             store_needs_order := true.B
         }
-        clear_store := Mux(stq(stq_head).bits.uop.is_fence, io.dmem.ordered,
+        clear_store := Mux(stq(stq_head).bits.uop.is_fence, dcache.io.lsu.ordered,
                                                             stq(stq_head).bits.succeeded
         )
     }
