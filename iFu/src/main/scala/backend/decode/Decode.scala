@@ -271,6 +271,7 @@ class DecodeUnitIO() extends CoreBundle {
 //TODO 添加对CSR环境下异常指令的检测
 class DecodeUnit extends CoreModule {
     val io = IO(new DecodeUnitIO)
+    io <> DontCare
 
     val uop = Wire(new MicroOp)
     uop := io.enq.uop

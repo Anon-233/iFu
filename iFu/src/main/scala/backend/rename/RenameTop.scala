@@ -248,6 +248,7 @@ class PredRenameStage (
     val numFTQEntries = frontendParams.numFTQEntries
     def DoBypass(uop: MicroOp, older: Seq[MicroOp], allocReqs: Seq[Bool]): MicroOp = { uop }
 
+    io <> DontCare
     ren2AllocReqs := DontCare
 
     val busyTable = RegInit(VecInit(0.U(numFTQEntries.W).asBools))
