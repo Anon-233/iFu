@@ -879,5 +879,5 @@ class iFuCore extends CoreModule {
     val diff = Module(new debugDiff)
     val lregOut = Wire(Vec(lregSz, UInt(xLen.W)))
     diff.io.commit := rob.io.commit
-    lregOut := diff.io.lregOut   //use this for difftest
+    lregOut := diff.io.lregOut   //用这个接difftest，或者进入后端debugDiff文件中接入
 }
