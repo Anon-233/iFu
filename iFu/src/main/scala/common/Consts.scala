@@ -21,10 +21,7 @@ object Consts {
     val CFI_JALR = 3.U(CFI_SZ.W) // JALR
 
     val IQT_SZ  = 2
-<<<<<<< HEAD
     val IQT_X   = BitPat.dontCare(IQT_SZ)
-=======
->>>>>>> 18e63be701164b846fc9a41102bd607d8726335e
     val IQT_INT = 1.U(IQT_SZ.W)
     val IQT_MEM = 2.U(IQT_SZ.W)
 

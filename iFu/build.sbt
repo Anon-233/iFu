@@ -6,7 +6,6 @@ ThisBuild / version          := "3.0"
 ThisBuild / organization     := "fdu"
 
 val chiselVersion = "3.6.0"
-val chiselVersion = "3.6.0"
 
 lazy val root = (project in file("."))
   .settings(
