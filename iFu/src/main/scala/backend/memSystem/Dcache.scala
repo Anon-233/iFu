@@ -195,7 +195,7 @@ class DcacheMeta extends Module with HasDcacheParameters{
 
     when(io.fenceTakeDirtyMeta){
         // 将这个脏行的dirty位置为0写回
-        dirtyTable(dirtyIdx) := dirtyTable(dirtyIdx) & (~(1.U << dirtyPos))
+        dirtyTable(dirtyIdx) := dirtyTable(dirtyIdx).asUInt & (~(1.asUInt << dirtyPos)).asUInt
         dirtyMeta.dirty := false.B
         meta.write(dirtyIdx, VecInit(Seq.fill(nWays)(dirtyMeta)), cleanedMask.asBools)
     }
@@ -883,7 +883,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
           s3state === lsu &&
           s3hit(w) &&
           isStore(s3req(0)) &&
-          ((s2req(w).addr >> nOffsetBits) === (s3req(0).addr >> nOffsetBits))
+          ((s2req(w).addr >> nOffsetBits).asUInt === (s3req(0).addr >> nOffsetBits).asUInt)
     }
 
     // 下面是s2执行的内容
