@@ -23,8 +23,8 @@ class iFuCore extends CoreModule {
     val fetchWidth      = frontendParams.fetchWidth
     val decodeWidth     = coreWidth
     val bankBytes       = frontendParams.iCacheParams.bankBytes
-    val memIssueParam   = issueParams.filter(_.iqType == IQT_MEM)(0)
-    val intIssueParam   = issueParams.filter(_.iqType == IQT_INT)(0)
+    val memIssueParam   = issueParams.filter(_.iqType == IQT_MEM.litValue)(0)
+    val intIssueParam   = issueParams.filter(_.iqType == IQT_INT.litValue)(0)
     val numFTQEntries   = frontendParams.numFTQEntries
     val iCacheLineBytes = frontendParams.iCacheParams.lineBytes
 
