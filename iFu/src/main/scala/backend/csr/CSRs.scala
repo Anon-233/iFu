@@ -2,7 +2,8 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
-
+import iFu.common._
+import iFu.backend.CSRAddr._
 
 object CSRAddr {
     val CRMD            = 0x0;
@@ -993,7 +994,6 @@ class CSRs extends CoreModule{
 
         // from ws
         val excp_flush = Input(Bool())
-        val excp_tlbrefill = Input(Bool())
         val era_in = Input(UInt(32.W))
         val esubcode_in = Input(UInt(9.W))
         val ecode_in = Input(UInt(6.W))
@@ -1152,6 +1152,11 @@ class CSRs extends CoreModule{
         def TLB_PPN_EN = TLB_PPN(19, 0)
     }
 
+    class CSR_cpuid{
+        val RESERVE = UInt(23.W)
+        val COREID = UInt(9.W)
+    }
+
     class CSR_asid extends CoreBundle{
         val TLB_ASID = UInt(10.W)
         val RESERVE = UInt(22.W)
@@ -1246,13 +1251,9 @@ class CSRs extends CoreModule{
     }
 
     class CSR_disable_cache extends CoreBundle{
-
+        val RESERVE = UInt(31.W)
+        val disable_cache_out = UInt(1.W)
     }
-
-
-
-
-
 /*
 define PLV       1:0
 `define IE        2
@@ -1329,49 +1330,6 @@ define PLV       1:0
 
 */
 
-def getPLV(x:UInt) = x(1,0)
-def getIE(x:UInt) = x(2)
-def getDA(x:UInt) = x(3)
-def getPG(x:UInt) = x(4)
-def getDATF(x:UInt) = x(6,5)
-def getDATM(x:UInt) = x(8,7)
-def getPPLV(x:UInt) = x(1,0)
-def getPIE(x:UInt) = x(2)
-def getLIE(x:UInt) = x(12,0)
-def getLIE_1(x:UInt) = x(9,0)
-def getLIE_2(x:UInt) = x(12,11)
-def getIS(x:UInt) = x(12,0)
-def getECODE(x:UInt) = x(21,16)
-def getESUBCODE(x:UInt) = x(30,22)
-def getINDEX(x:UInt) = x(4,0)
-def getPS(x:UInt) = x(29,24)
-def getNE(x:UInt) = x(31)
-def getVPPN(x:UInt) = x(31,13)
-def getTLB_V(x:UInt) = x(0)
-def getTLB_D(x:UInt) = x(1)
-def getTLB_PLV(x:UInt) = x(3,2)
-def getTLB_MAT(x:UInt) = x(5,4)
-def getTLB_G(x:UInt) = x(6)
-def getTLB_PPN(x:UInt) = x(31,8)
-def getTLB_PPN_EN(x:UInt) = x(27,8)
-def getTLB_ASID(x:UInt) = x(9,0)
-def getCOREID(x:UInt) = x(8,0)
-def getROLLB(x:UInt) = x(0)
-def getWCLLB(x:UInt) = x(1)
-def getKLO(x:UInt) = x(2)
-def getEN(x:UInt) = x(0)
-def getPERIODIC(x:UInt) = x(1)
-def getINITVAL(x:UInt) = x(31,2)
-def getCLR(x:UInt) = x(0)
-def getTLBRENTRY_PA(x:UInt) = x(31,6)
-def getPLV0(x:UInt) = x(0)
-def getPLV3(x:UInt) = x(3)
-def getDMW_MAT(x:UInt) = x(5,4)
-def getPSEG(x:UInt) = x(27,25)
-def getVSEG(x:UInt) = x(31,29)
-def getBASE(x:UInt) = x(31,12)
-
-
 /*
     wire crmd_wen   = csr_wr_en & (wr_addr == CRMD);
 wire prmd_wen   = csr_wr_en & (wr_addr == PRMD);
@@ -1438,36 +1396,36 @@ reg [31:0] csr_disable_cache;
 
       
       */ 
-val csr_crmd = RegInit(0.U(32.W))
-val csr_prmd = RegInit(0.U(32.W))
-val csr_ectl = RegInit(0.U(32.W))
-val csr_estat = RegInit(0.U(32.W))
-val csr_era = RegInit(0.U(32.W))
-val csr_badv = RegInit(0.U(32.W))
-val csr_eentry = RegInit(0.U(32.W))
-val csr_tlbidx = RegInit(0.U(32.W))
-val csr_tlbehi = RegInit(0.U(32.W))
-val csr_tlbelo0 = RegInit(0.U(32.W))
-val csr_tlbelo1 = RegInit(0.U(32.W))
-val csr_asid = RegInit(0.U(32.W))
-val csr_cpuid = RegInit(0.U(32.W))
-val csr_save0 = RegInit(0.U(32.W))
-val csr_save1 = RegInit(0.U(32.W))
-val csr_save2 = RegInit(0.U(32.W))
-val csr_save3 = RegInit(0.U(32.W))
-val csr_tid = RegInit(0.U(32.W))
-val csr_tcfg = RegInit(0.U(32.W))
-val csr_tval = RegInit(0.U(32.W))
-val csr_cntc = RegInit(0.U(32.W))
-val csr_ticlr = RegInit(0.U(32.W))
-val csr_llbctl = RegInit(0.U(32.W))
-val csr_tlbrentry = RegInit(0.U(32.W))
-val csr_dmw0 = RegInit(0.U(32.W))
-val csr_dmw1 = RegInit(0.U(32.W))
-val csr_pgdl = RegInit(0.U(32.W))
-val csr_pgdh = RegInit(0.U(32.W))
-val csr_brk = RegInit(0.U(32.W))
-val csr_disable_cache = RegInit(0.U(32.W))
+val csr_crmd = new CSR_crmd
+val csr_prmd = new CSR_prmd
+val csr_ectl = new CSR_ectl
+val csr_estat = new CSR_estat
+val csr_era = new CSR_era
+val csr_badv = new CSR_badv
+val csr_eentry = new CSR_eentry
+val csr_tlbidx = new CSR_tlbidx
+val csr_tlbehi = new CSR_tlbehi
+val csr_tlbelo0 = new CSR_tlbelo0
+val csr_tlbelo1 = new CSR_tlbelo1
+val csr_asid = new CSR_asid
+val csr_cpuid = new CSR_cpuid
+val csr_save0 = new CSR_save0
+val csr_save1 = new CSR_save1
+val csr_save2 = new CSR_save2
+val csr_save3 = new CSR_save3
+val csr_tid = new CSR_tid
+val csr_tcfg = new CSR_tcfg
+val csr_tval = new CSR_tval
+val csr_cntc = new CSR_cntc
+val csr_ticlr = new CSR_ticlr
+val csr_llbctl = new CSR_llbctl
+val csr_tlbrentry = new CSR_tlbrentry
+val csr_dmw0 = new CSR_dmw0
+val csr_dmw1 = new CSR_dmw1
+val csr_pgdl = new CSR_pgdl
+val csr_pgdh = new CSR_pgdh
+val csr_brk = new CSR_brk
+val csr_disable_cache = new CSR_disable_cache
 
 val timer_en = RegInit(0.U(1.W))
 val timer_64 = RegInit(0.U(64.W))
@@ -1599,92 +1557,92 @@ val eret_tlbrefill_excp = WireInit(false.B)
 
 val csr_pgd = WireInit(0.U(32.W))
 
-csr_pgd := Mux(csr_badv(31) === 1.U, csr_pgdh, csr_pgdl)
+csr_pgd := Mux(csr_badv.asUInt(31) === 1.U, csr_pgdh, csr_pgdl)
 
-eret_tlbrefill_excp = csr_estat(getECODE(6,0)) === 0x3f.U
+eret_tlbrefill_excp := csr_estat.ECODE === 0x3f.U
 
-tlbrd_valid_wr_en   := io.tlbrd_en && !getNE(io.tlbidx_in)
-tlbrd_invalid_wr_en := io.tlbrd_en &&  getNE(io.tlbidx_in)
-
-has_int := getLTE(csr_ectl) & getIS(csr_estat) =/= 0.U & getIE(io.csr_crmd)
-
-io.eentry_out   := csr_eentry
-io.era_out      := csr_era
-io.timer_64_out := timer_64 + Cat(Fill(32,csr_cntc(31)), csr_cntc)
-io.tid_out      := csr_tid
-io.llbit_out    := llbit
-io.asid_out     := getTLB_ASID(csr_asid)
-io.vppn_out     := Mux(io.csr_wr_en && io.wr_addr === TLBEHI, getVPPN(wr_data), getVPPN(csr_tlbehi))
-io.tlbehi_out   := csr_tlbehi
-io.tlbelo0_out  := csr_tlbelo0
-io.tlbelo1_out  := csr_tlbelo1
-io.tlbidx_out   := csr_tlbidx
-io.rand_index   := timer_64(4,0)
-io.disable_cache_out := csr_disable_cache(0)
-
-//forward to if stage
-val no_forward   = WireInit(false.B)
-
-no_forward := !io.excp_tlbrefill && !(eret_tlbrefill_excp && io.ertn_flush) && !crmd_wen
-
-io.pg_out       := io.excp_tlbrefill & 0.U                      |
-                    (eret_tlbrefill_excp && io.ertn_flush) & 1.U |
-                    crmd_wen       & getPG(io.wr_data)              |
-                    no_forward     & getPG(csr_crmd)
-
-io.da_out       := io.excp_tlbrefill & 1.U                      |
-                    (eret_tlbrefill_excp && io.ertn_flush) & 0.U |
-                    crmd_wen       & getDA(io.wr_data)              |
-                    no_forward     & getDA(csr_crmd)
-
-io.dmw0_out     := Mux(DMW0_wen, io.wr_data, csr_dmw0)
-io.dmw1_out     := Mux(DMW1_wen, io.wr_data, csr_dmw1)
-
-io.plv_out      := Cat(Fill(2,io.excp_flush) & 0.U)            |
-                    Cat(Fill(2,io.ertn_flush)&getPLV(csr_prmd)) |
-                    Cat(Fill(2,crmd_wen  ) & getPLV(io.wr_data))   |
-                    Cat(Fill(2,!io.excp_flush && !io.ertn_flush && !crmd_wen), getPLV(csr_crmd))
-
-io.tlbrentry_out:= csr_tlbrentry
-io.datf_out     := getDATF(csr_crmd)
-io.datm_out     := getDATM(csr_crmd)
-io.ecode_out    := getECODE(csr_estat)
-
-io.rd_data := MuxLookup(io.rd_addr, 0.U(32.W),
-                        Array(
-                            CRMD -> csr_crmd,
-                            PRMD -> csr_prmd,
-                            ECTL -> csr_ectl,
-                            ESTAT -> csr_estat,
-                            ERA -> csr_era,
-                            BADV -> csr_badv,
-                            EENTRY -> csr_eentry,
-                            TLBIDX -> csr_tlbidx,
-                            TLBEHI -> csr_tlbehi,
-                            TLBELO0 -> csr_tlbelo0,
-                            TLBELO1 -> csr_tlbelo1,
-                            ASID -> csr_asid,
-                            PGDL -> csr_pgdl,
-                            PGDH -> csr_pgdh,
-                            PGD -> csr_pgd,
-                            CPUID -> csr_cpuid,
-                            SAVE0 -> csr_save0,
-                            SAVE1 -> csr_save1,
-                            SAVE2 -> csr_save2,
-                            SAVE3 -> csr_save3,
-                            TID -> csr_tid,
-                            TCFG -> csr_tcfg,
-                            CNTC -> csr_cntc,
-                            TICLR -> csr_ticlr,
-                            LLBCTL -> Cat(csr_llbctl(31,1), llbit),
-                            TVAL -> csr_tval,
-                            TLBRENTRY -> csr_tlbrentry,
-                            DMW0 -> csr_dmw0,
-                            DMW1 -> csr_dmw1
-            ))
-
-    if(io.reset){
-    }
+tlbrd_valid_wr_en   := io.tlbrd_en && !(io.tlbidx_in)(31)
+tlbrd_invalid_wr_en := io.tlbrd_en &&  (io.tlbidx_in)(31)
+//TODO :: 以下
+//has_int := csr_ectl.LIE & csr_estat.IS =/= 0.U & csr_crmd.IE
+//
+//io.eentry_out   := csr_eentry
+//io.era_out      := csr_era
+//io.timer_64_out := timer_64 + Cat(Fill(32,csr_cntc(31)), csr_cntc)
+//io.tid_out      := csr_tid
+//io.llbit_out    := llbit
+//io.asid_out     := getTLB_ASID(csr_asid)
+//io.vppn_out     := Mux(io.csr_wr_en && io.wr_addr === TLBEHI, getVPPN(wr_data), getVPPN(csr_tlbehi))
+//io.tlbehi_out   := csr_tlbehi
+//io.tlbelo0_out  := csr_tlbelo0
+//io.tlbelo1_out  := csr_tlbelo1
+//io.tlbidx_out   := csr_tlbidx
+//io.rand_index   := timer_64(4,0)
+//io.disable_cache_out := csr_disable_cache(0)
+//
+////forward to if stage
+//val no_forward   = WireInit(false.B)
+//
+//no_forward := !io.excp_tlbrefill && !(eret_tlbrefill_excp && io.ertn_flush) && !crmd_wen
+//
+//io.pg_out       := io.excp_tlbrefill & 0.U                      |
+//                    (eret_tlbrefill_excp && io.ertn_flush) & 1.U |
+//                    crmd_wen       & getPG(io.wr_data)              |
+//                    no_forward     & getPG(csr_crmd)
+//
+//io.da_out       := io.excp_tlbrefill & 1.U                      |
+//                    (eret_tlbrefill_excp && io.ertn_flush) & 0.U |
+//                    crmd_wen       & getDA(io.wr_data)              |
+//                    no_forward     & getDA(csr_crmd)
+//
+//io.dmw0_out     := Mux(DMW0_wen, io.wr_data, csr_dmw0)
+//io.dmw1_out     := Mux(DMW1_wen, io.wr_data, csr_dmw1)
+//
+//io.plv_out      := Cat(Fill(2,io.excp_flush) & 0.U)            |
+//                    Cat(Fill(2,io.ertn_flush)&getPLV(csr_prmd)) |
+//                    Cat(Fill(2,crmd_wen  ) & getPLV(io.wr_data))   |
+//                    Cat(Fill(2,!io.excp_flush && !io.ertn_flush && !crmd_wen), getPLV(csr_crmd))
+//
+//io.tlbrentry_out:= csr_tlbrentry
+//io.datf_out     := getDATF(csr_crmd)
+//io.datm_out     := getDATM(csr_crmd)
+//io.ecode_out    := getECODE(csr_estat)
+//
+//io.rd_data := MuxLookup(io.rd_addr, 0.U(32.W),
+//                        Array(
+//                            CRMD -> csr_crmd,
+//                            PRMD -> csr_prmd,
+//                            ECTL -> csr_ectl,
+//                            ESTAT -> csr_estat,
+//                            ERA -> csr_era,
+//                            BADV -> csr_badv,
+//                            EENTRY -> csr_eentry,
+//                            TLBIDX -> csr_tlbidx,
+//                            TLBEHI -> csr_tlbehi,
+//                            TLBELO0 -> csr_tlbelo0,
+//                            TLBELO1 -> csr_tlbelo1,
+//                            ASID -> csr_asid,
+//                            PGDL -> csr_pgdl,
+//                            PGDH -> csr_pgdh,
+//                            PGD -> csr_pgd,
+//                            CPUID -> csr_cpuid,
+//                            SAVE0 -> csr_save0,
+//                            SAVE1 -> csr_save1,
+//                            SAVE2 -> csr_save2,
+//                            SAVE3 -> csr_save3,
+//                            TID -> csr_tid,
+//                            TCFG -> csr_tcfg,
+//                            CNTC -> csr_cntc,
+//                            TICLR -> csr_ticlr,
+//                            LLBCTL -> Cat(csr_llbctl(31,1), llbit),
+//                            TVAL -> csr_tval,
+//                            TLBRENTRY -> csr_tlbrentry,
+//                            DMW0 -> csr_dmw0,
+//                            DMW1 -> csr_dmw1
+//            ))
+//
+//    if(io.reset){
+//    }
 
 
 

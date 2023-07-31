@@ -61,15 +61,15 @@ class BtbPredictor extends Module with HasBtbParameters{
         reseting := false.B
     }
 
-    val meta = Seq.fill(nWays) { SyncReadMem(nSets, Vec(bankWidth, UInt(btbMetaSz.W))) }
-    val btb  = Seq.fill(nWays) { SyncReadMem(nSets, Vec(bankWidth, UInt(btbEntrySz.W))) }
+    val meta = Seq.fill(nWays) { SyncReadMem(nSets, Vec(bankWidth, new BtbMeta))}
+    val btb  = Seq.fill(nWays) { SyncReadMem(nSets, Vec(bankWidth, new BtbEntry))}
     val ebtb = SyncReadMem(extendedNSets, UInt(vaddrBits.W))
 
     val s1meta = Wire(Vec (bankWidth ,new BtbPredictMeta))
     io.s3meta := RegNext(RegNext(s1meta))
 
-    val s1rbtb = VecInit(btb.map(b => VecInit(b.read(s0idx, io.s0valid).map(_.asTypeOf(new BtbEntry)))))
-    val s1rmeta = VecInit(meta.map(m => VecInit(m.read(s0idx, io.s0valid).map(_.asTypeOf(new BtbMeta)))))
+    val s1rbtb = VecInit(btb.map(b => VecInit(b.read(s0idx, io.s0valid))))
+    val s1rmeta = VecInit(meta.map(m => VecInit(m.read(s0idx, io.s0valid))))
 
     // 相较于Ubtb,这里专门给offset装不下的指令
     val s1rebtb = ebtb.read(s0idx, io.s0valid)
