@@ -46,10 +46,10 @@ class iFuCore extends CoreModule {
     val numWritePorts = exe_units.numWritePorts + memWidth
     val numFastWakeupPorts = exe_units.count(_.bypassable)
     val numAlwaysBypassable = exe_units.count(_.alwaysBypassable)
-    val numIssueWakeupPorts = numIrfWritePorts + numFastWakeupPorts - numAlwaysBypassable
+    val numIssueWakeupPorts = numWritePorts + numFastWakeupPorts - numAlwaysBypassable
     val numRenameWakeupPorts = numIssueWakeupPorts
 
-    val rename_stage = Module(new RenameStage(coreWidth, numPRegs, numIntRenameWakeupPorts))
+    val rename_stage = Module(new RenameStage(coreWidth, numPRegs, numRenameWakeupPorts))
     val pred_rename_stage = Module(new PredRenameStage(coreWidth, numFTQEntries, 1))
     val rename_stages = Seq(rename_stage, pred_rename_stage)
 
@@ -60,14 +60,14 @@ class iFuCore extends CoreModule {
 
     val iregfile = Module(new RegisterFileSynthesizable(
         numPRegs,
-        numIrfReadPorts,
-        numIrfWritePorts,
+        numReadPorts,
+        numWritePorts,
         xLen,
         Seq.fill(memWidth) { true } ++ exe_units.bypassable_write_port_mask
     ))
     val pregfile = Module(new RegisterFileSynthesizable(
         numFTQEntries,
-        exe_units.numIrfReaders,
+        exe_units.numReaders,
         1,
         1,
         Seq(true)
@@ -76,7 +76,7 @@ class iFuCore extends CoreModule {
     val iregister_read = Module(new RegisterRead(
         issue_units.map(_.issueWidth).sum,
         exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits).toSeq,
-        numIrfReadPorts,
+        numReadPorts,
         exe_units.withFilter(_.readsIrf).map(x => 2).toSeq,
         exe_units.numTotalBypassPorts,
         jmp_unit.numStages,
@@ -85,9 +85,9 @@ class iFuCore extends CoreModule {
 
     val lsu = Module(new Lsu)
 
-    val rob = Module(new Rob(numIrfWritePorts))
+    val rob = Module(new Rob(numWritePorts))
 
-    val csr = Module(new CSRFile)
+    /*val csr = Module(new CSRFile)*/
 
 /*-----------------------------*/
 
@@ -120,8 +120,8 @@ class iFuCore extends CoreModule {
     val dis_ready  = Wire(Bool())   // TODO: ??? why 1 bit
 
     // Issue/Register Read
-    val iss_valids    = Wire(Vec(exe_units.numIrfReaders, Bool()))
-    val iss_uops      = Wire(Vec(exe_units.numIrfReaders, new MicroOp()))
+    val iss_valids    = Wire(Vec(exe_units.numReaders, Bool()))
+    val iss_uops      = Wire(Vec(exe_units.numReaders, new MicroOp()))
     val bypasses      = Wire(Vec(exe_units.numTotalBypassPorts, Valid(new ExeUnitResp)))
     val pred_bypasses = Wire(Vec(jmp_unit.numStages, Valid(new ExeUnitResp(1))))
     require(jmp_unit.bypassable)
@@ -201,19 +201,19 @@ class iFuCore extends CoreModule {
     when (RegNext(rob.io.flush.valid)) {
         ifu.io.exe.redirect_val := true.B
         ifu.io.exe.redirect_flush := true.B
-        val flush_type = RegNext(rob.io.flush.bits.flush_type)
+        val flush_type = RegNext(rob.io.flush.bits.flush_typ)
         // Clear the global history when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
         val new_ghist = WireInit((0.U).asTypeOf(new GlobalHistory))
         new_ghist.currentSawBranchNotTaken := true.B
         new_ghist.rasIdx := ifu.io.exe.getFtqPc(0).entry.rasIdx
         ifu.io.exe.redirect_ghist := new_ghist
-        when (FlushTypes.useCsrEvec(flush_type)) {
+        /*when (FlushTypes.useCsrEvec(flush_type)) {
             ifu.io.exe.redirect_pc := Mux(
                 flush_type === FlushTypes.eret,
                 RegNext(RegNext(csr.io.evec)),
                 csr.io.evec
             )
-        } .otherwise {
+        } .otherwise {*/
             val flush_pc = (
                 AlignPCToBoundary(ifu.io.exe.getFtqPc(0).pc, iCacheLineBytes) +
                 RegNext(rob.io.flush.bits.pc_lob)
@@ -223,7 +223,7 @@ class iFuCore extends CoreModule {
                 FlushTypes.useSamePC(flush_type),
                 flush_pc, flush_pc_next
             )
-        }
+        /*}*/
         ifu.io.exe.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
     } .elsewhen(brUpdate.b2.mispredict) {
         val block_pc = AlignPCToBoundary(ifu.io.exe.getFtqPc(1).pc, iCacheLineBytes)
@@ -281,11 +281,11 @@ class iFuCore extends CoreModule {
     assert(!(rob.io.commit.valids.reduce(_ | _) && rob.io.com_xcpt.valid),
         "ROB can't commit and except in same cycle!")
 
-    for (i <- 0 until memWidth) {
+    /*for (i <- 0 until memWidth) {
         when (RegNext(lsu.io.core.exe(i).req.bits.sfence.valid)) {
             ifu.io.exe.sfence := RegNext(lsu.io.core.exe(i).req.bits.sfence)
         }
-    }
+    }*/
 
     val ftq_arb = Module(new Arbiter(UInt(log2Ceil(numFTQEntries).W), 3))
     val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
@@ -304,7 +304,7 @@ class iFuCore extends CoreModule {
     jmp_pc_req.valid := RegNext(iss_valids(jmp_unit_idx) && iss_uops(jmp_unit_idx).fuCode === FU_JMP)
     jmp_pc_req.bits := RegNext(iss_uops(jmp_unit_idx).ftqIdx)
 
-    ifu.io.exe.get_pc(0).ftq_idx := ftq_arb.io.out.bits
+    ifu.io.exe.getFtqPc(0).ftqIdx := ftq_arb.io.out.bits
     ftq_arb.io.out.ready := true.B
 
     jmp_unit.io.getFtqPc <> ifu.io.exe.getFtqPc(0)
@@ -339,7 +339,7 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     // Branch Mask Logic
 
-    dec_brmask_logic.io.brUpdate := brUpdate
+    dec_brmask_logic.io.brupdate := brUpdate
     dec_brmask_logic.io.flush_pipeline := RegNext(rob.io.flush.valid)
 
     for (w <- 0 until coreWidth) {
@@ -408,6 +408,7 @@ class iFuCore extends CoreModule {
     ren_stalls := rename_stage.io.ren_stalls
 
     for (w <- 0 until coreWidth) {
+        val i_uop = rename_stage.io.ren2_uops(w)
         val p_uop = if (enableSFBOpt) pred_rename_stage.io.ren2_uops(w) else NullMicroOp
         dis_uops(w).ppred := p_uop.ppred
         dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype === RT_FIX, i_uop.pdst, p_uop.pdst)
@@ -627,7 +628,7 @@ class iFuCore extends CoreModule {
             iss_idx += 1
         }
     }
-    require(iss_idx == exe_units.numIrfReaders)
+    require(iss_idx == exe_units.numReaders)
 
     issue_units.map(_.io.brUpdate := brUpdate)
     issue_units.map(_.io.flushPipeline := RegNext(rob.io.flush.valid))
@@ -636,8 +637,8 @@ class iFuCore extends CoreModule {
     // Wakeup (Issue & Writeback)
     for (iu <- issue_units) {
         for ((issPort, wakeup) <- iu.io.wakeupPorts zip int_iss_wakeups) {
-            issport.valid := wakeup.valid
-            issport.bits.pdst := wakeup.bits.uop.pdst
+            issPort.valid := wakeup.valid
+            issPort.bits.pdst := wakeup.bits.uop.pdst
         }
         require(iu.io.wakeupPorts.length == int_iss_wakeups.length)
     }
@@ -654,7 +655,7 @@ class iFuCore extends CoreModule {
         iregister_read.io.prf_read_ports <> pregfile.io.read_ports
     }
 
-    for (w <- 0 until exe_units.numIrfReaders) {
+    for (w <- 0 until exe_units.numReaders) {
         iregister_read.io.iss_valids(w) :=iss_valids(w) &&
             !(lsu.io.core.ld_miss && (iss_uops(w).iw_p1_poisoned || iss_uops(w).iw_p2_poisoned))
     }
@@ -850,7 +851,7 @@ class iFuCore extends CoreModule {
             cnt += 1
         }
     }
-    require(cnt == numIrfWritePorts)
+    require(cnt == numWritePorts)
     require(cnt == rob.numWakeupPorts)
 
     rob.io.brupdate <> brUpdate

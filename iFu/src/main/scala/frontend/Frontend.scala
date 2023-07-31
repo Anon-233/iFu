@@ -140,7 +140,7 @@ class FetchBundle extends CoreBundle {
     // val fsrc            = UInt(BSRC_SZ.W)
 }
 
-class FrontendToExeUIO extends CoreBundle {  // from core to frontend instead of from frontend to core
+class FrontendToExeIO extends CoreBundle {  // from core to frontend instead of from frontend to core
     /*--------------------------*/
     val numFTQEntries   = frontendParams.numFTQEntries
     /*--------------------------*/
