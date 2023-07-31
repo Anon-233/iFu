@@ -17,7 +17,7 @@ class RRdCtrlSigs extends CoreBundle {
     val fcn_dw         = Bool()
     val op1_sel        = UInt(OP1_X.getWidth.W)
     val op2_sel        = UInt(OP2_X.getWidth.W)
-    val imm_sel        = UInt(IS_X.getWidth.W)
+    val imm_sel        = UInt(immX.getWidth.W)
     val rf_wen         = Bool()
     val csr_cmd        = Bits(CSR.SZ.W)
 
@@ -37,11 +37,11 @@ abstract trait RRdDecodeConstants {
     val mulFn = new MultFuncCode
     val divFn = new DivFuncCode
     val default: List[BitPat] =
-        List[BitPat](BR_N , Y, N, N, aluFn.FN_ADD , DW_X  , OP1_X   , OP2_X   , IS_X, REN_0, CSR.N)
+        List[BitPat](BR_N , Y, N, N, aluFn.FN_ADD , OP1_X   , OP2_X   , immX, REN_0, CSR.N)
     val table: Array[(BitPat, List[BitPat])]
 }
 
-object AluRRdDecode extends RRdDecodeConstants with MicroOpCode {
+object AluRRdDecode extends RRdDecodeConstants {
     val table: Array[(BitPat, List[BitPat])] =
         Array[(BitPat, List[BitPat])](
                                       // br type
@@ -83,7 +83,7 @@ object AluRRdDecode extends RRdDecodeConstants with MicroOpCode {
         )
 }
 
-object JmpRRdDecode extends RRdDecodeConstants with MicroOpCode {
+object JmpRRdDecode extends RRdDecodeConstants {
     val table: Array[(BitPat, List[BitPat])] =
         Array[(BitPat, List[BitPat])](
             // br type
@@ -99,7 +99,7 @@ object JmpRRdDecode extends RRdDecodeConstants with MicroOpCode {
         )
 }
 
-object MulDivRRdDecode extends RRdDecodeConstants with MicroOpCode {
+object MulDivRRdDecode extends RRdDecodeConstants {
     val table: Array[(BitPat, List[BitPat])] =
         Array[(BitPat, List[BitPat])](
             // br type
@@ -153,7 +153,7 @@ object MemRRdDecode extends RRdDecodeConstants {
 //         )
 // }
 
-class RegisterReadDecode(supportedUnits: SupportedFuncUnits) extends CoreModule {
+class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
     val io = IO(new CoreBundle {
         val iss_valid = Input(Bool())
         val iss_uop   = Input(new MicroOp)
@@ -183,13 +183,13 @@ class RegisterReadDecode(supportedUnits: SupportedFuncUnits) extends CoreModule 
     io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopAMO_AG
     io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype === RT_FIX)
 
-    when (io.rrd_uop.uopc === uopAMO_AG || (io.rrd_uop.uopc === uopLD && io.rrd_uop.mem_cmd === M_XLL)) {
+    when (io.rrd_uop.uopc === uopAMO_AG /*|| (io.rrd_uop.uopc === uopLD && io.rrd_uop.mem_cmd === M_XLL)*/) {
         io.rrd_uop.immPacked := 0.U
     }
 
     val raddr1 = io.rrd_uop.prs1 // although renamed, it'll stay 0 if lrs1 = 0
     val csr_ren = (rrd_cs.csr_cmd === CSR.S || rrd_cs.csr_cmd === CSR.C) && raddr1 === 0.U
-    io.rrd_uop.ctrl.csr_cmd := Mux(csr_ren, CSR.R, rrd_cs.csr_cmd)
+//    io.rrd_uop.ctrl.csr_cmd := Mux(csr_ren, CSR.R, rrd_cs.csr_cmd)
 
     io.rrd_valid := io.iss_valid
 }
