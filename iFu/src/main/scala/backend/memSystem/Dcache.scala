@@ -148,7 +148,7 @@ class DcacheMeta extends Module with HasDcacheParameters{
 
         val readOnlyBlockAddr = Input(Valid(UInt(32.W)))
     })
-
+    io <> DontCare
 
 
     // 数据结构
@@ -427,7 +427,7 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
         val cbusReq = Output(new CBusReq)
 
     })
-
+    io <> DontCare
     val ready :: fetch :: wb :: Nil = Enum(3)
     val state = RegInit(ready)
     val offsetIdx = RegInit(0.U(log2Ceil(nRowBits/32).W))
@@ -503,7 +503,7 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
 
 class NonBlockingDcache extends Module with HasDcacheParameters{
     val io = IO(new DCacheBundle)
-
+    io <> DontCare
     // 解释:
     // replay : mshr的replay请求
     // wb : rpu的写回请求
