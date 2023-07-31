@@ -18,7 +18,6 @@ trait IssueState {
 
 class IssueWakeup(val pregSz: Int) extends Bundle {
     val pdst = UInt(pregSz.W)   // physical destination register
-    val poisoned = Bool()
 }
 
 class IssueUnitIO (
