@@ -172,7 +172,10 @@ class FrontendToCPUIO extends CoreBundle {  // from core to frontend instead of 
 }
 
 class FrontendIO extends CoreBundle {
-    val cpu = Flipped(new FrontendToCPUIO())
+    val cpu = Flipped(new FrontendToCPUIO)
+
+    val cbusResp = Input(new CBusResp)
+    val cbusReq = Output(new CBusReq)
     // val ptw = new TLBPTWIO   // do we need this?
     // val errors = new ICacheErrors
 }
@@ -183,7 +186,7 @@ class FrontendIO extends CoreBundle {
  */
 //TODO Frontend.273 bpd，RAS,icache的接口
 
-class Frontend extends CoreModule{
+class Frontend extends CoreModule {
     /*--------------------------*/
     val fetchWidth    = frontendParams.fetchWidth
     val numRasEntries = frontendParams.bpdParams.numRasEntries
@@ -203,6 +206,9 @@ class Frontend extends CoreModule{
     val tlb    = Module(new TLB)
     val fb     = Module(new FetchBuffer)
     val ftq    = Module(new FetchTargetQueue)
+
+    io.cbusReq := icache.io.cbusReq
+    icache.io.cbusResp := io.cbusResp
 
     icache.io.invalidate := io.cpu.flush_icache
 
