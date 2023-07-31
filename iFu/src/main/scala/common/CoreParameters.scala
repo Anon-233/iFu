@@ -36,7 +36,7 @@ class FrontendParameters{
     val instrBytes:Int                 = 4
 }
 
-class ROBParameters extends HasCoreParameters {
+class ROBParameters {
     val robAddrSz: Int = log2Ceil(numRobRows) + log2Ceil(coreWidth)
     val retireWidth: Int = 4 //decodeWidth
     val numRobRows: Int = numRobEntries/coreWidth
