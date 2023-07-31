@@ -337,9 +337,9 @@ class DecodeUnit extends CoreModule {
         uop.ldst_is_rs1 := false.B
     }
 
-    when (!uop.is_sfb_shadow && cs.uopc === uopORI && inst(21,10) === 0.U) {
+   /* when (!uop.is_sfb_shadow && cs.uopc === uopORI && inst(21,10) === 0.U) {
         uop.uopc := uopMOV
-    }
+    }*/
     when(cs.uopc === uopANDI && inst(21,0) === 0.U){
         uop.uopc := uopNOP
     }
