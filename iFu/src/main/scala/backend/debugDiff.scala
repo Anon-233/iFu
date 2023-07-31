@@ -14,7 +14,7 @@ class debugDiff extends CoreModule {
 
 
   for(w <- 0 until coreWidth){
-    if(io.commit.valids(w)) { //TODO:是否要换成arch_valids?
+    when (io.commit.valids(w)) { //TODO:是否要换成arch_valids?
       val lreg = io.commit.debug_ldst(w) //这个接目的寄存器
       val wdata = io.commit.debug_wdata(w) //这个接写入数据
       val nowInst = io.commit.debug_insts(w) //当前指令
@@ -25,8 +25,7 @@ class debugDiff extends CoreModule {
 
 
       debug_reg(lreg) := wdata
-    }
-    else{
+    } .otherwise {
       val valid = false
     }
   }

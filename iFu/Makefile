@@ -9,7 +9,7 @@ SBT = sbt
 
 compile: $(gen_dir)/iFuCore.v
 
-$(gen_dir)/Core.v: $(wildcard $(src_dir)/scala/*.scala)
+$(gen_dir)/iFuCore.v: $(wildcard $(src_dir)/scala/*.scala)
 	$(SBT) "run $(gen_dir)"
 
 clean:

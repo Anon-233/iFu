@@ -21,6 +21,7 @@ object Consts {
     val CFI_JALR = 3.U(CFI_SZ.W) // JALR
 
     val IQT_SZ  = 2
+    val IQT_X   = BitPat.dontCare(IQT_SZ.W)
     val IQT_INT = 1.U(IQT_SZ.W)
     val IQT_MEM = 2.U(IQT_SZ.W)
 
@@ -35,7 +36,7 @@ object Consts {
     // val FN_CNT = 64.U(FUC_SZ.W)
     // val FN_TLB = 128.U(FUC_SZ.W)
 
-    val RT_X   = 0.U(1.W)
+    val RT_X   = BitPat("b0")
     val RT_FIX = 1.U(1.W)
 
     val immX   = BitPat("b???")

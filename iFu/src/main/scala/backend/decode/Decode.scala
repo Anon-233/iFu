@@ -82,7 +82,7 @@ abstract trait DecodeTable {
     //     |     |  |         |        |        regtype |       |       |  |     |  |  |  |  |  cmd    |    |  |  |  |  flush on commit
     //     |     |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |    |  |  |  |  |  csr cmd
     //     |     |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |    |  |  |  |  |  |
-        List(N, uopX, IQT_INT, FU_X, RT_X, DC2, DC2, X, immX, X, X, X, X, N, /*M_X,*/ DC2, X, X, N, N, X, CSR.X)
+        List(N, uopX, IQT_X, FU_X, RT_X, DC2, DC2, X, immX, X, X, X, X, N, /*M_X,*/ DC2, X, X, N, N, X, CSR.X)
 
     val table: Array[(BitPat, List[BitPat])]
 }
