@@ -135,7 +135,7 @@ class FetchBundle extends CoreBundle {
     val xcpt_pf_if      = Bool()    // I-TLB miss(instruction fetch fault)
     val xcpt_ae_if      = Bool()    // Access exception
 
-    val bpdMeta         = Vec(nBanks, new PredictionMeta)
+    val bpdMeta         = Vec(nBanks, Vec(bankWidth, new PredictionMeta))
 
     // val fsrc            = UInt(BSRC_SZ.W)
 }
