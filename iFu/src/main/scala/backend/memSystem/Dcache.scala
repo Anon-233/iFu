@@ -185,9 +185,9 @@ class DcacheMeta extends Module with HasDcacheParameters{
 
     val cleanedMask = UInt(nWays.W)
     cleanedMask := UIntToOH(dirtyPos)
-    val cleanedMeta = new MetaLined
-    cleanedMeta.dirty = false.B
-    cleanedMeta.valid = true.B
+    val cleanedMeta = new MetaLine
+    cleanedMeta.dirty := false.B
+    cleanedMeta.valid := true.B
     cleanedMeta.tag := dirtyMeta.tag
     cleanedMeta.age := dirtyMeta.age
 
@@ -388,8 +388,10 @@ class DCacheErrors  extends CoreBundle with HasDcacheParameters{
 }
 
 class DCacheBundle  extends CoreBundle with HasDcacheParameters{
-    val error = new DCacheErrors
+//    val error = new DCacheErrors
     val lsu = Flipped(new LSUDMemIO)
+    val cbusReq = Output(new CBusReq)
+    val cbusResp = Input(new CBusResp)
 }
 
 class ReplaceUnit extends Module  with HasDcacheParameters{
