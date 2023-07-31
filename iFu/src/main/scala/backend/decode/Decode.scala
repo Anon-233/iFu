@@ -257,7 +257,7 @@ object XDecode extends DecodeTable  {
 
 //TODO 修改CSRFile
 
-class DecodeUnitIO() extends CoreModule {
+class DecodeUnitIO() extends CoreBundle {
     val enq = new Bundle { val uop = Input(new MicroOp()) }
     val deq = new Bundle { val uop = Output(new MicroOp()) }
 

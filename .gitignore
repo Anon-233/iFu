@@ -1,1 +1,6 @@
 .DS_Store
+.metals/metals.lock.db
+.metals/metals.log
+.vscode/settings.json
+.metals/metals.mv.db
+.metals/.reports/metals-full/r_compiler-error_1690697099753
