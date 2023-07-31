@@ -73,7 +73,7 @@ class PredictionMeta extends Bundle with HasBPUParameters{
 class BranchPredictionBundle extends Bundle with HasBPUParameters{
     val pc = UInt(vaddrBits.W)
     val predInfos = (Vec(fetchWidth, new PredictionInfo))
-    val meta = Vec(nBanks,new PredictionMeta)
+    val meta = Vec(nBanks,Vec(bankWidth,new PredictionMeta))
 }
 
 
