@@ -101,7 +101,7 @@ class ALUUnit(
     } else {
         op1Data = Mux(uop.ctrl.op1_sel === OP1_RS1, io.req.bits.rs1Data, 0.U)
     }
-    val op2Data = Mux(uop.ctrl.op2_sel === OP2_IMM, imm,
+    val op2Data = Mux(uop.ctrl.op2_sel === OP2_IMM, imm.asUInt,
                   Mux(uop.ctrl.op2_sel === OP2_RS2, io.req.bits.rs2Data, 
                   Mux(uop.ctrl.op2_sel === OP2_NEXT, 4.U, 0.U)))
 
