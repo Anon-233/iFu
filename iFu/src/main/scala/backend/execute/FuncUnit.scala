@@ -119,7 +119,7 @@ class ALUUnit(
     val brLt = (~(rs1(xLen - 1) ^ rs2(xLen - 1)) & brLtu |
                 rs1(xLen - 1) & ~rs2(xLen - 1)).asBool
 
-    val pcSel = MuxLookup(uop.ctrl.br_type, PC_PLUS4,
+    val pcSel = MuxLookup(uop.ctrl.br_type, PC_PLUS4)(
         Seq(
             BR_N   -> PC_PLUS4,
             BR_NE  -> Mux(!brEq , PC_BRJMP, PC_PLUS4),

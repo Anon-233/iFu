@@ -1,5 +1,6 @@
 package iFu
 
+import circt.stage.ChiselStage
 import chisel3.stage.ChiselGeneratorAnnotation
 import firrtl.TargetDirAnnotation
 
