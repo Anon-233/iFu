@@ -1187,12 +1187,13 @@ class Lsu extends CoreModule {
 
 object GenByteMask {
     def apply(addr: UInt, size: UInt): UInt = {
-        val mask = Wire(UInt(4.W))
-        mask := MuxCase(15.U(4.W), Seq(
-            (size === 0.U) -> (1.U(4.W) << addr(1, 0)),
-            (size === 1.U) -> (3.U(4.W) << (addr(1) << 1.U)),
-            (size === 2.U) -> 15.U(4.W)
-        ))
+        val mask = MuxLookup(size, 0.U,
+            Seq(
+                0.U -> (1.U(4.W) << addr(1, 0)),
+                1.U -> (3.U(4.W) << (addr(1) << 1.U)),
+                2.U -> 15.U(4.W)
+            )
+        )
         mask
     }
 }
