@@ -80,7 +80,7 @@ class BranchPredictor extends Module
 
 
     // The branch prediction metadata is stored un-shuffled
-    
+
     io.resp.f3.meta(0)    := bankedPredictors(0).io.f3meta
     io.resp.f3.meta(1)    := bankedPredictors(1).io.f3meta
 
