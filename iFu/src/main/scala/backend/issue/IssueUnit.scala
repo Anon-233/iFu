@@ -30,7 +30,7 @@ class IssueUnitIO (
     val disUops = Vec(dispatchWidth, Flipped(Decoupled(new MicroOp)))
 
     // normal wakeup
-    val wakeupPorts = Vec(numWakeupPorts, Flipped(Valid(new IssueWakeup(pregSz.W))))
+    val wakeupPorts = Vec(numWakeupPorts, Flipped(Valid(new IssueWakeup(pregSz))))
     // SFB wakeup
     val predWakeupPorts = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
     // speculative load wakeup

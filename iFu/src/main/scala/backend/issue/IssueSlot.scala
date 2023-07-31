@@ -5,6 +5,7 @@ import chisel3.util._
 
 import iFu.common._
 import iFu.common.Consts._
+import  iFu.util._
 
 class IssueSlotIO(val numWakeupPorts: Int) extends CoreBundle {
     val ftqSz = frontendParams.numFTQEntries
@@ -20,7 +21,7 @@ class IssueSlotIO(val numWakeupPorts: Int) extends CoreBundle {
     val clear      = Input(Bool())
     val ldSpecMiss = Input(Bool())
 
-    val wakeupPorts = Vec(numWakeupPorts, Flipped(Valid(new IssueWakeup(pregSz.W))))
+    val wakeupPorts = Vec(numWakeupPorts, Flipped(Valid(new IssueWakeup(pregSz))))
     val predWakeupPorts = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
     val specLdWakeupPorts = Vec(memWidth, Flipped(Valid(UInt(pregSz.W))))
 
@@ -43,17 +44,17 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     val nextState = WireInit(state)
     val nextUop = Mux(io.inUop.valid, io.inUop.bits, slotUop)
     val nextUopc = WireInit(slotUop.uopc)
-    val nextLrs1Rtype = WireInit(slotUop.lrs1Rtype)
-    val nextLrs2Rtype = WireInit(slotUop.lrs2Rtype)
+    val nextLrs1Rtype = WireInit(slotUop.lrs1_rtype)
+    val nextLrs2Rtype = WireInit(slotUop.lrs2_rtype)
     p1Poisoned := false.B
     p2Poisoned := false.B
-    val nextP1Poisoned = Mux(io.inUop.valid, io.inUop.bits.p1Poisoned, p1Poisoned)
-    val nextP2Poisoned = Mux(io.inUop.valid, io.inUop.bits.p2Poisoned, p2Poisoned)
+    val nextP1Poisoned = Mux(io.inUop.valid, io.inUop.bits.iw_p1_poisoned, p1Poisoned)
+    val nextP2Poisoned = Mux(io.inUop.valid, io.inUop.bits.iw_p2_poisoned, p2Poisoned)
 
     when (io.kill) {
         state := s_invalid
     } .elsewhen (io.inUop.valid) {
-        state := io.inUop.bits.iw_state
+        state := io.inUop.bits.iwState
     } .elsewhen (io.clear) {
         state := s_invalid
     } .otherwise {
@@ -75,12 +76,12 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
             when (p1) {
                 slotUop.uopc := uopSTD
                 nextUopc := uopSTD
-                slotUop.lrs1Rtype := RT_X
+                slotUop.lrs1_rtype := RT_X
                 nextLrs1Rtype := RT_X
             } .otherwise {
                 // slotUop.uopc := uopSTA
                 // nextUopc := uopSTA
-                slotUop.lrs2Rtype := RT_X
+                slotUop.lrs2_rtype := RT_X
                 nextLrs2Rtype := RT_X
             }
         }
@@ -95,9 +96,9 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     val nextPpred = WireInit(ppred)
 
     when (io.inUop.valid) {
-        p1 := !(io.inUop.bits.prs1Busy)
-        p2 := !(io.inUop.bits.prs2Busy)
-        ppred := !(io.inUop.bits.ppredBusy)
+        p1 := !(io.inUop.bits.prs1_busy)
+        p2 := !(io.inUop.bits.prs2_busy)
+        ppred := !(io.inUop.bits.ppred_busy)
     }
 
     when (io.ldSpecMiss && nextP1Poisoned) { p1 := false.B }
@@ -119,7 +120,7 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
         when (
             io.specLdWakeupPorts(w).valid &&
             io.specLdWakeupPorts(w).bits === nextUop.prs1 &&
-            nextUop.lrs1Rtype === RT_FIX
+            nextUop.lrs1_rtype === RT_FIX
         ) {
             p1 := true.B
             p1Poisoned := true.B
@@ -127,7 +128,7 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
         when (
             io.specLdWakeupPorts(w).valid &&
             io.specLdWakeupPorts(w).bits === nextUop.prs2 &&
-            nextUop.lrs2Rtype === RT_FIX
+            nextUop.lrs2_rtype === RT_FIX
         ) {
             p2 := true.B
             p2Poisoned := true.B
@@ -141,7 +142,7 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     }
 
     when (!io.inUop.valid) {
-        slotUop.br_mask := nextBrMask
+        slotUop.brMask := nextBrMask
     }
 
     when (state === s_valid_1) {
@@ -167,11 +168,11 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     io.willBeValid := isValid && !(mayVacate && !squashGrant)
 
     io.outUop := slotUop
-    io.outUop.iw_state := nextState
+    io.outUop.iwState := nextState
     io.outUop.uopc := nextUopc
-    io.outUop.lrs1Rtype := nextLrs1Rtype
-    io.outUop.lrs2Rtype := nextLrs2Rtype
-    io.outUop.br_mask := nextBrMask
+    io.outUop.lrs1_rtype := nextLrs1Rtype
+    io.outUop.lrs2_rtype := nextLrs2Rtype
+    io.outUop.brMask := nextBrMask
     io.outUop.prs1_busy := !p1
     io.outUop.prs2_busy := !p2
     io.outUop.ppred_busy := !ppred

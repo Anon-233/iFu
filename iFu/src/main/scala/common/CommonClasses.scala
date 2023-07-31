@@ -96,6 +96,7 @@ class CommitSignals extends CoreBundle {
     val debug_insts = Vec(robParameters.retireWidth, UInt(32.W))
     val debug_wdata = Vec(robParameters.retireWidth, UInt(xLen.W))
     val debug_ldst = UInt(lregSz.W)
+    val debug_pc = UInt(32.W)
 }
 
 case class SupportedFuncs (

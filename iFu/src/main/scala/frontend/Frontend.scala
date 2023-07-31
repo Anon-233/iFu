@@ -258,7 +258,7 @@ class Frontend extends CoreModule {
     val f1_clear     = WireInit(false.B)
 
     tlb.io.req.valid            := (s1_valid && !s1_is_replay && !f1_clear) || s1_is_sfence
-    tlb.io.req.bits.cmd         := DontCare
+    // tlb.io.req.bits.cmd         := DontCare
     tlb.io.req.bits.vaddr       := s1_vpc
     tlb.io.req.bits.passthrough := false.B  // may be changed
     tlb.io.req.bits.size        := log2Ceil(fetchWidth * instrBytes).U  // what is this?

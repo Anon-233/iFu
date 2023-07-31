@@ -61,24 +61,24 @@ class BtbPredictor extends Module with HasBtbParameters{
         reseting := false.B
     }
 
-    val meta = Seq.fill(nWays) { SyncReadMem(nSets, Vec(bankWidth, UInt(btbMetaSz.W))) }
-    val btb  = Seq.fill(nWays) { SyncReadMem(nSets, Vec(bankWidth, UInt(btbEntrySz.W))) }
+    val meta = Seq.fill(nWays) { SyncReadMem(nSets, Vec(bankWidth, new BtbMeta))}
+    val btb  = Seq.fill(nWays) { SyncReadMem(nSets, Vec(bankWidth, new BtbEntry))}
     val ebtb = SyncReadMem(extendedNSets, UInt(vaddrBits.W))
 
     val s1meta = Wire(Vec (bankWidth ,new BtbPredictMeta))
     io.s3meta := RegNext(RegNext(s1meta))
 
-    val s1rbtb = VecInit(btb.map(b => VecInit(b.read(s0idx, io.s0valid).map(_.asTypeOf(new BtbEntry)))))
-    val s1rmeta = VecInit(meta.map(m => VecInit(m.read(s0idx, io.s0valid).map(_.asTypeOf(new BtbMeta)))))
+    val s1rbtb = VecInit(btb.map(b => VecInit(b.read(s0idx.asUInt, io.s0valid))))
+    val s1rmeta = VecInit(meta.map(m => VecInit(m.read(s0idx.asUInt, io.s0valid))))
 
     // 相较于Ubtb,这里专门给offset装不下的指令
-    val s1rebtb = ebtb.read(s0idx, io.s0valid)
+    val s1rebtb = ebtb.read(s0idx.asUInt, io.s0valid)
     
     val s1tag = s1idx >> log2Ceil(nSets)
 
     val s1hitOHs = VecInit((0 until bankWidth)map{
         i => VecInit((0 until nWays)map{
-            j => s1rmeta(j)(i).tag === s1tag
+            j => s1rmeta(j)(i).tag === s1tag.asUInt
         })
     })
 
@@ -126,7 +126,7 @@ class BtbPredictor extends Module with HasBtbParameters{
     val maxOffsetValue = (~(0.U)((offsetSz-1).W)).asSInt
     val minOffsetValue = Cat(1.B, (0.U)((offsetSz-1).W)).asSInt
     val newOffsetValue = (s1update.bits.target.asSInt -
-                            (s1update.bits.pc + (s1update.bits.cfiIdx.bits<<2)).asSInt)
+                            (s1update.bits.pc.asSInt + (s1update.bits.cfiIdx.bits<<2).asSInt))
     // 相较于Ubtb,这里专门处理了offset的问题
     val needExtend = (newOffsetValue > maxOffsetValue ||
                         newOffsetValue < minOffsetValue)
@@ -168,13 +168,13 @@ class BtbPredictor extends Module with HasBtbParameters{
             // 命中，写到对应的way
         }.elsewhen(s1updateMeta(w).writeWay === w.U && s1updateMeta(w).hit){
             btb(w).write(
-            s1updateIdx,
+            s1updateIdx.asUInt,
             VecInit(Seq.fill(bankWidth){s1updateWBtbData.asUInt}),
             (s1updatewBtbMask).asBools
             )
 
             meta(w).write(
-            s1updateIdx,
+            s1updateIdx.asUInt,
             VecInit(s1updatewMetaData.map(_.asUInt)),
             (s1updatewMetaMask).asBools
             )
@@ -182,7 +182,7 @@ class BtbPredictor extends Module with HasBtbParameters{
     }
 
     when (s1updatewBtbMask =/= 0.U && needExtend){
-        ebtb.write(s1updateIdx , s1update.bits.target)
+        ebtb.write(s1updateIdx.asUInt, s1update.bits.target)
     }
     
 }
