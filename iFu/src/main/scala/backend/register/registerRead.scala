@@ -3,7 +3,7 @@ package iFu.backend
 import chisel3._
 import chisel3.util._
 import iFu.common._
-import iFu.util.GetNewUopAndBrMask
+import iFu.util._
 
 class RegisterRead(
     issueWidth : Int,
@@ -80,7 +80,7 @@ class RegisterRead(
         if(numReadPorts > 1 ) io.rf_read_ports(idx+1).addr := rs2Addr
         if(numReadPorts > 2 ) io.rf_read_ports(idx+2).addr := rs3Addr
 
-        if(enableSFBOPT) io.prf_read_ports(w).addr := predAddr
+        if(enableSFBOpt) io.prf_read_ports(w).addr := predAddr
 
         if (numReadPorts > 0) rrdRs1Data(w) := Mux(RegNext(rs1Addr === 0.U), 0.U, io.rf_read_ports(idx+0).data)
         if (numReadPorts > 1) rrdRs2Data(w) := Mux(RegNext(rs2Addr === 0.U), 0.U, io.rf_read_ports(idx+1).data)
