@@ -68,8 +68,8 @@ class BtbPredictor extends Module with HasBtbParameters{
     val s1meta = Wire(Vec (bankWidth ,new BtbPredictMeta))
     io.s3meta := RegNext(RegNext(s1meta))
 
-    val s1rbtb = VecInit(btb.map(b => VecInit(b.read(s0idx.asUInt, io.s0valid))))
-    val s1rmeta = VecInit(meta.map(m => VecInit(m.read(s0idx.asUInt, io.s0valid))))
+    val s1rbtb = VecInit(btb.map(b => b.read(s0idx.asUInt, io.s0valid)))
+    val s1rmeta = VecInit(meta.map(m => m.read(s0idx.asUInt, io.s0valid)))
 
     // 相较于Ubtb,这里专门给offset装不下的指令
     val s1rebtb = ebtb.read(s0idx.asUInt, io.s0valid)
@@ -156,26 +156,26 @@ class BtbPredictor extends Module with HasBtbParameters{
         when (reseting){
             btb(w).write(
             resetIdx,
-            VecInit(Seq.fill(bankWidth){ 0.U(btbEntrySz.W)}),
+            VecInit(Seq.fill(bankWidth){ 0.U.asTypeOf(new BtbEntry)}),
             (~(0.U(bankWidth.W))).asBools
             )
 
             meta(w).write(
             resetIdx,
-            VecInit(Seq.fill(bankWidth){ 0.U(btbMetaSz.W)}),
+            VecInit(Seq.fill(bankWidth){ 0.U.asTypeOf(new BtbMeta)}),
             (~(0.U(bankWidth.W))).asBools
             )
             // 命中，写到对应的way
         }.elsewhen(s1updateMeta(w).writeWay === w.U && s1updateMeta(w).hit){
             btb(w).write(
             s1updateIdx.asUInt,
-            VecInit(Seq.fill(bankWidth){s1updateWBtbData.asUInt}),
+            VecInit(Seq.fill(bankWidth){s1updateWBtbData}),
             (s1updatewBtbMask).asBools
             )
 
             meta(w).write(
             s1updateIdx.asUInt,
-            VecInit(s1updatewMetaData.map(_.asUInt)),
+            s1updatewMetaData,
             (s1updatewMetaMask).asBools
             )
         }

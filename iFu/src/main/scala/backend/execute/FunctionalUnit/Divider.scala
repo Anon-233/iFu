@@ -17,7 +17,7 @@ class DivFuncCode {
 }
 
 object DivFuncCode {
-    def apply() = new DivFuncCode()
+    def apply() = new DivFuncCode
 }
 
 class DivReq[T <: DivFuncCode](val divFn: T) extends CoreBundle {
@@ -34,7 +34,7 @@ abstract class AbstractDiv[T <: DivFuncCode](val divFn: T) extends CoreModule {
     val io = IO(new Bundle {
         val kill = Input(Bool())
         val req = Flipped(Decoupled(new DivReq(divFn)))
-        val resp = Decoupled(new DivResp())
+        val resp = Decoupled(new DivResp)
     })
 }
 
@@ -91,8 +91,8 @@ class SRT16Divider(val debug: Boolean = false) extends AbstractDiv(DivFuncCode()
     val dAbsReg = RegEnable(Mux(dSign, dInverter, d), io.req.fire)
     // ---------- sIdle - sPre0 Register ------------------------------------
     // ----- sPre0 ----------------------------------------------------------
-    val aLZC = PriorityEncoder(aAbsReg(xLen - 1, 0).asBools().reverse)
-    val dLZC = PriorityEncoder(dAbsReg(xLen - 1, 0).asBools().reverse)
+    val aLZC = PriorityEncoder(aAbsReg(xLen - 1, 0).asBools.reverse)
+    val dLZC = PriorityEncoder(dAbsReg(xLen - 1, 0).asBools.reverse)
     // ----- sPre0 ----------------------------------------------------------
     // ---------- sPre1 - sPre1 Register ------------------------------------
     val aLZCReg = RegEnable(aLZC, state(sPre0))
@@ -104,8 +104,8 @@ class SRT16Divider(val debug: Boolean = false) extends AbstractDiv(DivFuncCode()
     val dNormReg = RegEnable((dAbsReg(xLen - 1, 0) << dLZC)(xLen - 1, 0), state(sPre0))
     // ---------- sPre1 - sPre1 Register ------------------------------------
     // ----- sPre1 ----------------------------------------------------------
-    val dIsOne = dLZC.andR()  // d 是 0 或者 1
-    dIsZero := ~dNormReg.orR() // d 是 0
+    val dIsOne = dLZC.andR  // d 是 0 或者 1
+    dIsZero := ~dNormReg.orR // d 是 0
 
     val special = dIsOne | dIsZero | aLessThanD
     val quotSpecial = Mux(dIsZero,
@@ -288,13 +288,13 @@ class SRT16Divider(val debug: Boolean = false) extends AbstractDiv(DivFuncCode()
     // ----- sPost1 ----------------------------------------------------------
     val r = rNextReg
     val rPd = rNextPdReg
-    val needCorr = Mux(rSignReg, ~r(xLen) & r.orR(), r(xLen)) // r 的符号不对
+    val needCorr = Mux(rSignReg, ~r(xLen) & r.orR, r(xLen)) // r 的符号不对
 
     val rPreShifted = Mux(needCorr, rPd, r)
     val rightShifter = Module(new RightShifter(xLen, lzcWidth))
     rightShifter.io.in := rPreShifted
     rightShifter.io.shiftNum := dLZCReg
-    rightShifter.io.msb := Mux(~(rPreShifted.orR()), 0.U, rSignReg)
+    rightShifter.io.msb := Mux(~(rPreShifted.orR), 0.U, rSignReg)
     val rShifted = rightShifter.io.out
     // ----- sPost1 ----------------------------------------------------------
     // ---------- sPost1 - sFinish Register ----------------------------------
@@ -411,7 +411,7 @@ object LookUpTable {
 }
 
 class RightShifter(len: Int, lzcWidth: Int) extends Module {
-    val io = IO(new Bundle() {
+    val io = IO(new Bundle {
         val shiftNum = Input(UInt(lzcWidth.W))
         val in = Input(UInt(len.W))
         val msb = Input(Bool())

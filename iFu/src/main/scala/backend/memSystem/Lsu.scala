@@ -231,7 +231,7 @@ class Lsu extends CoreModule {
 
     // TODO: cacop? fence?
 
-    val stqEmpty = (0 until numStqEntries).map{ i => stq(i).valid }.asUInt === 0.U
+    val stqEmpty = (0 until numStqEntries).map{ i => stq(i).valid }.reduce(_||_) === 0.U
     dcache.io.lsu.force_order := io.core.fence_dmem
     io.core.fencei_rdy := stqEmpty && dcache.io.lsu.ordered
 
@@ -272,7 +272,7 @@ class Lsu extends CoreModule {
 
     // Don't wakeup a load if we just sent it last cycle or two cycles ago
     // The p0_block_load_mask may be wrong, but the executing_load mask must be accurate
-    val p0_block_load_mask = WireInit(VecInit(Seq.fill(numLdqEntries){ false.B }))
+    val p0_block_load_mask = WireInit(VecInit(IndexedSeq.fill(numLdqEntries){ false.B }))
     val p1_block_load_mask = RegNext(p0_block_load_mask)
     val p2_block_load_mask = RegNext(p1_block_load_mask)
 

@@ -159,7 +159,7 @@ class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
         val iss_valid = Input(Bool())
         val iss_uop   = Input(new MicroOp)
 
-        val rrd_valid = Output(Bool)
+        val rrd_valid = Output(Bool())
         val rrd_uop   = Output(new MicroOp)
     })
 

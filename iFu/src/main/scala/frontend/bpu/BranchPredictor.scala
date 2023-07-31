@@ -33,11 +33,11 @@ class BranchPredictor extends CoreModule
 
   })
 
-  val bankedPredictors = Vec(nBanks, Module(new BankedPredictor))
+  // val bankedPredictors = Seq(nBanks, Module(ne0dw BankedPredictor))
+  val bankedPredictors = (0 until nBanks).map( i => Module(new BankedPredictor))
 
 
 
-  {
     require(nBanks == 2)
 
     when (bank(io.f0req.bits.pc) === 0.U) {
@@ -67,10 +67,9 @@ class BranchPredictor extends CoreModule
       bankedPredictors(0).io.f1ghist  := RegNext(io.f0req.bits.gHist.histories(1))
       bankedPredictors(1).io.f1ghist  := RegNext(io.f0req.bits.gHist.histories(0))
     }
-  }
 
 
-  {
+  
     require(nBanks == 2)
     val b0fire = io.f3fire && RegNext(RegNext(RegNext(bankedPredictors(0).io.f0valid)))
     val b1fire = io.f3fire && RegNext(RegNext(RegNext(bankedPredictors(1).io.f0valid)))
@@ -120,7 +119,7 @@ class BranchPredictor extends CoreModule
         io.resp.f3.predInfos(i+bankWidth) := bankedPredictors(0).io.resp.f3(i)
       }
     }
-  }
+  
 
   io.resp.f1.pc := RegNext(io.f0req.bits.pc)
   io.resp.f2.pc := RegNext(io.resp.f1.pc)
@@ -147,7 +146,7 @@ class BranchPredictor extends CoreModule
 
   }
 
- {
+ 
     require(nBanks == 2)
     // Split the single update bundle for the fetchpacket into two updates
     // 1 for each bank.
@@ -198,7 +197,7 @@ class BranchPredictor extends CoreModule
       bankedPredictors(0).io.update.bits.gHist := io.update.bits.gHist.histories(1)
     }
 
-  }
+  
 
   when (io.update.valid) {
     when (io.update.bits.cfiIsBr && io.update.bits.cfiIdx.valid) {

@@ -158,14 +158,14 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
         io.request := false.B
     }
 
-    io.valid := isValid
+    io.valid := isValid(state)
     io.uop := slotUop
     io.uop.iw_p1_poisoned := p1Poisoned
     io.uop.iw_p2_poisoned := p2Poisoned
 
     val mayVacate = io.grant && ((state === s_valid_1) || (state === s_valid_2) && p1 && p2 && ppred)
     val squashGrant = io.ldSpecMiss && (p1Poisoned || p2Poisoned)
-    io.willBeValid := isValid && !(mayVacate && !squashGrant)
+    io.willBeValid := isValid(state) && !(mayVacate && !squashGrant)
 
     io.outUop := slotUop
     io.outUop.iwState := nextState

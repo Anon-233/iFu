@@ -42,18 +42,10 @@ object FrontendUtils extends FrontendParameters {
         Mux(isLastBankInBlock(addr), "b01".U(2.W), "b11".U(2.W))
     }
 
-    def bank(addr: UInt) = if (nBanks == 2) addr(log2Ceil(bankBytes)) else 0.U
-
-    def isLastBankInBlock(addr: UInt) = {
-        (nBanks == 2).B && addr(blockOffBits - 1, log2Ceil(bankBytes)) === (numChunks - 1).U
-    }
-
     def mayNotBeDualBanked(addr: UInt) = {
         require(nBanks == 2)
         isLastBankInBlock(addr)
     }
-
-    def bankAlign(addr: UInt) = ~(~addr | (bankBytes - 1).U)
 
     def fetchIdx(addr: UInt) = addr >> log2Ceil(fetchBytes)
 

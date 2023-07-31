@@ -287,12 +287,12 @@ class Frontend extends CoreModule {
     }
     val f1_do_redirect = f1_redirects.reduce(_||_)
     val f1_redirect_idx = PriorityEncoder(f1_redirects)
-    val f1_tgts = s1_bpd_resp.predInfos.map(_.predictedpc.bits)
+    val f1_tgts = VecInit(s1_bpd_resp.predInfos.map(_.predictedpc.bits))
     val f1_predicted_target = Mux(f1_do_redirect, f1_tgts(f1_redirect_idx),
                                                   nextFetch(s1_vpc)
     )
     val f1_predicted_ghist = s1_ghist.update(
-        s1_bpd_resp.predInfos.map(p => p.isBranch && p.predictedpc.valid).asUInt & f1_mask,
+        VecInit(s1_bpd_resp.predInfos.map(p => p.isBranch && p.predictedpc.valid)).asUInt & f1_mask,
         s1_bpd_resp.predInfos(f1_redirect_idx).taken && f1_do_redirect,
         s1_bpd_resp.predInfos(f1_redirect_idx).isBranch,
         f1_redirect_idx,
@@ -342,13 +342,13 @@ class Frontend extends CoreModule {
         (f2_bpd_resp.predInfos(i).isBranch && f2_bpd_resp.predInfos(i).taken))
     }
     val f2_redirect_idx = PriorityEncoder(f2_redirects)
-    val f2_tgts = f2_bpd_resp.predInfos.map(_.predictedpc.bits)
+    val f2_tgts = VecInit(f2_bpd_resp.predInfos.map(_.predictedpc.bits))
     val f2_do_redirect = f2_redirects.reduce(_||_)
     val f2_predicted_target = Mux(f2_do_redirect, f2_tgts(f2_redirect_idx),
                                                   nextFetch(s2_vpc)
     )
     val f2_predicted_ghist = s2_ghist.update(
-        f2_bpd_resp.predInfos.map(p => p.isBranch && p.predictedpc.valid).asUInt & f2_mask,
+        VecInit(f2_bpd_resp.predInfos.map(p => p.isBranch && p.predictedpc.valid)).asUInt & f2_mask,
         f2_bpd_resp.predInfos(f2_redirect_idx).taken && f2_do_redirect,
         f2_bpd_resp.predInfos(f2_redirect_idx).isBranch,
         f2_redirect_idx,
