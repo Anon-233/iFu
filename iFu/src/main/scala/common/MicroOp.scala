@@ -3,115 +3,110 @@ package iFu.common
 import chisel3._
 import chisel3.util._
 
+import iFu.backend.AluFuncCode
 import iFu.common.Consts._
 
 class MicroOp extends CoreBundle {
-    /**********************************************/
-    val numFTQEntries = frontendParams.numFTQEntries
-    /**********************************************/
-    val pcLowBits = UInt(log2Ceil(frontendParams.iCacheParams.lineBytes).W)
-    val instr = UInt(coreInstrBits.W)
-    val uopc = UInt(UOPC_SZ.W)
-    val ftqIdx = UInt(log2Ceil(frontendParams.numFTQEntries).W)
-    val taken = Bool()
+    // ---------------------------------------------------------
+    val numFTQEntries: Int   = frontendParams.numFTQEntries
+    val iCacheLineBytes: Int = frontendParams.iCacheParams.lineBytes
+    val robAddrSz: Int       = robParameters.robAddrSz
+    val ldqAddrSz: Int       = lsuParameters.ldqAddrSz
+    val stqAddrSz: Int       = lsuParameters.stqAddrSz
+    // ---------------------------------------------------------
+    val pcLowBits: UInt = UInt(log2Ceil(iCacheLineBytes).W)
+    val instr: UInt     = UInt(coreInstrBits.W)
+    val uopc: UInt      = UInt(UOPC_SZ.W)
+    val iqType: UInt    = UInt(IQT_SZ.W)
+    val fuCode: UInt    = UInt(FUC_SZ.W)
 
-    val iqType = UInt(IQT_SZ.W)
-    val fuCode = UInt(FUC_SZ.W)
+    val ftqIdx: UInt = UInt(log2Ceil(frontendParams.numFTQEntries).W)
+
+    val isBr: Bool   = Bool()
+    val isJal: Bool  = Bool()
+    val isJalr: Bool = Bool()
+    val isSFB: Bool  = Bool()
+    val taken: Bool  = Bool()
+
+    val brMask: UInt = UInt(maxBrCount.W)
+    val brTag: UInt  = UInt(brTagSz.W)
+
+    val ldst_is_rs1: Bool = Bool()
+    val ldst: UInt        = UInt(lregSz.W)
+    val lrs1: UInt        = UInt(lregSz.W)
+    val lrs2: UInt        = UInt(lregSz.W)
+    val ldst_val: Bool    = Bool()
+    val dst_rtype: UInt   = UInt(RT_X.getWidth.W)
+    val lrs1_rtype: UInt  = UInt(RT_X.getWidth.W)
+    val lrs2_rtype: UInt  = UInt(RT_X.getWidth.W)
+
+    val pdst: UInt       = UInt(pregSz.W)
+    val prs1: UInt       = UInt(pregSz.W)
+    val prs2: UInt       = UInt(pregSz.W)
+    val ppred: UInt      = UInt(log2Ceil(maxBrCount).W)
+    val stale_pdst: UInt = UInt(pregSz.W)
+
+    val bypassable: Bool = Bool()
+
+    val immPacked: UInt = UInt(26.W)
+
+    // val csrAddr: UInt = UInt(/*TODO*/)
+
+    val robIdx: UInt = UInt(robAddrSz.W)
+    val ldqIdx: UInt = UInt(ldqAddrSz.W)
+    val stqIdx: UInt = UInt(stqAddrSz.W)
+
+    val iwState: UInt        = UInt(2.W)
+    val iw_p1_poisoned: Bool = Bool()
+    val iw_p2_poisoned: Bool = Bool()
+
+    val prs1_busy: Bool  = Bool()
+    val prs2_busy: Bool  = Bool()
+    val ppred_busy: Bool = Bool()
+
+    val exception: Bool = Bool()
+    val excCause: UInt = UInt(xLen.W)
+
     val ctrl = new CtrlSignals
 
-    val iwState = UInt(2.W)
-    val iw_p1_poisoned = Bool()
-    val iw_p2_poisoned = Bool()
+    val use_ldq: Bool = Bool()
+    val use_stq: Bool = Bool()
 
-    val isBr = Bool()
-    val isJal = Bool()
-    val isJalr = Bool()
-    val isSFB = Bool()
+    // val mem_cmd: UInt = UInt(/*TODO*/)
+    val mem_size: UInt   = UInt(2.W)
+    val mem_signed: Bool = Bool()
 
-    val brMask = UInt(maxBrCount.W)
-    val brTag = UInt(brTagSz.W)
+    val is_fence: Bool  = Bool()
+    val is_fencei: Bool = Bool()
+    val is_amo: Bool    = Bool()
 
-    val immPacked = UInt(/*TODO*/)
+    val xcpt_pf_if: Bool = Bool()
+    val xcpt_ae_if: Bool = Bool()
+    // val xcpt_ma_if: Bool = Bool()
+    // val bp_xcpt_if: Bool = Bool()
+    val is_sys_pc2epc: Bool = Bool()
+    val is_unique: Bool = Bool()
+    val flush_on_commit: Bool = Bool()
 
-    val csrAddr = UInt(/*TODO*/)
+    val debug_inst: UInt = UInt(coreInstrBits.W)
 
-    val robIdx = UInt(/*TODO*/)
-    val ldqIdx = UInt(/*TODO*/)
-    val stqIdx = UInt(/*TODO*/)
-
-    val pdst = UInt(pregSz.W)
-    val prs1 = UInt(pregSz.W)
-    val prs2 = UInt(pregSz.W)
-    val ppred = UInt(log2Ceil(maxBrCount).W)
-
-    val prs1_busy = Bool()
-    val prs2_busy = Bool()
-    val ppred_busy = Bool()
-
-    val stale_pdst = UInt(pregSz.W)
-
-    val exception = Bool()
-    val excCause = UInt(/*TODO*/)
-
-    val bypassable = Bool()
-
-    //    val mem_cmd = UInt(/*TODO*/)
-    val mem_size = UInt(2.W)
-    val mem_signed = Bool()
-
-    val is_fence = Bool()
-    val is_fencei = Bool()
-    val is_amo = Bool()
-
-    val use_ldq = Bool()
-    val use_stq = Bool()
-
-    val is_sys_pc2epc = Bool()
-
-    val is_unique = Bool()
-
-    val flush_on_commit = Bool()
-
-    def is_sfb_br = isBr && isSFB
-    def is_sfb_shadow = isSFB && !isBr
-
-    val ldst_is_rs1 = Bool()
-
-    val ldst = UInt(lregSz.W)
-    val lrs1 = UInt(lregSz.W)
-    val lrs2 = UInt(lregSz.W)
-
-    val ldst_val = Bool()
-    val dst_rtype = UInt(/*TODO*/)
-    val lrs1_rtype = UInt(/*TODO*/)
-    val lrs2_rtype = UInt(/*TODO*/)
-
-    val xcpt_pf_if = Bool()
-    val xcpt_ae_if = Bool()
-    val xcpt_ma_if = Bool()
-    val bp_debug_if = Bool()
-    val bp_xcpt_if = Bool()
-
-    val debug_fsrc = UInt(/*TODO*/)
-    val debug_tsrc = UInt(/*TODO*/)
-    val debug_inst = UInt(/*TODO*/)
-
-    def allocate_brtag = (isBr && !isSFB) || isJalr
-    def rf_wen = dst_rtype =/= RT_X
-    def unsafe = use_ldq || (use_stq && !is_fence) || isBr || isJalr
-    def fu_code_is(_fu: UInt) = (fuCode & _fu) =/= 0.U
-
+    def is_sfb_br: Bool             = isBr && isSFB
+    def is_sfb_shadow: Bool         = isSFB && !isBr
+    def allocate_brtag: Bool        = (isBr && !isSFB) || isJalr
+    def rf_wen: Bool                = dst_rtype =/= RT_X
+    def unsafe: Bool                = use_ldq || (use_stq && !is_fence) || isBr || isJalr
+    def fu_code_is(_fu: UInt): Bool = (fuCode & _fu) =/= 0.U
 }
 
 class CtrlSignals extends CoreBundle {
-    val br_type     = UInt(BR_N.getWidth.W)
-    val op1_sel     = UInt(OP1_X.getWidth.W)
-    val op2_sel     = UInt(OP2_X.getWidth.W)
-    val imm_sel     = UInt(immX.getWidth.W)
-    val op_fcn      = UInt(/*TODO*/)
-    val fcn_dw      = Bool()
-    //    val csr_cmd     = UInt(CSR.SZ.W)
-    val is_load     = Bool()
-    val is_sta      = Bool()
-    val is_std      = Bool()
+    val br_type: UInt     = UInt(BR_N.getWidth.W)
+    val op1_sel: UInt     = UInt(OP1_X.getWidth.W)
+    val op2_sel: UInt     = UInt(OP2_X.getWidth.W)
+    val imm_sel: UInt     = UInt(immX.getWidth.W)
+    val op_fcn: UInt      = UInt(AluFuncCode().SZ_ALU_FN.W)
+    val fcn_dw: Bool      = Bool()
+    //    val csr_cmd: UInt     = UInt(CSR.SZ.W)
+    val is_load: Bool     = Bool()
+    val is_sta: Bool      = Bool()
+    val is_std: Bool      = Bool()
 }
