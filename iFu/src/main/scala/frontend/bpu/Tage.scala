@@ -68,7 +68,7 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
         val idx_history = computeFoldedHist(hist, log2Ceil(nRows))
         val idx = (unhashed_idx ^ idx_history)(log2Ceil(nRows) - 1, 0)
         val tag_history = computeFoldedHist(hist, tagSz)
-        val tag = ((unhashed_idx >> log2Ceil(nRows)) ^ tag_history)(tagSz - 1, 0)
+        val tag = ((unhashed_idx >> log2Ceil(nRows)).asUInt ^ tag_history)(tagSz - 1, 0)
         (idx, tag)
     }
 
@@ -91,7 +91,7 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
 
     val tageEntrySz = tagSz + 1 + 3
 
-    val (s1HashIdx , s1tag) = computeTagandHash(fetchIdx(io.f1pc),io.f1gHist)
+    val (s1HashIdx , s1tag) = computeTagandHash(fetchIdx(io.f1pc).asUInt,io.f1gHist)
 
 
 // 存储结构
@@ -132,7 +132,7 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
     val clearingLOU = clearingU && clearUCnt(log2Ceil(uBitPeriod) + log2Ceil(nRows)) === 0.U
     val clearingUIdx = clearUCnt >> log2Ceil(uBitPeriod)
 
-    val ( updateIdx , upDatetag ) = computeTagandHash(fetchIdx(io.updatepc),io.updateHist)
+    val ( updateIdx , upDatetag ) = computeTagandHash(fetchIdx(io.updatepc).asUInt,io.updateHist)
 
     val updatewData = Wire(Vec(bankWidth, new TageEntry()))
     val updateHIwData = Wire(Vec(bankWidth, Bool()))
@@ -159,14 +159,14 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
     }.elsewhen(clearingHIU||clearingLOU){
         when(clearingHIU){
             HIU.write(
-            clearingUIdx,
+            clearingUIdx.asUInt,
             VecInit(Seq.fill(bankWidth)(false.B)),
             VecInit(Seq.fill(bankWidth)(true.B))
             )
         }
         when(clearingLOU){
             LOU.write(
-            clearingUIdx,
+            clearingUIdx.asUInt,
             VecInit(Seq.fill(bankWidth)(false.B)),
             VecInit(Seq.fill(bankWidth)(true.B))
             )
@@ -236,7 +236,7 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
             wrBypass(wrBypassEnqIdx) := VecInit(updatewData.map(_.ctr))
             wrBypassTag(wrBypassEnqIdx) := upDatetag
             wrBypassIdx(wrBypassEnqIdx) := updateIdx
-            wrBypassEnqIdx := WrapInc(wrBypassEnqIdx, nWrBypassEntries.U)
+            wrBypassEnqIdx := WrapInc(wrBypassEnqIdx, nWrBypassEntries)
         }
     }
 
@@ -351,7 +351,7 @@ class TagePredictor(params: TageParams = TageParams())extends Module with HasTag
         // 分配位置的条件是：1.表没有命中 2.表的u位为0 3.表不是provider
         val allocatableSlots = (
             VecInit(tableResps.map(r => !r(w).valid && r(w).bits.u === 0.U)).asUInt &
-            ~(MaskLower(UIntToOH(provider))& Fill(tageNTables, provided))
+              (~(MaskLower(UIntToOH(provider))& Fill(tageNTables, provided))).asUInt
         )
 
         // 可分配位置的方式是：
