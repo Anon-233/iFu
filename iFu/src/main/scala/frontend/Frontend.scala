@@ -140,7 +140,7 @@ class FetchBundle extends CoreBundle {
     // val fsrc            = UInt(BSRC_SZ.W)
 }
 
-class FrontendToCPUIO extends CoreBundle {  // from core to frontend instead of from frontend to core
+class FrontendToExeUIO extends CoreBundle {  // from core to frontend instead of from frontend to core
     /*--------------------------*/
     val numFTQEntries   = frontendParams.numFTQEntries
     /*--------------------------*/
@@ -172,7 +172,7 @@ class FrontendToCPUIO extends CoreBundle {  // from core to frontend instead of 
 }
 
 class FrontendIO extends CoreBundle {
-    val cpu = Flipped(new FrontendToCPUIO)
+    val exe = Flipped(new FrontendToExeIO)
 
     val iresp = Input(new CBusResp)
     val ireq = Output(new CBusReq)
@@ -210,7 +210,7 @@ class Frontend extends CoreModule {
     io.ireq            := icache.io.cbusReq
     icache.io.cbusResp := io.iresp
 
-    icache.io.invalidate := io.cpu.flush_icache
+    icache.io.invalidate := io.exe.flush_icache
 
     // --------------------------------------------------------
     // **** NextPC Select (F0) ****
@@ -264,7 +264,7 @@ class Frontend extends CoreModule {
     tlb.io.req.bits.size        := log2Ceil(fetchWidth * instrBytes).U  // what is this?
     // tlb.io.req.bits.v           := io.ptw.status.v
     // tlb.io.req.bits.prv         := io.ptw.status.prv
-    tlb.io.sfence               := RegNext(io.cpu.sfence)
+    tlb.io.sfence               := RegNext(io.exe.sfence)
     // tlb.io.kill                 := false.B
 
     // 如果s1阶段将要进行replay，则不考虑tlb miss
@@ -463,11 +463,11 @@ class Frontend extends CoreModule {
         for(w <- 0 until bankWidth) {
 
             // val bpu = Module(new BreakpointUnit(nBreakpoints))
-            // bpu.io.status   := io.cpu.status
-            // bpu.io.bp := io.cpu.bp
+            // bpu.io.status   := io.exe.status
+            // bpu.io.bp := io.exe.bp
             // bpu.io.ea := DontCare
-            // bpu.io.mcontext := io.cpu.mcontext
-            // bpu.io.scontext := io.cpu.scontext
+            // bpu.io.mcontext := io.exe.mcontext
+            // bpu.io.scontext := io.exe.scontext
 
             val i = (b * bankWidth) + w
             val pc = (f3_aligned_pc + (i << log2Ceil(coreInstrBits)).U)
@@ -696,17 +696,17 @@ class Frontend extends CoreModule {
     // **** To Core (F5) ****
     // -------------------------------------------------------
 
-    io.cpu.fetchPacket <> fb.io.deq
-    io.cpu.getFtqPc    <> ftq.io.getFtqpc
+    io.exe.fetchPacket <> fb.io.deq
+    io.exe.getFtqPc    <> ftq.io.getFtqpc
 
-    ftq.io.deq            := io.cpu.commit
-    ftq.io.brUpdate       := io.cpu.brupdate
-    ftq.io.redirect.valid := io.cpu.redirect_val
-    ftq.io.redirect.bits  := io.cpu.redirect_ftq_idx
+    ftq.io.deq            := io.exe.commit
+    ftq.io.brUpdate       := io.exe.brupdate
+    ftq.io.redirect.valid := io.exe.redirect_val
+    ftq.io.redirect.bits  := io.exe.redirect_ftq_idx
     
     fb.io.clear := false.B
 
-    when (io.cpu.sfence.valid) {
+    when (io.exe.sfence.valid) {
         fb.io.clear  := true.B
         f4_clear     := true.B
         f3_clear     := true.B
@@ -714,23 +714,23 @@ class Frontend extends CoreModule {
         f1_clear     := true.B
 
         s0_valid     := false.B
-        s0_vpc       := io.cpu.sfence.bits.addr
+        s0_vpc       := io.exe.sfence.bits.addr
         s0_is_replay := false.B
         s0_is_sfence := true.B
-    } .elsewhen(io.cpu.redirect_flush) {
+    } .elsewhen(io.exe.redirect_flush) {
         fb.io.clear := true.B
         f4_clear    := true.B
         f3_clear    := true.B
         f2_clear    := true.B
         f1_clear    := true.B
 
-        s0_valid := io.cpu.redirect_val
-        s0_vpc := io.cpu.redirect_pc
-        s0_ghist := io.cpu.redirect_ghist
+        s0_valid := io.exe.redirect_val
+        s0_vpc := io.exe.redirect_pc
+        s0_ghist := io.exe.redirect_ghist
         // s0_tsrc := BSRC_C
         s0_is_replay := false.B
 
-        ftq.io.redirect.valid := io.cpu.redirect_val
-        ftq.io.redirect.bits := io.cpu.redirect_ftq_idx
+        ftq.io.redirect.valid := io.exe.redirect_val
+        ftq.io.redirect.bits := io.exe.redirect_ftq_idx
     }
 }
