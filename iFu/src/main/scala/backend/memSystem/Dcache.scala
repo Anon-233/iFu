@@ -904,11 +904,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                             s2handleMetaLine(w).dirty := true.B
                             // data写操作
                             val memSize = s2req(w).uop.mem_size
-                            var wdata = s2handleDataLine(w)(s2req(w).addr(log2Ceil(nRowWords)+1,2))
+                            val wordOffset = s2req(w).addr(log2Ceil(nRowWords) + 1, 2)
+                            var wdata = s2handleDataLine(w)(wordOffset)
                             for(i <- 0 until 4){
                                 when(s2req(w).mask(i)){ wdata( i*8+8 ,i*8) := s2req(w).data(i*8+8,i*8)}
                             }
-                            s2handleDataLine(s2req(w).addr(log2Ceil(nRowWords)+1,2)) := wdata
+                            s2handleDataLine(wordOffset) := wdata
 
                         }.otherwise{
                             // load，注意这里可能有一个旁路转发的判断，需不需要使用s3的数据
@@ -1004,13 +1005,14 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                             s2handleMetaLine(w).dirty := true.B
                             // data写操作
                             val memSize = s2req(w).uop.mem_size
-                            var wdata = s2handleDataLine(w)(s2req(w).addr(log2Ceil(nRowWords) + 1, 2))
+                            val wordOffset = s2req(w).addr(log2Ceil(nRowWords) + 1, 2)
+                            var wdata = s2handleDataLine(w)(wordOffset)
                             for (i <- 0 until 4) {
                                 when(s2req(w).mask(i)) {
                                     wdata(i * 8 + 8, i * 8) := s2req(w).data(i * 8 + 8, i * 8)
                                 }
                             }
-                            s2handleDataLine(s2req(w).addr(log2Ceil(nRowWords) + 1, 2)) := wdata
+                            s2handleDataLine(wordOffset) := wdata
 
                         }.otherwise {
                             // load，注意这里可能有一个旁路转发的判断，需不需要使用s3的数据
