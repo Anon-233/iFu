@@ -37,8 +37,8 @@ class GlobalHistory extends CoreBundle{
         if (bank == 0) {
             old_history
         } else {
-            Mux(newSawBranchTaken,       old_history << 1 | 1.U,
-            Mux(newSawBranchNotTaken,   old_history << 1,
+            Mux(newSawBranchTaken,       (old_history << 1).asUInt | 1.U,
+            Mux(newSawBranchNotTaken,   (old_history << 1).asUInt,
                                             old_history))
         }
     }
@@ -59,8 +59,8 @@ class GlobalHistory extends CoreBundle{
         val cfi_idx_oh = UIntToOH(cfi_idx_fixed)
         val new_history = Wire(new GlobalHistory)
         val not_taken_branches = branches & Mux(cfi_valid,
-            MaskLower(cfi_idx_oh) & ~Mux(cfi_is_br && cfi_taken, cfi_idx_oh, 0.U(fetchWidth.W)),
-            ~(0.U(fetchWidth.W))
+            MaskLower(cfi_idx_oh) & (~Mux(cfi_is_br && cfi_taken, cfi_idx_oh, 0.U(fetchWidth.W))).asUInt,
+            (~(0.U(fetchWidth.W))).asUInt
         )
 
         val cfi_in_bank_0 = cfi_valid && cfi_taken && cfi_idx_fixed < bankWidth.U
@@ -74,8 +74,8 @@ class GlobalHistory extends CoreBundle{
             new_history.newSawBranchTaken := cfi_is_br && cfi_in_bank_0
         } .otherwise {
             new_history.old_history :=
-                Mux(cfi_is_br && cfi_in_bank_0, histories(1) << 1 | 1.U,
-                Mux(first_bank_saw_not_taken,   histories(1) << 1,
+                Mux(cfi_is_br && cfi_in_bank_0, (histories(1) << 1).asUInt | 1.U,
+                Mux(first_bank_saw_not_taken,   (histories(1) << 1).asUInt,
                                                 histories(1)))
             new_history.newSawBranchNotTaken := not_taken_branches(fetchWidth - 1, bankWidth) =/= 0.U
             new_history.newSawBranchTaken := cfi_valid && cfi_taken && cfi_is_br && !cfi_in_bank_0
@@ -489,7 +489,7 @@ class Frontend extends CoreModule {
             f3_btb_mispredicts(i) := (
                 brsigs.cfiType === CFI_JAL &&
                 f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.valid &&
-                (f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc =/= brsigs.target)
+                (f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits =/= brsigs.target)
             )
 
             // i << 1是防止溢出，因为sfbOffset <= Cacheline
@@ -509,7 +509,7 @@ class Frontend extends CoreModule {
                 f3_mask(i) && brsigs.sfbOffset.valid &&
                 (offset_from_aligned_pc <= Mux(f3_is_last_bank_in_block, (fetchBytes + bankBytes).U,(2 * fetchBytes).U))
             )
-            f3_fetch_bundle.sfb_masks(i) := ~MaskLower(lower_mask) & ~MaskUpper(upper_mask)
+            f3_fetch_bundle.sfb_masks(i) := (~MaskLower(lower_mask)).asUInt & (~MaskUpper(upper_mask)).asUInt
             /**
              * 没有发生异常
              * bank有效
@@ -576,7 +576,7 @@ class Frontend extends CoreModule {
     )
 
     ras.io.write_valid := false.B
-    ras.io.write_addr  := f3_aligned_pc + ((f3_fetch_bundle.cfiIdx.bits << 2)) + 4.U
+    ras.io.write_addr  := (f3_aligned_pc.asSInt + ((f3_fetch_bundle.cfiIdx.bits << 2)).asSInt + 4.S).asUInt
     ras.io.write_idx   := WrapInc(f3_fetch_bundle.gHist.rasIdx, numRasEntries)
 
     val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist
@@ -631,14 +631,14 @@ class Frontend extends CoreModule {
     // 下面将要处理sfbs
     val f4_shadowable_masks = VecInit((0 until fetchWidth).map{ i =>
         f4.io.deq.bits.shadowable_mask.asUInt |
-        ~f4.io.deq.bits.sfb_masks(i)(fetchWidth - 1,0)    // the instructions which not in sfb shadow
+          (~f4.io.deq.bits.sfb_masks(i)).asUInt(fetchWidth - 1,0)    // the instructions which not in sfb shadow
     })
     val f3_shadowable_masks = VecInit((0 until fetchWidth).map{ i =>
         Mux(f4.io.enq.valid, f4.io.enq.bits.shadowable_mask.asUInt, 0.U) |
-        ~f4.io.deq.bits.sfb_masks(i)(2 * fetchWidth - 1, fetchWidth)
+          (~f4.io.deq.bits.sfb_masks(i)).asUInt(2 * fetchWidth - 1, fetchWidth)
     })
     val f4_sfbs = VecInit((0 until fetchWidth) map {i => (
-        (~f4_shadowable_masks(i) === 0.U) && (~f3_shadowable_masks(i) === 0.U) &&
+        ((~f4_shadowable_masks(i)).asUInt === 0.U) && ((~f3_shadowable_masks(i)).asUInt === 0.U) &&
         f4.io.deq.bits.sfbs(i) &&
         !(f4.io.deq.bits.cfiIdx.valid && f4.io.deq.bits.cfiIdx.bits === i.U)
     )})
@@ -667,7 +667,7 @@ class Frontend extends CoreModule {
     fb.io.enq.bits              := f4.io.deq.bits
     fb.io.enq.bits.ftqIdx       := ftq.io.enqIdx
     fb.io.enq.bits.sfbs         := Mux(f4_sfb_valid, UIntToOH(f4_sfb_idx), 0.U(fetchWidth.W)).asBools
-    fb.io.enq.bits.shadowedMask := (
+    fb.io.enq.bits.shadowed_mask := (
         Mux(f4_sfb_valid, f4_sfb_mask(fetchWidth - 1,0), 0.U(fetchWidth.W)) |
         f4.io.deq.bits.shadowed_mask.asUInt
     ).asBools
