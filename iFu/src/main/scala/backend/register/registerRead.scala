@@ -144,7 +144,7 @@ class RegisterRead(
         if(numReadPorts > 0) exeRegRs1Data(w) := bypassedRs1Data(w)
         if(numReadPorts > 1) exeRegRs2Data(w) := bypassedRs2Data(w)
         if(numRedaPorts > 2) exeRegRs3Data(w) := rrdRs3Data(w)
-        if(enableSFBOpt) exseRegPredData(w) := bypassedPredData(w)
+        if(enableSFBOpt) exeRegPredData(w) := bypassedPredData(w)
     }
 
     for(w <- 0 until issueWidth) {
@@ -153,10 +153,10 @@ class RegisterRead(
         io.exe_reqs(w).valid := exeRegValids(w)
         io.exe_reqs(w).bits.uop := exeRegUops(w)
 
-        if(numReadPorts > 0) io.exe_reqs(w).bits.rs1_data := exeRegRs1Data(w)
-        if(numReadPorts > 1) io.exe_reqs(w).bits.rs2_data := exeRegRs2Data(w)
+        if(numReadPorts > 0) io.exe_reqs(w).bits.rs1Data := exeRegRs1Data(w)
+        if(numReadPorts > 1) io.exe_reqs(w).bits.rs2Data := exeRegRs2Data(w)
         if(numReadPorts > 2) io.exe_reqs(w).bits.rs3_data := exeRegRs3Data(w)
-        if(enableSFBOpt) io.exe_reqs(w).bits.pred_data := exeRegPredData(w)
+        if(enableSFBOpt) io.exe_reqs(w).bits.predData := exeRegPredData(w)
     }
     
     
