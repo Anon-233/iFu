@@ -14,16 +14,21 @@ class debugDiff extends CoreModule {
 
 
   for(w <- 0 until coreWidth){
-    val lreg = io.commit.debug_ldst(w)  //这个接目的寄存器
-    val wdata = io.commit.debug_wdata(w)  //这个接写入数据
-    val nowInst = io.commit.debug_insts(w) //当前指令
-    val valid = nowInst =/= BUBBLE //判断指令是否有效
-    val nowPc = io.commit.debug_pc(w)  //这个接pc
-    val nowPc2 = io.commit.uops(w).debug_pc //这个和上面那个应该要相同
-    //require((nowPc == nowPc2) && valid)  //如果不同，说明rob存在问题
+    if(io.commit.valids(w)) { //TODO:是否要换成arch_valids?
+      val lreg = io.commit.debug_ldst(w) //这个接目的寄存器
+      val wdata = io.commit.debug_wdata(w) //这个接写入数据
+      val nowInst = io.commit.debug_insts(w) //当前指令
+      val valid = nowInst =/= BUBBLE //判断指令是否有效
+      val nowPc = io.commit.debug_pc(w) //这个接pc
+      val nowPc2 = io.commit.uops(w).debug_pc //这个和上面那个应该要相同
+      //require((nowPc == nowPc2) && valid)  //如果不同，说明rob存在问题
 
 
-    debug_reg(lreg) := wdata
+      debug_reg(lreg) := wdata
+    }
+    else{
+      val valid = false
+    }
   }
   for(w <-0 until lregSz){
     val regRead = debug_reg(w)   //这个接寄存器堆
