@@ -153,7 +153,7 @@ class Lsu extends CoreModule {
     val clear_store = WireInit(false.B) // 清空一条指令
     val live_store_mask = RegInit(0.U(numStqEntries.W)) // 当前哪些位置有store指令 // diff with valid?
     var next_live_store_mask = Mux(clear_store, 
-        live_store_mask & ~(1.U << stq_head), // -> 如果store指令提交了，那么该位置零
+        live_store_mask & (~(1.U << stq_head)).asUInt, // -> 如果store指令提交了，那么该位置零
         live_store_mask
     )
 
@@ -163,7 +163,7 @@ class Lsu extends CoreModule {
     //-------------------------------------------------------------
     for (i <- 0 until numLdqEntries) { // store指令提交后，修改ldq中与该条指令有关的位
         when(clear_store) {
-            ldq(i).bits.st_dep_mask := ldq(i).bits.st_dep_mask & ~(1.U << stq_head)
+            ldq(i).bits.st_dep_mask := ldq(i).bits.st_dep_mask & (~(1.U << stq_head)).asUInt
         }
     }
 
@@ -219,7 +219,7 @@ class Lsu extends CoreModule {
         st_enq_idx = Mux(dis_st_val, WrapInc(st_enq_idx, numStqEntries), st_enq_idx)
 
         next_live_store_mask = Mux(dis_st_val,      // 新增store指令
-            next_live_store_mask | (1.U << st_enq_idx),
+            next_live_store_mask | (1.U << st_enq_idx).asUInt,
             next_live_store_mask
         )
 
