@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import iFu.backend.HasUop
 import iFu.common._
+import iFu.common.Consts._
 
 object MaskLower {
     def apply(in: UInt): UInt = {
@@ -130,8 +131,18 @@ object Sext
 }
 object immGen
 {
-    def apply(x: UInt, immType: UInt): SInt = {
-        require(false)
-        0.S
+    def apply(immPacked: UInt, immType: UInt): SInt = {
+        val imm = WireInit(0.U(32.W))
+        imm := MuxLookup(immType, 0.U, Seq(
+            immU5   -> Cat(Fill(27,0.U),immPacked(14,10)),
+            immU12  -> Cat(Fill(20,0.U),immPacked(21,10)),
+            immS12  -> Cat(Fill(20,immPacked(21)),immPacked(21,10)),
+            immS14  -> Cat(Fill(16,immPacked(23)),immPacked(23,10),Fill(2,0.U)),
+            immS16  -> Cat(Fill(14,immPacked(25)),immPacked(25,10),Fill(2,0.U)),
+            immU20  -> Cat(immPacked(24,5),Fill(12,0.U)),
+            immS20  -> Cat(Fill(10,immPacked(24)),immPacked(24,5),Fill(2,0.U)),
+            immS26  -> Cat(Fill(4,immPacked(9)),immPacked(9,0),immPacked(25,10),Fill(2,0.U))
+        ))
+        imm
     }
 }
