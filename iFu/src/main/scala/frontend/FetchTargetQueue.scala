@@ -90,7 +90,7 @@ class FetchTargetQueue extends CoreModule {
     )   // why need at least 2 empty entries?
 
     val pcs   = Reg(Vec(numFTQEntries, UInt(vaddrBits.W)))
-    val meta  = SyncReadMem(numFTQEntries, Vec(nBanks, new PredictionMeta))
+    val meta  = SyncReadMem(numFTQEntries, Vec(nBanks, Vec(bankWidth,new PredictionMeta)))
     val ram   = Reg(Vec(numFTQEntries, new FTQBundle))
     val gHist = Seq.fill(nBanks) { SyncReadMem(numFTQEntries, new GlobalHistory) }
 
@@ -159,11 +159,14 @@ class FetchTargetQueue extends CoreModule {
     val bpdRepairIdx        = Reg(UInt(log2Ceil(numFTQEntries).W))
     val bpdRepairpc         = Reg(UInt(vaddrBits.W))
     val bpdEndIdx           = Reg(UInt(log2Ceil(numFTQEntries).W))
-    val bpdEntry            = RegNext(ram(bpdIdx))
 
     val bpdIdx    = Mux(io.redirect.valid,                      io.redirect.bits,
                     Mux(bpdUpdateRepair || bpdUpdateMispredict, bpdRepairIdx,
                                                                 bpdPtr))
+
+    val bpdEntry            = RegNext(ram(bpdIdx))
+
+
     val bpdgHist  = gHist(0).read(bpdIdx, true.B)
     val bpdMeta   = meta.read(bpdIdx, true.B)
     val bpdpc     = RegNext(pcs(bpdIdx))
