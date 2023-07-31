@@ -1189,8 +1189,8 @@ object GenByteMask {
     def apply(addr: UInt, size: UInt): UInt = {
         val mask = MuxLookup(size, 0.U,
             Seq(
-                0.U -> (1.U(4.W) << addr(1, 0)),
-                1.U -> (3.U(4.W) << (addr(1) << 1.U)),
+                0.U -> (1.U(4.W) << addr(1, 0))(3, 0),
+                1.U -> (3.U(4.W) << (addr(1) << 1.U))(3, 0),
                 2.U -> 15.U(4.W)
             )
         )
