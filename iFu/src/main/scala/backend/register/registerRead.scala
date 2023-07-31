@@ -107,9 +107,9 @@ class RegisterRead(
 
     for(w<- 0 until issueWidth){
         val numReadPorts = numReadPortsArray(w)
-        var rs1Cases = Array((false.B, 0.U(registerWidth.W)))
-        var rs2Cases = Array((false.B, 0.U(registerWidth.W)))
-        var predCases = Array((false.B, 0.U(1.W)))
+        var rs1Cases = Seq((false.B, 0.U(registerWidth.W)))
+        var rs2Cases = Seq((false.B, 0.U(registerWidth.W)))
+        var predCases = Seq((false.B, 0.U(1.W)))
         
         val prs1 = rrdUops(w).prs1
         val lrs1Rtype = rrdUops(w).lrs1_rtype
@@ -120,9 +120,9 @@ class RegisterRead(
         for(b <- 0 until numTotalBypassPorts){
             val bypass = io.bypass(b)
 
-            rs1Cases ++= Array((bypass.valid && (prs1 === bypass.bits.uop.pdst) && bypass.bits.uop.rf_wen
+            rs1Cases ++= Seq((bypass.valid && (prs1 === bypass.bits.uop.pdst) && bypass.bits.uop.rf_wen
              && bypass.bits.uop.dst_rtype === RT_FIX && lrs1Rtype === RT_FIX && (prs1 =/= 0.U),bypass.bits.data))
-            rs2Cases ++= Array((bypass.valid && (prs2 === bypass.bits.uop.pdst) && bypass.bits.uop.rf_wen 
+            rs2Cases ++= Seq((bypass.valid && (prs2 === bypass.bits.uop.pdst) && bypass.bits.uop.rf_wen 
              && bypass.bits.uop.dst_rtype === RT_FIX && lrs2Rtype === RT_FIX && (prs2 =/= 0.U),bypass.bits.data))
 
 
@@ -130,7 +130,7 @@ class RegisterRead(
 
         for(b <- 0 until numTotalPredBypassPorts){
             val bypass = io.pred_bypass(b)
-            predCases ++= Array((bypass.valid && (ppred === bypass.bits.uop.pdst) && bypass.bits.uop.is_sfb_br,bypass.bits.data))
+            predCases ++= Seq((bypass.valid && (ppred === bypass.bits.uop.pdst) && bypass.bits.uop.is_sfb_br,bypass.bits.data))
 
         }
 
@@ -158,8 +158,4 @@ class RegisterRead(
         //if(numReadPorts > 2) io.exe_reqs(w).bits.rs3_data := exeRegRs3Data(w)
         if(enableSFBOpt) io.exe_reqs(w).bits.predData := exeRegPredData(w)
     }
-    
-    
-
-
 }
