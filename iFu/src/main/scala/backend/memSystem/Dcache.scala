@@ -119,26 +119,13 @@ class MetaResp extends CoreBundle with HasDcacheParameters{
     val replacePos = UInt(log2Ceil(nWays).W)
 }
 
-class DataReq extends CoreBundle with HasDcacheParameters{
-    val wayMask = UInt(nWays.W)
-    val wdata = Vec(nRowWords,UInt(32.W))
-    val idx = UInt(nIdxBits.W)
-
-    // mshr来读data的时候所选择的路
-    val replacePos = UInt(log2Ceil(nWays).W)
-
-    // replay将命中的路
-    val hitPos = UInt(log2Ceil(nWays).W)
-}
-
-class DataResp extends CoreBundle with HasDcacheParameters{
-    val rdata = Vec(nRowWords,UInt(32.W))
-}
-
 class DcacheMetaIO extends CoreBundle with HasDcacheParameters{
     val req = Input(Valid(new MetaReq))
     val resp = Output(Valid(new MetaResp))
 }
+
+
+
 
 
 class DcacheMeta extends Module with HasDcacheParameters{
@@ -164,7 +151,7 @@ class DcacheMeta extends Module with HasDcacheParameters{
 
     // 数据结构
     val meta = SyncReadMem(nSets, Vec(nWays, new MetaLine))
-    // 同步记录meta里面的dirty行
+    // 同步记录meta里面有效的的dirty行
     val dirtyTable = RegInit(VecInit(Seq.fill(nSets)(0.U(nWays.W))))
 
 
@@ -190,14 +177,19 @@ class DcacheMeta extends Module with HasDcacheParameters{
     val dirtySet = dirtyTable.map((x:UInt) => x.orR)
     val dirtyIdx = PriorityEncoder(dirtySet)
     val dirtyPos = PriorityEncoder(dirtyTable(dirtyIdx))
-    io.dirtyIdx := dirtyIdx
-    io.dirtyPos := dirtyPos
-    val cleanedMask = UInt(nWays.W)
-    cleanedMask := UIntToOH(dirtyPos)
-    io.hasDirty := dirtySet.reduce(_||_)
-    var dirtyMeta = meta.read(dirtyIdx, true.B)(dirtyPos)
+    io.dirtyIdx := RegNext(dirtyIdx)
+    io.dirtyPos := RegNext(dirtyPos)
+    io.hasDirty := RegNext(dirtySet.reduce(_||_))
+    val dirtyMeta = meta.read(dirtyIdx, true.B)(dirtyPos)
     io.dirtyMeta := dirtyMeta
 
+    val cleanedMask = UInt(nWays.W)
+    cleanedMask := UIntToOH(dirtyPos)
+    val cleanedMeta = new MetaLined
+    cleanedMeta.dirty = false.B
+    cleanedMeta.valid = true.B
+    cleanedMeta.tag := dirtyMeta.tag
+    cleanedMeta.age := dirtyMeta.age
 
     when(io.fenceTakeDirtyMeta){
         // 将这个脏行的dirty位置为0写回
@@ -292,6 +284,23 @@ class DcacheMeta extends Module with HasDcacheParameters{
     io.rpuWrite.resp.bits := DontCare
 
 }
+
+class DataReq extends CoreBundle with HasDcacheParameters{
+    val wayMask = UInt(nWays.W)
+    val wdata = Vec(nRowWords,UInt(32.W))
+    val idx = UInt(nIdxBits.W)
+
+    // mshr来读data的时候所选择的路
+    val replacePos = UInt(log2Ceil(nWays).W)
+
+    // 将命中的路
+    val hitPos = UInt(log2Ceil(nWays).W)
+}
+
+class DataResp extends CoreBundle with HasDcacheParameters{
+    val rdata = Vec(nRowWords,UInt(32.W))
+}
+
 
 
 class DcacheDataIO extends CoreBundle with HasDcacheParameters{
