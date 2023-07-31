@@ -174,8 +174,8 @@ class FrontendToCPUIO extends CoreBundle {  // from core to frontend instead of 
 class FrontendIO extends CoreBundle {
     val cpu = Flipped(new FrontendToCPUIO)
 
-    val cbusResp = Input(new CBusResp)
-    val cbusReq = Output(new CBusReq)
+    val iresp = Input(new CBusResp)
+    val ireq = Output(new CBusReq)
     // val ptw = new TLBPTWIO   // do we need this?
     // val errors = new ICacheErrors
 }
@@ -207,8 +207,8 @@ class Frontend extends CoreModule {
     val fb     = Module(new FetchBuffer)
     val ftq    = Module(new FetchTargetQueue)
 
-    io.cbusReq := icache.io.cbusReq
-    icache.io.cbusResp := io.cbusResp
+    io.ireq            := icache.io.cbusReq
+    icache.io.cbusResp := io.iresp
 
     icache.io.invalidate := io.cpu.flush_icache
 
