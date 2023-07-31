@@ -20,12 +20,13 @@ class iFuCore extends CoreModule {
     })
 /*-----------------------------*/
 
-    val fetchWidth    = frontendParams.fetchWidth
-    val decodeWidth   = coreWidth
-    val bankBytes     = frontendParams.iCacheParams.bankBytes
-    val memIssueParam = issueParams.filter(_.iqType == IQT_MEM)(0)
-    val intIssueParam = issueParams.filter(_.iqType == IQT_INT)(0)
-    val numFTQEntries = frontendParams.numFTQEntries
+    val fetchWidth      = frontendParams.fetchWidth
+    val decodeWidth     = coreWidth
+    val bankBytes       = frontendParams.iCacheParams.bankBytes
+    val memIssueParam   = issueParams.filter(_.iqType == IQT_MEM)(0)
+    val intIssueParam   = issueParams.filter(_.iqType == IQT_INT)(0)
+    val numFTQEntries   = frontendParams.numFTQEntries
+    val iCacheLineBytes = frontendParams.iCacheParams.lineBytes
 
 /*-----------------------------*/
 
@@ -86,6 +87,8 @@ class iFuCore extends CoreModule {
 
     val rob = Module(new Rob(numIrfWritePorts))
 
+    val csr = Module(new CSRFile)
+
 /*-----------------------------*/
 
     val int_iss_wakeups = Wire(Vec(numIssueWakeupPorts, Valid(new ExeUnitResp)))
@@ -93,68 +96,59 @@ class iFuCore extends CoreModule {
     val pred_wakeup = Wire(Valid(new ExeUnitResp(1)))
 
 /*-----------------------------*/
+
     io.ireq := ifu.io.ireq
     ifu.io.iresp := io.iresp
     io.dreq := lsu.io.dreq
     lsu.io.dresp := io.dresp
+
 /*-----------------------------*/
 
-    //***********************************
-    // Pipeline State Registers and Wires
+    // Decode/Rename1
+    val dec_valids = Wire(Vec(coreWidth, Bool()))
+    val dec_uops   = Wire(Vec(coreWidth, new MicroOp))
+    val dec_fire   = Wire(Vec(coreWidth, Bool()))
 
-    // Decode/Rename1 Stage
-    val dec_valids = Wire(Vec(coreWidth, Bool())) // are the decoded instruction valid? It may be held up though.
-    val dec_uops = Wire(Vec(coreWidth, new MicroOp()))
-    val dec_fire = Wire(Vec(coreWidth, Bool())) // can the instruction fire beyond decode?
-    // (can still be stopped in ren or dis)
-    val dec_ready = Wire(Bool())
-    val dec_xcpts = Wire(Vec(coreWidth, Bool()))
+    val dec_ready  = Wire(Bool())
+    val dec_xcpts  = Wire(Vec(coreWidth, Bool()))
     val ren_stalls = Wire(Vec(coreWidth, Bool()))
 
-    // Rename2/Dispatch stage
+    // Rename2/Dispatch
     val dis_valids = Wire(Vec(coreWidth, Bool()))
-    val dis_uops = Wire(Vec(coreWidth, new MicroOp))
-    val dis_fire = Wire(Vec(coreWidth, Bool()))
-    val dis_ready = Wire(Bool())
+    val dis_uops   = Wire(Vec(coreWidth, new MicroOp))
+    val dis_fire   = Wire(Vec(coreWidth, Bool()))
+    val dis_ready  = Wire(Bool())   // TODO: ??? why 1 bit
 
-    // Issue Stage/Register Read
-    val iss_valids = Wire(Vec(exe_units.numIrfReaders, Bool()))
-    val iss_uops = Wire(Vec(exe_units.numIrfReaders, new MicroOp()))
-    val bypasses = Wire(Vec(exe_units.numTotalBypassPorts, Valid(new ExeUnitResp(xLen))))
+    // Issue/Register Read
+    val iss_valids    = Wire(Vec(exe_units.numIrfReaders, Bool()))
+    val iss_uops      = Wire(Vec(exe_units.numIrfReaders, new MicroOp()))
+    val bypasses      = Wire(Vec(exe_units.numTotalBypassPorts, Valid(new ExeUnitResp)))
     val pred_bypasses = Wire(Vec(jmp_unit.numStages, Valid(new ExeUnitResp(1))))
     require(jmp_unit.bypassable)
 
     // --------------------------------------
     // Dealing with branch resolutions
-
-    // The individual branch resolutions from each ALU
     val brinfos = Reg(Vec(coreWidth, new BrResolutionInfo()))
 
-    // "Merged" branch update info from all ALUs
-    // brmask contains masks for rapidly clearing mispredicted instructions
-    // brindices contains indices to reset pointers for allocated structures
-    //           brindices is delayed a cycle
-    val brupdate = Wire(new BrUpdateInfo)
-    val b1 = Wire(new BrUpdateMasks)
-    val b2 = Reg(new BrResolutionInfo)
+    val brUpdate = Wire(new BrUpdateInfo)
+    val b1       = Wire(new BrUpdateMasks)
+    val b2       = Reg(new BrResolutionInfo)
 
-    brupdate.b1 := b1
-    brupdate.b2 := b2
+    brUpdate.b1 := b1
+    brUpdate.b2 := b2
 
     for ((b, a) <- brinfos zip exe_units.alu_units) {
-        b := a.io.brinfo
         b.valid := a.io.brinfo.valid && !rob.io.flush.valid
+        b := a.io.brinfo
     }
-    b1.resolveMask := brinfos.map(x => x.valid << x.uop.brTag).reduce(_ | _)
-    b1.mispredictMask := brinfos.map(x => (x.valid && x.mispredict) << x.uop.brTag).reduce(_ | _)
+    b1.resolveMask := brinfos.map(x => x.valid << x.uop.brTag).reduce(_|_)
+    b1.mispredictMask := brinfos.map(x => (x.valid && x.mispredict) << x.uop.brTag).reduce(_|_)
 
-    // Find the oldest mispredict and use it to update indices
     var mispredict_val = false.B
     var oldest_mispredict = brinfos(0)
     for (b <- brinfos) {
         val use_this_mispredict = !mispredict_val ||
-                b.valid && b.mispredict && IsOlder(b.uop.robIdx, oldest_mispredict.uop.robIdx, rob.io.rob_head_idx)
-
+            b.valid && b.mispredict && IsOlder(b.uop.robIdx, oldest_mispredict.uop.robIdx, rob.io.rob_head_idx)
         mispredict_val = mispredict_val || (b.valid && b.mispredict)
         oldest_mispredict = Mux(use_this_mispredict, b, oldest_mispredict)
     }
@@ -163,140 +157,135 @@ class iFuCore extends CoreModule {
     b2.cfiType := oldest_mispredict.cfiType
     b2.taken := oldest_mispredict.taken
     b2.pcSel := oldest_mispredict.pcSel
-    b2.uop := UpdateBrMask(brupdate, oldest_mispredict.uop)
+    b2.uop := UpdateBrMask(brUpdate, oldest_mispredict.uop)
     b2.jalrTarget := RegNext(jmp_unit.io.brinfo.jalrTarget)
     b2.targetOffset := oldest_mispredict.targetOffset
 
     val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftqIdx
+    ifu.io.exe.getFtqPc(1).ftqIdx := oldest_mispredict_ftq_idx
 
-
-    assert(!((brupdate.b1.mispredictMask =/= 0.U || brupdate.b2.mispredict)
+    assert(!((brUpdate.b1.mispredictMask =/= 0.U || brUpdate.b2.mispredict)
             && rob.io.commit.rollback), "Can't have a mispredict during rollback.")
 
-    ifu.io.exe.brupdate := brupdate
+    ifu.io.exe.brupdate := brUpdate
 
-    for (eu <- exe_units) {
-        eu.io.brupdate := brupdate
+    for (exu <- exe_units) {
+        exu.io.brupdate := brUpdate
     }
 
-
-    // Load/Store Unit & ExeUnits
-    
     val mem_resps = mem_units.map(_.io.mem_iresp)
     for (i <- 0 until memWidth) {
         mem_units(i).io.lsu_io <> lsu.io.core.exe(i)
     }
-
-
-    //    val csr = Module(new freechips.rocketchip.rocket.CSRFile(perfEvents, boomParams.customCSRs.decls))
-    //    csr.io.inst foreach { c => c := DontCare }
-    //    csr.io.rocc_interrupt := io.rocc.interrupt
-
+    
+    // csr.io.inst foreach { c => c := DontCare }
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
-    // **** Fetch Stage/Frontend ****
+    // **** Fetch Stage ****
     //-------------------------------------------------------------
     //-------------------------------------------------------------
+
+    // // Breakpoint info
+    // ifu.io.exe.status   := csr.io.status
+    // ifu.io.exe.bp       := csr.io.bp
+    // ifu.io.exe.mcontext := csr.io.mcontext
+    // ifu.io.exe.scontext := csr.io.scontext
+
     ifu.io.exe.redirect_val := false.B
     ifu.io.exe.redirect_flush := false.B
-
-    // Breakpoint info
-    //    ifu.io.exe.status  := csr.io.status
-    //    ifu.io.exe.bp      := csr.io.bp
-    //    ifu.io.exe.mcontext := csr.io.mcontext
-    //    ifu.io.exe.scontext := csr.io.scontext
-
     ifu.io.exe.flush_icache := (0 until coreWidth).map { i =>
-        (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_fencei) /*||
-                (RegNext(dec_valids(i) && dec_uops(i).isJalr && csr.io.status.debug))*/
-    }.reduce(_ || _)
+        (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_fencei)
+    }.reduce(_||_)
 
-    val icBlockBytes = frontendParams.iCacheParams.lineBytes
-    when(RegNext(rob.io.flush.valid)) {
+    when (RegNext(rob.io.flush.valid)) {
         ifu.io.exe.redirect_val := true.B
         ifu.io.exe.redirect_flush := true.B
-        val flush_typ = RegNext(rob.io.flush.bits.flush_typ)
+        val flush_type = RegNext(rob.io.flush.bits.flush_type)
         // Clear the global history when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
         val new_ghist = WireInit((0.U).asTypeOf(new GlobalHistory))
         new_ghist.currentSawBranchNotTaken := true.B
         new_ghist.rasIdx := ifu.io.exe.getFtqPc(0).entry.rasIdx
         ifu.io.exe.redirect_ghist := new_ghist
-        when(FlushTypes.useCsrEvec(flush_typ)) {
-            ifu.io.exe.redirect_pc := Mux(flush_typ === FlushTypes.eret,
+        when (FlushTypes.useCsrEvec(flush_type)) {
+            ifu.io.exe.redirect_pc := Mux(
+                flush_type === FlushTypes.eret,
                 RegNext(RegNext(csr.io.evec)),
-                csr.io.evec)
-        }.otherwise {
-            val flush_pc = (AlignPCToBoundary(ifu.io.exe.getFtqPc(0).pc, icBlockBytes)
-                    + RegNext(rob.io.flush.bits.pc_lob))
-
-            val flush_pc_next = flush_pc + Mux(RegNext(rob.io.flush.bits.is_rvc), 2.U, 4.U)
-            ifu.io.exe.redirect_pc := Mux(FlushTypes.useSamePC(flush_typ),
-                flush_pc, flush_pc_next)
-
+                csr.io.evec
+            )
+        } .otherwise {
+            val flush_pc = (
+                AlignPCToBoundary(ifu.io.exe.getFtqPc(0).pc, iCacheLineBytes) +
+                RegNext(rob.io.flush.bits.pc_lob)
+            )
+            val flush_pc_next = flush_pc + coreInstrBytes.U
+            ifu.io.exe.redirect_pc := Mux(
+                FlushTypes.useSamePC(flush_type),
+                flush_pc, flush_pc_next
+            )
         }
         ifu.io.exe.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
-    }.elsewhen(brupdate.b2.mispredict && !RegNext(rob.io.flush.valid)) {
-        val block_pc = AlignPCToBoundary(ifu.io.exe.getFtqPc(1).pc, icBlockBytes)
-        val uop_maybe_pc = block_pc | brupdate.b2.uop.pcLowBits
-        val npc = uop_maybe_pc +  4.U
-        val jal_br_target = Wire(UInt(vaddrBits.W))
-        jal_br_target := (uop_maybe_pc.asSInt + brupdate.b2.targetOffset +
-                (Fill(vaddrBits - 1, brupdate.b2.uop.edge_inst) << 1).asSInt).asUInt
-        val bj_addr = Mux(brupdate.b2.cfiType === CFI_JALR, brupdate.b2.jalrTarget, jal_br_target)
-        val mispredict_target = Mux(brupdate.b2.pcSel === PC_PLUS4, npc, bj_addr)
+    } .elsewhen(brUpdate.b2.mispredict) {
+        val block_pc = AlignPCToBoundary(ifu.io.exe.getFtqPc(1).pc, iCacheLineBytes)
+        val uop_maybe_pc = block_pc | brUpdate.b2.uop.pcLowBits
+
+        val npc = uop_maybe_pc + coreInstrBytes.U
+        val jal_br_target = (uop_maybe_pc.asSInt + brUpdate.b2.targetOffset).asUInt
+
+        val bj_addr = Mux(brUpdate.b2.cfiType === CFI_JALR,
+            brUpdate.b2.jalrTarget, jal_br_target
+        )
+
+        val mispredict_target = Mux(brUpdate.b2.pcSel === PC_PLUS4, npc, bj_addr)
+
         ifu.io.exe.redirect_val := true.B
-        ifu.io.exe.redirect_pc := mispredict_target
         ifu.io.exe.redirect_flush := true.B
-        ifu.io.exe.redirect_ftq_idx := brupdate.b2.uop.ftqIdx
-        val use_same_ghist = (brupdate.b2.cfiType === CFI_BR &&
-                !brupdate.b2.taken &&
-                bankAlign(block_pc) === bankAlign(npc))
+        ifu.io.exe.redirect_pc := mispredict_target
+        ifu.io.exe.redirect_ftq_idx := brUpdate.b2.uop.ftqIdx
+        
+        val use_same_ghist = (
+            brUpdate.b2.cfiType === CFI_BR &&
+            !brUpdate.b2.taken &&
+            bankAlign(block_pc) === bankAlign(npc)
+        )
         val ftq_entry = ifu.io.exe.getFtqPc(1).entry
-        val cfi_idx = (brupdate.b2.uop.pcLowBits ^
-                Mux(ftq_entry.startBank === 1.U, 1.U << log2Ceil(bankBytes), 0.U))(log2Ceil(fetchWidth), 1)
+        val cfi_idx = (brUpdate.b2.uop.pcLowBits ^
+            Mux(ftq_entry.startBank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)
+        )(log2Ceil(fetchWidth), 2)
         val ftq_ghist = ifu.io.exe.getFtqPc(1).gHist
         val next_ghist = ftq_ghist.update(
             ftq_entry.brMask.asUInt,
-            brupdate.b2.taken,
-            brupdate.b2.cfiType === CFI_BR,
+            brUpdate.b2.taken,
+            brUpdate.b2.cfiType === CFI_BR,
             cfi_idx,
             true.B,
             ifu.io.exe.getFtqPc(1).pc,
             ftq_entry.cfiIsCall && ftq_entry.cfiIdx.bits === cfi_idx,
-            ftq_entry.cfiIsCall && ftq_entry.cfiIdx.bits === cfi_idx)
+            ftq_entry.cfiIsCall && ftq_entry.cfiIdx.bits === cfi_idx
+        )
 
-
-        ifu.io.exe.redirect_ghist := Mux(
-            use_same_ghist,
-            ftq_ghist,
-            next_ghist)
+        ifu.io.exe.redirect_ghist := Mux(use_same_ghist, ftq_ghist, next_ghist)
         ifu.io.exe.redirect_ghist.currentSawBranchNotTaken := use_same_ghist
-    }.elsewhen(rob.io.flush_frontend || brupdate.b1.mispredictMask =/= 0.U) {
+    } .elsewhen (rob.io.flush_frontend || brUpdate.b1.mispredictMask =/= 0.U) {
         ifu.io.exe.redirect_flush := true.B
     }
 
-    // Tell the FTQ it can deallocate entries by passing youngest ftq_idx.
     val youngest_com_idx = (coreWidth - 1).U - PriorityEncoder(rob.io.commit.valids.reverse)
-    ifu.io.exe.commit.valid := rob.io.commit.valids.reduce(_ | _) || rob.io.com_xcpt.valid
-    ifu.io.exe.commit.bits := Mux(rob.io.com_xcpt.valid,
+    ifu.io.exe.commit.valid := rob.io.commit.valids.reduce(_|_) || rob.io.com_xcpt.valid
+    ifu.io.exe.commit.bits := Mux(
+        rob.io.com_xcpt.valid,
         rob.io.com_xcpt.bits.ftq_idx,
-        rob.io.commit.uops(youngest_com_idx).ftqIdx)
+        rob.io.commit.uops(youngest_com_idx).ftqIdx
+    )
 
     assert(!(rob.io.commit.valids.reduce(_ | _) && rob.io.com_xcpt.valid),
         "ROB can't commit and except in same cycle!")
 
     for (i <- 0 until memWidth) {
-        when(RegNext(lsu.io.core.exe(i).req.bits.sfence.valid)) {
+        when (RegNext(lsu.io.core.exe(i).req.bits.sfence.valid)) {
             ifu.io.exe.sfence := RegNext(lsu.io.core.exe(i).req.bits.sfence)
         }
     }
-
-    //-------------------------------------------------------------
-    //-------------------------------------------------------------
-    // **** Branch Prediction ****
-    //-------------------------------------------------------------
-    //-------------------------------------------------------------
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
@@ -371,10 +360,6 @@ class iFuCore extends CoreModule {
     flush_pc_req.valid := rob.io.flush.valid
     flush_pc_req.bits := rob.io.flush.bits.ftq_idx
 
-    // Mispredict requests (to get the correct target)
-    ifu.io.exe.getFtqPc(1).ftqIdx := oldest_mispredict_ftq_idx
-
-
     //-------------------------------------------------------------
     // Decode/Rename1 pipeline logic
 
@@ -389,8 +374,8 @@ class iFuCore extends CoreModule {
                         || rob.io.commit.rollback
                         || dec_xcpt_stall
                         || branch_mask_full(w)
-                        || brupdate.b1.mispredictMask =/= 0.U
-                        || brupdate.b2.mispredict
+                        || brUpdate.b1.mispredictMask =/= 0.U
+                        || brUpdate.b2.mispredict
                         || ifu.io.exe.redirect_flush))
 
     val dec_stalls = dec_hazards.scanLeft(false.B)((s, h) => s || h).takeRight(coreWidth)
@@ -408,7 +393,7 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     // Branch Mask Logic
 
-    dec_brmask_logic.io.brupdate := brupdate
+    dec_brmask_logic.io.brUpdate := brUpdate
     dec_brmask_logic.io.flush_pipeline := RegNext(rob.io.flush.valid)
 
     for (w <- 0 until coreWidth) {
@@ -430,7 +415,7 @@ class iFuCore extends CoreModule {
     // Inputs
     for (rename <- rename_stages) {
         rename.io.kill := ifu.io.exe.redirect_flush
-        rename.io.brupdate := brupdate
+        rename.io.brUpdate := brUpdate
 
         rename.io.dec_fire := dec_fire
         rename.io.dec_uops := dec_uops
@@ -507,8 +492,8 @@ class iFuCore extends CoreModule {
                         || !dispatcher.io.ren_uops(w).ready
                         || wait_for_empty_pipeline(w)
                         || dis_prior_slot_unique(w)
-                        || brupdate.b1.mispredictMask =/= 0.U
-                        || brupdate.b2.mispredict
+                        || brUpdate.b1.mispredictMask =/= 0.U
+                        || brUpdate.b2.mispredict
                         || ifu.io.exe.redirect_flush))
 
 
@@ -727,7 +712,7 @@ class iFuCore extends CoreModule {
     }
     require(iss_idx == exe_units.numIrfReaders)
 
-    issue_units.map(_.io.brUpdate := brupdate)
+    issue_units.map(_.io.brUpdate := brUpdate)
     issue_units.map(_.io.flushPipeline := RegNext(rob.io.flush.valid))
 
     // Load-hit Misspeculations
@@ -768,7 +753,7 @@ class iFuCore extends CoreModule {
     iregister_read.io.iss_uops := iss_uops
     iregister_read.io.iss_uops map { u => u.iw_p1_poisoned := false.B; u.iw_p2_poisoned := false.B }
 
-    iregister_read.io.brupdate := brupdate
+    iregister_read.io.brupdate := brUpdate
     iregister_read.io.kill := RegNext(rob.io.flush.valid)
 
     iregister_read.io.bypass := bypasses
@@ -796,7 +781,7 @@ class iFuCore extends CoreModule {
     csr.io.exception := RegNext(rob.io.com_xcpt.valid)
     // csr.io.pc used for setting EPC during exception or CSR.io.trace.
 
-    csr.io.pc := (AlignPCToBoundary(ifu.io.exe.getFtqPc(0).compc, icBlockBytes)
+    csr.io.pc := (AlignPCToBoundary(ifu.io.exe.getFtqPc(0).compc, iCacheLineBytes)
             + RegNext(rob.io.com_xcpt.bits.pc_lob))
     // Cause not valid for for CALL or BREAKPOINTs (CSRFile will override it).
     csr.io.cause := RegNext(rob.io.com_xcpt.bits.cause)
@@ -883,7 +868,7 @@ class iFuCore extends CoreModule {
     lsu.io.core.exception := RegNext(rob.io.flush.valid)
 
     // Handle Branch Mispeculations
-    lsu.io.core.brupdate := brupdate
+    lsu.io.core.brupdate := brUpdate
     lsu.io.core.rob_head_idx := rob.io.rob_head_idx
 
 
@@ -988,7 +973,7 @@ class iFuCore extends CoreModule {
     require(cnt == rob.numWakeupPorts)
 
     // branch resolution
-    rob.io.brupdate <> brupdate
+    rob.io.brupdate <> brUpdate
 
 /*    exe_units.map(u => u.io.status := csr.io.status)
 
