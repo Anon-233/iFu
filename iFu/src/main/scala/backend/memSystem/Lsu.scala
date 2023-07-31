@@ -434,7 +434,7 @@ class Lsu extends CoreModule {
             will_fire_sta_incoming(w) || will_fire_sfence(w),
             exe_tlb_uop(w).mem_cmd, 0.U)
     )*/
-    val dtlb = new DTlb
+    val dtlb = Module(new DTlb)
     // exceptions
     //TODO ma_ld和ma_st的条件判断需要更改
     val ma_ld = widthMap(w => will_fire_load_incoming(w) && /*exe_req(w).bits.mxcpt.valid*/false.B) // We get ma_ld in memaddrcalc
@@ -1315,18 +1315,29 @@ object loadDataGen{
 }
 object storeDataGen{
     def apply(addr: UInt, data:UInt, memSize:UInt): UInt = {
-        val storeData = WireInit(0.U(32.W))
+        val storeData = WireInit(0.U.asTypeOf(Vec(4,UInt(8.W))))
         when(memSize === 0.U){
-            when(addr === 0.U){ storeData(7,0) := data(7,0)}
-                    .elsewhen(addr === 1.U){storeData(15,8) := data(15,8)}
-                    .elsewhen(addr === 2.U){storeData(23,16) := data(23,16)}
-                    .elsewhen(addr === 3.U){storeData(31,24) := data(31,24)}
+            when(addr === 0.U){ 
+                storeData(0) := data(7,0)}
+                    .elsewhen(addr === 1.U){storeData(1) := data(15,8)}
+                    .elsewhen(addr === 2.U){storeData(2) := data(23,16)}
+                    .elsewhen(addr === 3.U){storeData(3) := data(31,24)}
         }.elsewhen(memSize === 1.U){
-            when(addr(1) === 0.U){storeData(15,0) := data(15,0)}
-                    .elsewhen(addr(1) === 1.U){storeData(31,16) := data(31,16)}
+        
+            when(addr(1) === 0.U){
+                storeData(0) := data(7,0)
+                storeData(1) := data(15,8)}
+            .elsewhen(addr(1) === 1.U){
+                storeData(2) := data(23,16)
+                storeData(3) := data(31,24)}
+
+        
         }.elsewhen(memSize === 2.U){
-            storeData := data
+            storeData(0) := data(7,0)
+            storeData(1) := data(15,8)
+            storeData(2) := data(23,16)
+            storeData(3) := data(31,24)
         }
-        storeData
+        storeData.asUInt
     }
 }
