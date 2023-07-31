@@ -12,80 +12,66 @@ import iFu.util._
 
 class iFuCore extends CoreModule {
     val io = IO(new CoreBundle {
-        // input logic clk, reset,
-        // output ibus_req_t  ireq,
-        // input  ibus_resp_t iresp,
-        // output dbus_req_t  dreq,
-        // input  dbus_resp_t dresp,
-        // input logic [7:0] ext_int
-
-        //        val interrupts = Input(new freechips.rocketchip.tile.CoreInterrupts())
-        // val ptw_tlb = new freechips.rocketchip.rocket.TLBPTWIO()
+        val ext_int = Input(UInt(8.W))
+        val ireq = Output(new CBusReq)
+        val iresp = Input(new CBusResp)
+        val dreq = Output(new CBusReq)
+        val dresp = Input(new CBusResp)
     })
-    //**********************************
-    // construct all of the modules
-    val fetchWidth  = frontendParams.fetchWidth
-    val decodeWidth = coreWidth
-    val bankBytes   = frontendParams.iCacheParams.bankBytes
+/*-----------------------------*/
+
+    val fetchWidth    = frontendParams.fetchWidth
+    val decodeWidth   = coreWidth
+    val bankBytes     = frontendParams.iCacheParams.bankBytes
+    val memIssueParam = issueParams.filter(_.iqType == IQT_MEM)(0)
+    val intIssueParam = issueParams.filter(_.iqType == IQT_INT)(0)
+    val numFTQEntries = frontendParams.numFTQEntries
+
+/*-----------------------------*/
 
     val ifu = Module(new Frontend)
 
-    // Only holds integer-registerfile execution units.
+    val decode_units = Seq.fill(decodeWidth) { Module(new DecodeUnit) }
+    val dec_brmask_logic = Module(new BranchMaskGenerationLogic)
+
+    val dispatcher = Module(new BasicDispatcher)
+
     val exe_units = new ExecutionUnits
     val jmp_unit_idx = exe_units.jmp_unit_idx
     val jmp_unit = exe_units(jmp_unit_idx)
+    val mem_units = exe_units.memory_units
 
-
-    val numIrfWritePorts = exe_units.numIrfWritePorts + memWidth
-    val numMemIrfWritePorts = exe_units.numMemIrfWritePorts
-    val numIrfReadPorts = exe_units.numIrfReadPorts
-
+    val numReadPorts  = exe_units.numReadPorts
+    val numWritePorts = exe_units.numWritePorts + memWidth
     val numFastWakeupPorts = exe_units.count(_.bypassable)
     val numAlwaysBypassable = exe_units.count(_.alwaysBypassable)
+    val numIssueWakeupPorts = numIrfWritePorts + numFastWakeupPorts - numAlwaysBypassable
+    val numRenameWakeupPorts = numIssueWakeupPorts
 
-    val numIntIssueWakeupPorts = numIrfWritePorts + numFastWakeupPorts - numAlwaysBypassable // + memWidth for ll_wb
-    val numIntRenameWakeupPorts = numIntIssueWakeupPorts
-
-    val decode_units = for (w <- 0 until decodeWidth) yield {
-        val d = Module(new DecodeUnit); d
-    }
-    val dec_brmask_logic = Module(new BranchMaskGenerationLogic)
     val rename_stage = Module(new RenameStage(coreWidth, numPRegs, numIntRenameWakeupPorts))
-    val pred_rename_stage = Module(new PredRenameStage(coreWidth, ftqSz, 1))
+    val pred_rename_stage = Module(new PredRenameStage(coreWidth, numFTQEntries, 1))
     val rename_stages = Seq(rename_stage, pred_rename_stage)
 
-    val memIssueParam = issueParams.filter(_.iqType == IQT_MEM)(0)
-    val intIssueParam = issueParams.filter(_.iqType == IQT_INT)(0)
-    val mem_iss_unit = Module(new IssueUnitAgeOrdered(memIssueParam, numIntIssueWakeupPorts))
-    /*mem_iss_unit.suggestName("mem_issue_unit")*/
-    val int_iss_unit = Module(new IssueUnitAgeOrdered(intIssueParam, numIntIssueWakeupPorts))
-    /*int_iss_unit.suggestName("int_issue_unit")*/
-
+    val mem_iss_unit = Module(new IssueUnitAgeOrdered(memIssueParam, numIssueWakeupPorts))
+    val int_iss_unit = Module(new IssueUnitAgeOrdered(intIssueParam, numIssueWakeupPorts))
     val issue_units = Seq(mem_iss_unit, int_iss_unit)
-    val dispatcher = Module(new BasicDispatcher)
-    val ftqSz      = frontendParams.numFTQEntries
+    require(exe_units.length == issue_units.map(_.issueWidth).sum)
+
     val iregfile = Module(new RegisterFileSynthesizable(
         numPRegs,
         numIrfReadPorts,
         numIrfWritePorts,
         xLen,
-        Seq.fill(memWidth) {
-            true
-        } ++ exe_units.bypassable_write_port_mask)) // bypassable ll_wb
+        Seq.fill(memWidth) { true } ++ exe_units.bypassable_write_port_mask
+    ))
     val pregfile = Module(new RegisterFileSynthesizable(
-        ftqSz,
+        numFTQEntries,
         exe_units.numIrfReaders,
         1,
         1,
-        Seq(true))) // The jmp unit is always bypassable
-    pregfile.io := DontCare // Only use the IO if enableSFBOpt
-
-    // wb arbiter for the 0th ll writeback
-    // TODO: 不需要仲裁器
-
-    val ll_wbarb         = Module(new Arbiter(new ExeUnitResp(xLen), 1 ))
-    //            (if (usingFPU) 1 else 0) +
-    //            (if (usingRoCC) 1 else 0)))
+        Seq(true)
+    ))
+    pregfile.io <> DontCare
     val iregister_read = Module(new RegisterRead(
         issue_units.map(_.issueWidth).sum,
         exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits).toSeq,
@@ -93,14 +79,25 @@ class iFuCore extends CoreModule {
         exe_units.withFilter(_.readsIrf).map(x => 2).toSeq,
         exe_units.numTotalBypassPorts,
         jmp_unit.numStages,
-        xLen))
+        xLen
+    ))
+
+    val lsu = Module(new Lsu)
+
     val rob = Module(new Rob(numIrfWritePorts))
-    // Used to wakeup registers in rename and issue. ROB needs to listen to something else.
-    val int_iss_wakeups = Wire(Vec(numIntIssueWakeupPorts, Valid(new ExeUnitResp)))
-    val int_ren_wakeups = Wire(Vec(numIntRenameWakeupPorts, Valid(new ExeUnitResp)))
+
+/*-----------------------------*/
+
+    val int_iss_wakeups = Wire(Vec(numIssueWakeupPorts, Valid(new ExeUnitResp)))
+    val int_ren_wakeups = Wire(Vec(numRenameWakeupPorts, Valid(new ExeUnitResp)))
     val pred_wakeup = Wire(Valid(new ExeUnitResp(1)))
 
-    require(exe_units.length == issue_units.map(_.issueWidth).sum)
+/*-----------------------------*/
+    io.ireq := ifu.io.ireq
+    ifu.io.iresp := io.iresp
+    io.dreq := lsu.io.dreq
+    lsu.io.dresp := io.dresp
+/*-----------------------------*/
 
     //***********************************
     // Pipeline State Registers and Wires
@@ -184,7 +181,7 @@ class iFuCore extends CoreModule {
 
 
     // Load/Store Unit & ExeUnits
-    val mem_units = exe_units.memory_units
+    
     val mem_resps = mem_units.map(_.io.mem_iresp)
     for (i <- 0 until memWidth) {
         mem_units(i).io.lsu_io <> lsu.io.core.exe(i)
@@ -337,11 +334,11 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     // FTQ GetPC Port Arbitration
 
-    val jmp_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
-    val xcpt_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
-    val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(ftqSz).W)))
+    val jmp_pc_req = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
+    val xcpt_pc_req = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
+    val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
 
-    val ftq_arb = Module(new Arbiter(UInt(log2Ceil(ftqSz).W), 3))
+    val ftq_arb = Module(new Arbiter(UInt(log2Ceil(numFTQEntries).W), 3))
 
     // Order by the oldest. Flushes come from the oldest instructions in pipe
     // Decoding exceptions come from youngest
@@ -585,16 +582,10 @@ class iFuCore extends CoreModule {
 
     require(issue_units.map(_.issueWidth).sum == exe_units.length)
 
-    var iss_wu_idx = 1
-    var ren_wu_idx = 1
-    // The 0th wakeup port goes to the ll_wbarb
-    int_iss_wakeups(0).valid := ll_wbarb.io.out.fire && ll_wbarb.io.out.bits.uop.dst_rtype === RT_FIX
-    int_iss_wakeups(0).bits := ll_wbarb.io.out.bits
+    var iss_wu_idx = 0
+    var ren_wu_idx = 0
 
-    int_ren_wakeups(0).valid := ll_wbarb.io.out.fire && ll_wbarb.io.out.bits.uop.dst_rtype === RT_FIX
-    int_ren_wakeups(0).bits := ll_wbarb.io.out.bits
-
-    for (i <- 1 until memWidth) {
+    for (i <- 0 until memWidth) {
         int_iss_wakeups(i).valid := mem_resps(i).valid && mem_resps(i).bits.uop.dst_rtype === RT_FIX
         int_iss_wakeups(i).bits := mem_resps(i).bits
 
@@ -630,11 +621,11 @@ class iFuCore extends CoreModule {
                     !resp.bits.uop.bypassable &&
                     resp.bits.uop.dst_rtype === RT_FIX
 
-            if (exe_units(i).bypassable) {
+            if (exe_units(i).bypassable) {  // has alu
                 int_iss_wakeups(iss_wu_idx) := fast_wakeup
                 iss_wu_idx += 1
             }
-            if (!exe_units(i).alwaysBypassable) {
+            if (!exe_units(i).alwaysBypassable) {   // has alu and other
                 int_iss_wakeups(iss_wu_idx) := slow_wakeup
                 iss_wu_idx += 1
             }
@@ -649,8 +640,8 @@ class iFuCore extends CoreModule {
             }
         }
     }
-    require(iss_wu_idx == numIntIssueWakeupPorts)
-    require(ren_wu_idx == numIntRenameWakeupPorts)
+    require(iss_wu_idx == numIssueWakeupPorts)
+    require(ren_wu_idx == numRenameWakeupPorts)
     require(iss_wu_idx == ren_wu_idx)
 
     // jmp unit performs fast wakeup of the predicate bits
@@ -832,7 +823,7 @@ class iFuCore extends CoreModule {
             ea
 
 
-    csr.io.interrupts := io.interrupts
+    csr.io.ext_int := io.ext_int
 
     // we do not support the H-extension
     csr.io.htval := DontCare
@@ -903,11 +894,9 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
 
     val ipregSz = pregSz
-    var w_cnt = 1
-    iregfile.io.write_ports(0) := WritePort(ll_wbarb.io.out, ipregSz, xLen, RT_FIX)
-    ll_wbarb.io.in(0) <> mem_resps(0)
-    assert(ll_wbarb.io.in(0).ready) // never backpressure the memory unit.
-    for (i <- 1 until memWidth) {
+    var w_cnt = 0
+
+    for (i <- 0 until memWidth) {
         iregfile.io.write_ports(w_cnt) := WritePort(mem_resps(i), ipregSz, xLen, RT_FIX)
         w_cnt += 1
     }
@@ -963,15 +952,8 @@ class iFuCore extends CoreModule {
 
     // Writeback
     // ---------
-    // First connect the ll_wport
-    val ll_uop = ll_wbarb.io.out.bits.uop
-    rob.io.wb_resps(0).valid := ll_wbarb.io.out.valid && !(ll_uop.uses_stq && !ll_uop.is_amo)
-    rob.io.wb_resps(0).bits <> ll_wbarb.io.out.bits
-    rob.io.debug_wb_valids(0) := ll_wbarb.io.out.valid && ll_uop.dst_rtype =/= RT_X
-    rob.io.debug_wb_wdata(0)  := ll_wbarb.io.out.bits.data
-    rob.io.debug_wb_ldst(0)   := ll_wbarb.io.out.bits.uop.ldst
-    var cnt = 1
-    for (i <- 1 until memWidth) {
+    var cnt = 0
+    for (i <- 0 until memWidth) {
         val mem_uop = mem_resps(i).bits.uop
         rob.io.wb_resps(cnt).valid := mem_resps(i).valid && !(mem_uop.use_stq && !mem_uop.is_amo)
         rob.io.wb_resps(cnt).bits := mem_resps(i).bits
@@ -1022,8 +1004,6 @@ class iFuCore extends CoreModule {
     rob.io.lsu_clr_bsy := lsu.io.core.clr_bsy
     rob.io.lxcpt <> lsu.io.core.lxcpt
 
-
-
     //-------------------------------------------------------------
     // **** Flush Pipeline ****
     //-------------------------------------------------------------
@@ -1036,15 +1016,6 @@ class iFuCore extends CoreModule {
 
     assert(!(rob.io.com_xcpt.valid && !rob.io.flush.valid),
         "[core] exception occurred, but pipeline flush signal not set!")
-
-    //-------------------------------------------------------------
-    //-------------------------------------------------------------
-    // Page Table Walker
-
-    //    io.ptw.ptbr       := csr.io.ptbr
-    //    io.ptw.status     := csr.io.status
-    //    io.ptw.pmp        := csr.io.pmp
-    //    io.ptw.sfence     := ifu.io.exe.sfence
 
     //-------------------------------------------------------------
     // *** debug for difftest

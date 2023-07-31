@@ -8,7 +8,7 @@ import iFu.common.Consts._
 
 import scala.collection.mutable.ArrayBuffer
 
-class ExecutionUnits extends CoreModule {
+class ExecutionUnits extends HasCoreParameters {
     val totalIssueWidth = issueParams.map(_.issueWidth).sum
 
     private val exe_units = ArrayBuffer[ExecutionUnit]()
@@ -81,10 +81,10 @@ class ExecutionUnits extends CoreModule {
         exe_units += alu_exe_unit
     }
 
-    val numIrfReaders       = exe_units.count(_.readsIrf)
-    val numIrfReadPorts     = exe_units.count(_.readsIrf) * 2
-    val numIrfWritePorts    = exe_units.count(_.writesIrf)
-    val numMemIrfWritePorts = exe_units.count(_.writesMemIrf)
+    val numReaders          = exe_units.count(_.readsIrf)
+    val numReadPorts        = exe_units.count(_.readsIrf) * 2
+    val numWritePorts       = exe_units.count(_.writesIrf)
+    val numMemWritePorts    = exe_units.count(_.writesMemIrf)
     val numTotalBypassPorts = exe_units.withFilter(_.bypassable).map(_.numStages).foldLeft(0)(_ + _)
 
     val bypassable_write_port_mask = exe_units.withFilter(x => x.writesIrf).map(u => u.bypassable)
