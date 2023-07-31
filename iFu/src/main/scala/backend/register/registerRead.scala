@@ -39,7 +39,7 @@ class RegisterRead(
     val exeRegUops = Reg(Vec(issueWidth,new MicroOp()))
     val exeRegRs1Data = Reg(Vec(issueWidth,Bits(registerWidth.W)))
     val exeRegRs2Data = Reg(Vec(issueWidth,Bits(registerWidth.W)))
-    val exeRegRs3Data = Reg(Vec(issueWidth,Bits(registerWidth.W)))
+    //val exeRegRs3Data = Reg(Vec(issueWidth,Bits(registerWidth.W)))
     val exeRegPredData = Reg(Vec(issueWidth,Bool()))
 
 
@@ -57,12 +57,12 @@ class RegisterRead(
 
     val rrdRs1Data = Wire(Vec(issueWidth,Bits(registerWidth.W)))
     val rrdRs2Data = Wire(Vec(issueWidth,Bits(registerWidth.W)))
-    val rrdRs3Data = Wire(Vec(issueWidth,Bits(registerWidth.W)))
+    //val rrdRs3Data = Wire(Vec(issueWidth,Bits(registerWidth.W)))
     val rrdPredData  = Wire(Vec(issueWidth,Bool()))
 
     rrdRs1Data := DontCare
     rrdRs2Data := DontCare
-    rrdRs3Data := DontCare
+    //rrdRs3Data := DontCare
     rrdPredData := DontCare
 
     io.prf_read_ports := DontCare
@@ -73,18 +73,18 @@ class RegisterRead(
 
         val rs1Addr = io.iss_uops(w).prs1
         val rs2Addr = io.iss_uops(w).prs2
-        val rs3Addr = io.iss_uops(w).prs3
+        //val rs3Addr = io.iss_uops(w).prs3
         val predAddr = io.iss_uops(w).ppred
 
         if(numReadPorts > 0 ) io.rf_read_ports(idx+0).addr := rs1Addr
         if(numReadPorts > 1 ) io.rf_read_ports(idx+1).addr := rs2Addr
-        if(numReadPorts > 2 ) io.rf_read_ports(idx+2).addr := rs3Addr
+        //if(numReadPorts > 2 ) io.rf_read_ports(idx+2).addr := rs3Addr
 
         if(enableSFBOpt) io.prf_read_ports(w).addr := predAddr
 
         if (numReadPorts > 0) rrdRs1Data(w) := Mux(RegNext(rs1Addr === 0.U), 0.U, io.rf_read_ports(idx+0).data)
         if (numReadPorts > 1) rrdRs2Data(w) := Mux(RegNext(rs2Addr === 0.U), 0.U, io.rf_read_ports(idx+1).data)
-        if (numReadPorts > 2) rrdRs3Data(w) := Mux(RegNext(rs3Addr === 0.U), 0.U, io.rf_read_ports(idx+2).data)
+        //if (numReadPorts > 2) rrdRs3Data(w) := Mux(RegNext(rs3Addr === 0.U), 0.U, io.rf_read_ports(idx+2).data)
 
         if (enableSFBOpt) rrdPredData(w) := Mux(RegNext(io.iss_uops(w).is_sfb_shadow), io.prf_read_ports(w).data, false.B)
 
@@ -107,9 +107,9 @@ class RegisterRead(
 
     for(w<- 0 until issueWidth){
         val numReadPorts = numReadPortsArray(w)
-        val rs1Cases = Array((false.B, 0.U(registerWidth.W)))
-        val rs2Cases = Array((false.B, 0.U(registerWidth.W)))
-        val predCases = Array((false.B, 0.U(1.W)))
+        var rs1Cases = Array((false.B, 0.U(registerWidth.W)))
+        var rs2Cases = Array((false.B, 0.U(registerWidth.W)))
+        var predCases = Array((false.B, 0.U(1.W)))
         
         val prs1 = rrdUops(w).prs1
         val lrs1Rtype = rrdUops(w).lrs1_rtype
@@ -130,7 +130,7 @@ class RegisterRead(
 
         for(b <- 0 until numTotalPredBypassPorts){
             val bypass = io.pred_bypass(b)
-            predCases ++= Array((bypass.valid && (ppred === bypass.bits.uop.pdst) && bypass.bits.uop.is_sfb_br,bypas.bits.data))
+            predCases ++= Array((bypass.valid && (ppred === bypass.bits.uop.pdst) && bypass.bits.uop.is_sfb_br,bypass.bits.data))
 
         }
 
@@ -143,7 +143,7 @@ class RegisterRead(
         val numReadPorts = numReadPortsArray(w)
         if(numReadPorts > 0) exeRegRs1Data(w) := bypassedRs1Data(w)
         if(numReadPorts > 1) exeRegRs2Data(w) := bypassedRs2Data(w)
-        if(numRedaPorts > 2) exeRegRs3Data(w) := rrdRs3Data(w)
+        //if(numRedaPorts > 2) exeRegRs3Data(w) := rrdRs3Data(w)
         if(enableSFBOpt) exeRegPredData(w) := bypassedPredData(w)
     }
 
@@ -155,7 +155,7 @@ class RegisterRead(
 
         if(numReadPorts > 0) io.exe_reqs(w).bits.rs1Data := exeRegRs1Data(w)
         if(numReadPorts > 1) io.exe_reqs(w).bits.rs2Data := exeRegRs2Data(w)
-        if(numReadPorts > 2) io.exe_reqs(w).bits.rs3_data := exeRegRs3Data(w)
+        //if(numReadPorts > 2) io.exe_reqs(w).bits.rs3_data := exeRegRs3Data(w)
         if(enableSFBOpt) io.exe_reqs(w).bits.predData := exeRegPredData(w)
     }
     
