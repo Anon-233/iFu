@@ -69,7 +69,7 @@ object MemoryOpConstants {
 
 abstract trait DecodeTable {
     val DC2 = BitPat.dontCare(2)
-
+    val DC1 = BitPat.dontCare(1)
     def decode_default: List[BitPat] =
     //                                                                  frs3_en                        wakeup_delay
     //     is val inst?                                                 |  imm sel                     |    bypassable (aka, known/fixed latency)
@@ -82,7 +82,7 @@ abstract trait DecodeTable {
     //     |     |  |         |        |        regtype |       |       |  |     |  |  |  |  |  cmd    |    |  |  |  |  flush on commit
     //     |     |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |    |  |  |  |  |  csr cmd
     //     |     |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |    |  |  |  |  |  |
-        List(N, uopX, IQT_X, FU_X, RT_X, DC2, DC2, X, immX, X, X, X, X, N, /*M_X,*/ DC2, X, X, N, N, X, CSR.X)
+        List(N, uopX, IQT_X, FU_X, RT_X, DC1, DC1, immX, X, X, X, X, N, /*M_X,*/ DC2, X, X, N, N, X, CSR.X)
 
     val table: Array[(BitPat, List[BitPat])]
 }

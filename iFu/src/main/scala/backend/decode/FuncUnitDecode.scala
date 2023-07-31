@@ -15,7 +15,6 @@ class RRdCtrlSigs extends CoreBundle {
     val use_muldivpipe = Bool()
     val use_mempipe    = Bool()
     val op_fcn         = Bits((new AluFuncCode).SZ_ALU_FN.W)
-    val fcn_dw         = Bool()
     val op1_sel        = UInt(OP1_X.getWidth.W)
     val op2_sel        = UInt(OP2_X.getWidth.W)
     val imm_sel        = UInt(immX.getWidth.W)
@@ -26,7 +25,7 @@ class RRdCtrlSigs extends CoreBundle {
         val decoder = DecodeLogic(uopc, AluRRdDecode.default, table)
         val sigs = Seq(
             br_type, use_alupipe, use_muldivpipe, use_mempipe, op_fcn,
-            fcn_dw, op1_sel, op2_sel, imm_sel, rf_wen, csr_cmd
+            op1_sel, op2_sel, imm_sel, rf_wen, csr_cmd
         )
         sigs zip decoder map {case(s,d) => s := d}
         this
@@ -179,7 +178,6 @@ class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
     io.rrd_uop.ctrl.op2_sel := rrd_cs.op2_sel
     io.rrd_uop.ctrl.imm_sel := rrd_cs.imm_sel
     io.rrd_uop.ctrl.op_fcn  := rrd_cs.op_fcn.asUInt
-    io.rrd_uop.ctrl.fcn_dw  := rrd_cs.fcn_dw.asBool
     io.rrd_uop.ctrl.is_load := io.rrd_uop.uopc === uopLD
     io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopAMO_AG
     io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype === RT_FIX)
