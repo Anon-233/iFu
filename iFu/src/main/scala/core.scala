@@ -312,7 +312,7 @@ class iFuCore extends CoreModule {
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
-    // **** Decode Stage ****
+    // **** Decode ****
     //-------------------------------------------------------------
     //-------------------------------------------------------------
 
@@ -359,24 +359,23 @@ class iFuCore extends CoreModule {
     val dec_xcpt_stall = dec_xcpts.reduce(_||_) && !xcpt_pc_req.ready
 
     val dec_hazards = (0 until coreWidth).map(w =>
-        dec_valids(w) &&
-                (!dis_ready
-                        || rob.io.commit.rollback
-                        || dec_xcpt_stall
-                        || branch_mask_full(w)
-                        || brUpdate.b1.mispredictMask =/= 0.U
-                        || brUpdate.b2.mispredict
-                        || ifu.io.exe.redirect_flush))
-
+        dec_valids(w) && (
+            !dis_ready || 
+            rob.io.commit.rollback ||
+            dec_xcpt_stall ||
+            branch_mask_full(w) ||
+            brUpdate.b1.mispredictMask =/= 0.U||
+            brUpdate.b2.mispredict||
+            ifu.io.exe.redirect_flush)
+    )
     val dec_stalls = dec_hazards.scanLeft(false.B)((s, h) => s || h).takeRight(coreWidth)
-    dec_fire := (0 until coreWidth).map(w => dec_valids(w) && !dec_stalls(w))
+    dec_fire := (0 until coreWidth).map { w => dec_valids(w) && !dec_stalls(w) }
 
-    // all decoders are empty and ready for new instructions
     dec_ready := dec_fire.last
 
-    when(dec_ready || ifu.io.exe.redirect_flush) {
+    when (dec_ready || ifu.io.exe.redirect_flush) {
         dec_finished_mask := 0.U
-    }.otherwise {
+    } .otherwise {
         dec_finished_mask := dec_fire.asUInt | dec_finished_mask
     }
 
@@ -386,65 +385,46 @@ class iFuCore extends CoreModule {
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
-    // **** Register Rename Stage ****
+    // **** Register Rename ****
     //-------------------------------------------------------------
     //-------------------------------------------------------------
 
     // Inputs
     for (rename <- rename_stages) {
-        rename.io.kill := ifu.io.exe.redirect_flush
-        rename.io.brUpdate := brUpdate
-
-        rename.io.dec_fire := dec_fire
-        rename.io.dec_uops := dec_uops
-
-        rename.io.dis_fire := dis_fire
-        rename.io.dis_ready := dis_ready
-
+        rename.io.kill       := ifu.io.exe.redirect_flush
+        rename.io.brupdate   := brUpdate
+        rename.io.dec_fire   := dec_fire
+        rename.io.dec_uops   := dec_uops
+        rename.io.dis_fire   := dis_fire
+        rename.io.dis_ready  := dis_ready
         rename.io.com_valids := rob.io.commit.valids
-        rename.io.com_uops := rob.io.commit.uops
+        rename.io.com_uops   := rob.io.commit.uops
         rename.io.rbk_valids := rob.io.commit.rbk_valids
-        rename.io.rollback := rob.io.commit.rollback
+        rename.io.rollback   := rob.io.commit.rollback
     }
 
-
-    // Outputs
-    dis_uops := rename_stage.io.ren2_uops
     dis_valids := rename_stage.io.ren2_mask
+    dis_uops   := rename_stage.io.ren2_uops
     ren_stalls := rename_stage.io.ren_stalls
 
-
-    /**
-     * TODO This is a bit nasty, but it's currently necessary to
-     * split the INT/FP rename pipelines into separate instantiations.
-     * Won't have to do this anymore with a properly decoupled FP pipeline.
-     */
     for (w <- 0 until coreWidth) {
         val i_uop = rename_stage.io.ren2_uops(w)
-        val f_uop = if (usingFPU) fp_rename_stage.io.ren2_uops(w) else NullMicroOp
         val p_uop = if (enableSFBOpt) pred_rename_stage.io.ren2_uops(w) else NullMicroOp
-        val f_stall = if (usingFPU) fp_rename_stage.io.ren_stalls(w) else false.B
-        val p_stall = if (enableSFBOpt) pred_rename_stage.io.ren_stalls(w) else false.B
 
-        // lrs1 can "pass through" to prs1. Used solely to index the csr file.
-        dis_uops(w).prs1 := Mux(dis_uops(w).lrs1_rtype === RT_FLT, f_uop.prs1,
-            Mux(dis_uops(w).lrs1_rtype === RT_FIX, i_uop.prs1, dis_uops(w).lrs1))
-        dis_uops(w).prs2 := Mux(dis_uops(w).lrs2_rtype === RT_FLT, f_uop.prs2, i_uop.prs2)
-        dis_uops(w).prs3 := f_uop.prs3
+        dis_uops(w).prs1 := i_uop.prs1
+        dis_uops(w).prs2 := i_uop.prs2
         dis_uops(w).ppred := p_uop.ppred
-        dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype === RT_FLT, f_uop.pdst,
-            Mux(dis_uops(w).dst_rtype === RT_FIX, i_uop.pdst,
-                p_uop.pdst))
-        dis_uops(w).stale_pdst := Mux(dis_uops(w).dst_rtype === RT_FLT, f_uop.stale_pdst, i_uop.stale_pdst)
 
-        dis_uops(w).prs1_busy := i_uop.prs1_busy && (dis_uops(w).lrs1_rtype === RT_FIX) ||
-                f_uop.prs1_busy && (dis_uops(w).lrs1_rtype === RT_FLT)
-        dis_uops(w).prs2_busy := i_uop.prs2_busy && (dis_uops(w).lrs2_rtype === RT_FIX) ||
-                f_uop.prs2_busy && (dis_uops(w).lrs2_rtype === RT_FLT)
-        dis_uops(w).prs3_busy := f_uop.prs3_busy && dis_uops(w).frs3_en
+        dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype === RT_FIX, i_uop.pdst, p_uop.pdst)
+
+        dis_uops(w).stale_pdst := i_uop.stale_pdst
+
+        dis_uops(w).prs1_busy := i_uop.prs1_busy && (dis_uops(w).lrs1_rtype === RT_FIX)
+        dis_uops(w).prs2_busy := i_uop.prs2_busy && (dis_uops(w).lrs2_rtype === RT_FIX)
+
         dis_uops(w).ppred_busy := p_uop.ppred_busy && dis_uops(w).is_sfb_shadow
 
-        ren_stalls(w) := rename_stage.io.ren_stalls(w) || f_stall || p_stall
+        ren_stalls(w) := rename_stage.io.ren_stalls(w)
     }
 
     //-------------------------------------------------------------
