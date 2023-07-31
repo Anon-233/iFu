@@ -287,20 +287,36 @@ class iFuCore extends CoreModule {
         }
     }
 
+    val ftq_arb = Module(new Arbiter(UInt(log2Ceil(numFTQEntries).W), 3))
+    val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
+    val jmp_pc_req   = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
+    val xcpt_pc_req  = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
+
+    // Order by the oldest. Flushes come from the oldest instructions in pipe
+    // Decoding exceptions come from youngest
+    ftq_arb.io.in(0) <> flush_pc_req
+    ftq_arb.io.in(1) <> jmp_pc_req
+    ftq_arb.io.in(2) <> xcpt_pc_req
+
+    flush_pc_req.valid := rob.io.flush.valid
+    flush_pc_req.bits := rob.io.flush.bits.ftq_idx
+
+    jmp_pc_req.valid := RegNext(iss_valids(jmp_unit_idx) && iss_uops(jmp_unit_idx).fuCode === FU_JMP)
+    jmp_pc_req.bits := RegNext(iss_uops(jmp_unit_idx).ftqIdx)
+
+    ifu.io.exe.get_pc(0).ftq_idx := ftq_arb.io.out.bits
+    ftq_arb.io.out.ready := true.B
+
+    jmp_unit.io.getFtqPc <> ifu.io.exe.getFtqPc(0)
+    rob.io.xcpt_fetch_pc := ifu.io.exe.getFtqPc(0).pc
+
     //-------------------------------------------------------------
     //-------------------------------------------------------------
     // **** Decode Stage ****
     //-------------------------------------------------------------
     //-------------------------------------------------------------
 
-    // track mask of finished instructions in the bundle
-    // use this to mask out insts coming from FetchBuffer that have been finished
-    // for example, back pressure may cause us to only issue some instructions from FetchBuffer
-    // but on the next cycle, we only want to retry a subset
     val dec_finished_mask = RegInit(0.U(coreWidth.W))
-
-    //-------------------------------------------------------------
-    // Pull out instructions and send to the Decoders
 
     ifu.io.exe.fetchPacket.ready := dec_ready
     val dec_fbundle = ifu.io.exe.fetchPacket.bits
@@ -309,64 +325,38 @@ class iFuCore extends CoreModule {
     // Decoders
 
     for (w <- 0 until coreWidth) {
-        dec_valids(w) := ifu.io.exe.fetchPacket.valid && dec_fbundle.uops(w).valid &&
-                !dec_finished_mask(w)
+        dec_valids(w) :=
+            ifu.io.exe.fetchPacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
         decode_units(w).io.enq.uop := dec_fbundle.uops(w).bits
-        decode_units(w).io.status := csr.io.status
-        decode_units(w).io.csr_decode <> csr.io.decode(w)
-        decode_units(w).io.interrupt := csr.io.interrupt
-        decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
+        // decode_units(w).io.status := csr.io.status
+        // decode_units(w).io.csr_decode <> csr.io.decode(w)
+        // decode_units(w).io.interrupt := csr.io.interrupt
+        // decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
 
         dec_uops(w) := decode_units(w).io.deq.uop
     }
 
     //-------------------------------------------------------------
-    // FTQ GetPC Port Arbitration
+    // Branch Mask Logic
 
-    val jmp_pc_req = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
-    val xcpt_pc_req = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
-    val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
+    dec_brmask_logic.io.brUpdate := brUpdate
+    dec_brmask_logic.io.flush_pipeline := RegNext(rob.io.flush.valid)
 
-    val ftq_arb = Module(new Arbiter(UInt(log2Ceil(numFTQEntries).W), 3))
+    for (w <- 0 until coreWidth) {
+        dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).allocate_brtag
+        dec_brmask_logic.io.will_fire(w) := dec_fire(w) && dec_uops(w).allocate_brtag
+        
+        dec_uops(w).brTag := dec_brmask_logic.io.br_tag(w)
+        dec_uops(w).brMask := dec_brmask_logic.io.br_mask(w)
+    }
 
-    // Order by the oldest. Flushes come from the oldest instructions in pipe
-    // Decoding exceptions come from youngest
-    ftq_arb.io.in(0) <> flush_pc_req
-    ftq_arb.io.in(1) <> jmp_pc_req
-    ftq_arb.io.in(2) <> xcpt_pc_req
-
-    // Hookup FTQ
-    ifu.io.exe.get_pc(0).ftq_idx := ftq_arb.io.out.bits
-    ftq_arb.io.out.ready := true.B
-
-    // Branch Unit Requests (for JALs) (Should delay issue of JALs if this not ready)
-    jmp_pc_req.valid := RegNext(iss_valids(jmp_unit_idx) && iss_uops(jmp_unit_idx).fuCode === FU_JMP)
-    jmp_pc_req.bits := RegNext(iss_uops(jmp_unit_idx).ftqIdx)
-
-    jmp_unit.io.getFtqPc := DontCare
-    jmp_unit.io.getFtqPc.pc := ifu.io.exe.getFtqPc(0).pc
-    jmp_unit.io.getFtqPc.entry := ifu.io.exe.getFtqPc(0).entry
-    jmp_unit.io.getFtqPc.nextVal := ifu.io.exe.getFtqPc(0).nextVal
-    jmp_unit.io.getFtqPc.nextpc := ifu.io.exe.getFtqPc(0).nextpc
-
-
-    // Frontend Exception Requests
-    val xcpt_idx = PriorityEncoder(dec_xcpts)
-    xcpt_pc_req.valid := dec_xcpts.reduce(_ || _)
-    xcpt_pc_req.bits := dec_uops(xcpt_idx).ftqIdx
-    //rob.io.xcpt_fetch_pc := RegEnable(ifu.io.exe.get_pc.fetch_pc, dis_ready)
-    rob.io.xcpt_fetch_pc := ifu.io.exe.getFtqPc(0).pc
-
-    flush_pc_req.valid := rob.io.flush.valid
-    flush_pc_req.bits := rob.io.flush.bits.ftq_idx
+    val branch_mask_full = dec_brmask_logic.io.is_full
 
     //-------------------------------------------------------------
     // Decode/Rename1 pipeline logic
 
     dec_xcpts := dec_uops zip dec_valids map { case (u, v) => u.exception && v }
-    val dec_xcpt_stall = dec_xcpts.reduce(_ || _) && !xcpt_pc_req.ready
-    // stall fetch/dcode because we ran out of branch tags
-    val branch_mask_full = Wire(Vec(coreWidth, Bool()))
+    val dec_xcpt_stall = dec_xcpts.reduce(_||_) && !xcpt_pc_req.ready
 
     val dec_hazards = (0 until coreWidth).map(w =>
         dec_valids(w) &&
@@ -390,21 +380,9 @@ class iFuCore extends CoreModule {
         dec_finished_mask := dec_fire.asUInt | dec_finished_mask
     }
 
-    //-------------------------------------------------------------
-    // Branch Mask Logic
-
-    dec_brmask_logic.io.brUpdate := brUpdate
-    dec_brmask_logic.io.flush_pipeline := RegNext(rob.io.flush.valid)
-
-    for (w <- 0 until coreWidth) {
-        dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).allocate_brtag
-        dec_brmask_logic.io.will_fire(w) := dec_fire(w) &&
-                dec_uops(w).allocate_brtag // ren, dis can back pressure us
-        dec_uops(w).brTag := dec_brmask_logic.io.br_tag(w)
-        dec_uops(w).brMask := dec_brmask_logic.io.br_mask(w)
-    }
-
-    branch_mask_full := dec_brmask_logic.io.is_full
+    val xcpt_idx = PriorityEncoder(dec_xcpts)
+    xcpt_pc_req.valid := dec_xcpts.reduce(_ || _)
+    xcpt_pc_req.bits := dec_uops(xcpt_idx).ftqIdx
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
