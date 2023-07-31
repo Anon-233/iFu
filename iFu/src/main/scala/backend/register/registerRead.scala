@@ -4,10 +4,10 @@ import chisel3._
 import chisel3.util._
 import iFu.common._
 import iFu.util._
-
+import iFu.common.Consts._
 class RegisterRead(
     issueWidth : Int,
-    supportedUnitsArray: Seq[SupportedFuncUnits],
+    supportedUnitsArray: Seq[SupportedFuncs],
     numTotalReadPorts: Int,
     numReadPortsArray: Seq[Int],
     numTotalBypassPorts: Int,
@@ -25,7 +25,7 @@ class RegisterRead(
         val bypass = Input(Vec(numTotalBypassPorts,Valid(new ExeUnitResp(registerWidth))))
         val pred_bypass = Input(Vec(numTotalPredBypassPorts,Valid(new ExeUnitResp(1))))
 
-        val exe_reqs = Vec(issueWidth,(new DecoupledIO(new FuncUnitReq(registerWidth))))
+        val exe_reqs = Vec(issueWidth,(new DecoupledIO(new FuncUnitReq)))
 
         val kill = Input(Bool())
         val brupdate = Input(new BrUpdateInfo())
