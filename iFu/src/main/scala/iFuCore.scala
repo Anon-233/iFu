@@ -31,9 +31,12 @@ class iFuCore extends CoreModule {
 /*-----------------------------*/
 
     val ifu = Module(new Frontend)
+    ifu.io <> DontCare
 
     val decode_units = Seq.fill(decodeWidth) { Module(new DecodeUnit) }
     val dec_brmask_logic = Module(new BranchMaskGenerationLogic)
+    decode_units.map(_.io  <> DontCare)
+    dec_brmask_logic.io <> DontCare
 
     val dispatcher = Module(new BasicDispatcher)
 

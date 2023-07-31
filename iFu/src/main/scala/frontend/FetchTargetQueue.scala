@@ -287,6 +287,7 @@ class FetchTargetQueue extends CoreModule {
     //-------------------------------------------------------------
 
     for (i <- 0 until 2) {
+        io.getFtqpc(i) <> DontCare
         val idx = io.getFtqpc(i).ftqIdx
         val nextIdx = WrapInc(idx, numFTQEntries)
         val nextIsEnq = (nextIdx === enqPtr) && io.enq.fire

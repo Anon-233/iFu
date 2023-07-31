@@ -179,7 +179,6 @@ class BankedPredictor extends Module with HasBPUParameters
         val f0mask = Input(UInt(bankWidth.W))
         
         val f1ghist = Input(UInt(globalHistoryLength.W))
-        val f1lhist = Input(UInt(localHistoryLength.W))
 
         val resp = Output(new BankedPredictorResponse)
         

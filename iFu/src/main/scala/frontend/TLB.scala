@@ -67,6 +67,7 @@ class TLB extends CoreModule{
         /** SFence Input */
         val sfence = Flipped(Valid(new SFenceReq))
     })
+    io <> DontCare
     io.resp.miss := false.B
     io.resp.paddr := io.req.bits.vaddr
     // io.resp.gpa := io.req.bits.vaddr

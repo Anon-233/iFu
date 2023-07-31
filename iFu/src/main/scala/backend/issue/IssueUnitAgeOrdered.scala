@@ -22,6 +22,7 @@ class IssueUnitAgeOrdered (
 
     def getShamtOH(countOH: UInt, inc: Bool): UInt = {
         val next = Wire(UInt(maxShift.W))
+        next := countOH
         when (countOH === 0.U && inc) {
             next := 1.U
         } .elsewhen (!countOH(maxShift - 1) && inc) {

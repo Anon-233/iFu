@@ -247,6 +247,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     io.cbusReq.mask := 0.U
     io.cbusReq.axiBurstType := AXI_BURST_INCR
     io.cbusReq.axiLen := MLEN16
+    io.cbusReq.data := DontCare
     require(iParams.lineBytes == 64)
 //========== ------ IO ------ ==========
 /*---------------------------------------------------------------------*/
