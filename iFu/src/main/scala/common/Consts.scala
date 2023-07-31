@@ -107,6 +107,8 @@ object Consts {
     val MSIZE64  = 6.U(3.W)
     val MSIZE128 = 7.U(3.W)
 
+    val BUBBLE = 0.U(32.W)
+
     val UOPC_SZ = 6
     val uopX = BitPat.dontCare(UOPC_SZ)
 

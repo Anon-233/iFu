@@ -120,7 +120,7 @@ class SRT16Divider(val debug: Boolean = false) extends AbstractDiv(DivFuncCode()
 
     val rSumInit = Cat(0.U(3.W), Mux(rShift, Cat(0.U(1.W), aNormReg), Cat(aNormReg, 0.U(1.W))))
     val rSumInitTrunc = Cat(0.U(1.W), rSumInit(itnLen - 4, itnLen - 4 - 4 + 1))
-    val mInitPos1 = MuxLookup(dNormReg(xLen-2, xLen-4), "b00100".U(5.W),
+    val mInitPos1 = MuxLookup(dNormReg(xLen-2, xLen-4), "b00100".U(5.W))(
         Seq(
             0.U -> "b00100".U(5.W),
             1.U -> "b00100".U(5.W),
@@ -132,7 +132,7 @@ class SRT16Divider(val debug: Boolean = false) extends AbstractDiv(DivFuncCode()
             7.U -> "b01000".U(5.W),
         )
     )
-    val mInitPos2 = MuxLookup(dNormReg(xLen-2, xLen-4), "b01100".U(5.W),
+    val mInitPos2 = MuxLookup(dNormReg(xLen-2, xLen-4), "b01100".U(5.W))(
         Seq(
             0.U -> "b01100".U(5.W),
             1.U -> "b01110".U(5.W),
@@ -152,10 +152,10 @@ class SRT16Divider(val debug: Boolean = false) extends AbstractDiv(DivFuncCode()
     val dNeg = -Cat(0.U(1.W), dNormReg) // -d
 
     val mNeg = VecInit(
-        Cat(SignExt(MuxLookup(dNormReg(xLen-2, xLen-4), 0.U(7.W), LookUpTable.minus_m(0)), 11), 0.U(1.W)),
-        Cat(SignExt(MuxLookup(dNormReg(xLen-2, xLen-4), 0.U(7.W), LookUpTable.minus_m(1)), 10), 0.U(2.W)),
-        Cat(SignExt(MuxLookup(dNormReg(xLen-2, xLen-4), 0.U(7.W), LookUpTable.minus_m(2)), 10), 0.U(2.W)),
-        Cat(SignExt(MuxLookup(dNormReg(xLen-2, xLen-4), 0.U(7.W), LookUpTable.minus_m(3)), 11), 0.U(1.W))
+        Cat(SignExt(MuxLookup(dNormReg(xLen-2, xLen-4), 0.U(7.W))(LookUpTable.minus_m(0)), 11), 0.U(1.W)),
+        Cat(SignExt(MuxLookup(dNormReg(xLen-2, xLen-4), 0.U(7.W))(LookUpTable.minus_m(1)), 10), 0.U(2.W)),
+        Cat(SignExt(MuxLookup(dNormReg(xLen-2, xLen-4), 0.U(7.W))(LookUpTable.minus_m(2)), 10), 0.U(2.W)),
+        Cat(SignExt(MuxLookup(dNormReg(xLen-2, xLen-4), 0.U(7.W))(LookUpTable.minus_m(3)), 11), 0.U(1.W))
     )
     val udNeg = VecInit(
         Cat(SignExt(dPos, 66), 0.U(2.W)),
@@ -196,18 +196,18 @@ class SRT16Divider(val debug: Boolean = false) extends AbstractDiv(DivFuncCode()
     }
     def OTFC(q: UInt, quot: UInt, quotM1: UInt): (UInt, UInt) = {
         val quotNext = Mux1H(Seq(
-        q(quotPos2) -> (quot << 2 | "b10".U),
-        q(quotPos1) -> (quot << 2 | "b01".U),
-        q(quotZero)     -> (quot << 2 | "b00".U),
-        q(quotNeg1) -> (quotM1 << 2 | "b11".U),
-        q(quotNeg2) -> (quotM1 << 2 | "b10".U)
+            q(quotPos2) -> (quot << 2 | "b10".U),
+            q(quotPos1) -> (quot << 2 | "b01".U),
+            q(quotZero) -> (quot << 2 | "b00".U),
+            q(quotNeg1) -> (quotM1 << 2 | "b11".U),
+            q(quotNeg2) -> (quotM1 << 2 | "b10".U)
         ))
         val quotM1Next = Mux1H(Seq(
-        q(quotPos2) -> (quot << 2 | "b01".U),
-        q(quotPos1) -> (quot << 2 | "b00".U),
-        q(quotZero)     -> (quotM1 << 2 | "b11".U),
-        q(quotNeg1) -> (quotM1 << 2 | "b10".U),
-        q(quotNeg2) -> (quotM1 << 2 | "b01".U)
+            q(quotPos2) -> (quot << 2 | "b01".U),
+            q(quotPos1) -> (quot << 2 | "b00".U),
+            q(quotZero) -> (quotM1 << 2 | "b11".U),
+            q(quotNeg1) -> (quotM1 << 2 | "b10".U),
+            q(quotNeg2) -> (quotM1 << 2 | "b01".U)
         ))
         (quotNext(xLen-1, 0), quotM1Next(xLen-1, 0))
     }

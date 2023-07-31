@@ -9,8 +9,6 @@ import iFu.common.Consts._
 import iFu.frontend.TLB
 import iFu.util._
 
-import scala.collection.Seq
-
 //TODO  memWidth为2，如果为1，需要wakeup不成功后增加一周期delay  Done
 //TODO tlb_miss抛出异常。
 //TODO 删除Hella Cache相关的代码  Done
@@ -1187,13 +1185,11 @@ class Lsu extends CoreModule {
 
 object GenByteMask {
     def apply(addr: UInt, size: UInt): UInt = {
-        val mask = MuxLookup(size, 0.U,
-            Seq(
-                0.U -> (1.U(4.W) << addr(1, 0))(3, 0),
-                1.U -> (3.U(4.W) << (addr(1) << 1.U))(3, 0),
-                2.U -> 15.U(4.W)
-            )
-        )
+        val mask = MuxCase(0.U(4.W), Seq(
+            (size === 0.U) -> (1.U << addr(1, 0)),
+            (size === 1.U) -> (3.U << (addr(1) << 1)),
+            (size === 2.U) -> 15.U(4.W)
+        ))
         mask
     }
 }
