@@ -5,10 +5,8 @@ import chisel3.util._
 import iFu.common.Consts._
 
 class BPUParameters {
-    val localHistoryLength: Int  = 0
-    val globalHistoryLength: Int = 0
-    val numRasEntries: Int       = 0
-    val bpdMaxMetaLength: Int    = 0
+    val globalHistoryLength: Int = 8
+    val numRasEntries: Int       = 16
 }
 
 class ICacheParameters {
@@ -26,10 +24,10 @@ class ICacheParameters {
 }
 
 class FrontendParameters{
-    val fetchWidth: Int                = 0
+    val fetchWidth: Int                = 8
     val fetchBytes: Int                = fetchWidth * 4
-    val numFTQEntries: Int             = 0
-    val numFetchBufferEntries: Int     = 0
+    val numFTQEntries: Int             = 40
+    val numFetchBufferEntries: Int     = 32
     val iCacheParams: ICacheParameters = new ICacheParameters
     val bpdParams: BPUParameters       = new BPUParameters
     val bankWidth: Int                 = fetchWidth / iCacheParams.nBanks
