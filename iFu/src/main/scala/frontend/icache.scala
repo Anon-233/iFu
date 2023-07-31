@@ -107,7 +107,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     for (i <- 0 until iParams.nWays) {
         val s1_idx = io.s1_paddr(iParams.untagBits - 1, iParams.offsetBits)
         val s1_tag = io.s1_paddr(iParams.tagBits + iParams.untagBits -1, iParams.untagBits)
-        val s1_validBit = validArray(Cat(i.U, s1_idx))
+        val s1_validBit = validArray(Cat(i.U(log2Ceil(iParams.nWays).W), s1_idx))
         val tag = tagReadData(i)
 
         s1_tagHit(i) := s1_validBit && tag === s1_tag

@@ -27,7 +27,7 @@ class RobIO(
     val wb_resps = Flipped(Vec(numWakeupPorts,Valid(new ExeUnitResp)))
 
     //store stage
-    val lsu_clr_bsy = Input(Vec(memWidth +1,Valid(UInt(robParameters.robAddrSz.W))))
+    val lsu_clr_bsy = Input(Vec(memWidth,Valid(UInt(robParameters.robAddrSz.W))))
 
     val lsu_clr_unsafe = Input(Vec(memWidth,Valid(UInt(robParameters.robAddrSz.W))))
 

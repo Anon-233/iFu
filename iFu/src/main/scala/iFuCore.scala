@@ -251,7 +251,7 @@ class iFuCore extends CoreModule {
         val ftq_entry = ifu.io.exe.getFtqPc(1).entry
         val cfi_idx = (brUpdate.b2.uop.pcLowBits ^
             Mux(ftq_entry.startBank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)
-        )(log2Ceil(fetchWidth), 2)
+        )(log2Ceil(fetchWidth) + 1, 2)
         val ftq_ghist = ifu.io.exe.getFtqPc(1).gHist
         val next_ghist = ftq_ghist.update(
             ftq_entry.brMask.asUInt,
