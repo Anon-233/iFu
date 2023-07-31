@@ -737,8 +737,13 @@ class iFuCore extends CoreModule {
         }
     }
     require(bypass_idx == exe_units.numTotalBypassPorts)
+
     for (i <- 0 until jmp_unit.numStages) {
         pred_bypasses(i) := jmp_unit.io.bypass(i)
+    }
+
+    for (w <- 0 until exe_units.length) {
+        exe_units(w).io.req.bits.kill := RegNext(rob.io.flush.valid)
     }
 
     //-------------------------------------------------------------
@@ -753,13 +758,9 @@ class iFuCore extends CoreModule {
     // tell LSU that it should fire a load that waits for the rob to clear
     lsu.io.core.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
-    //com_xcpt.valid comes too early, will fight against a branch that resolves same cycle as an exception
-    lsu.io.core.exception := RegNext(rob.io.flush.valid)
-
-    // Handle Branch Mispeculations
-    lsu.io.core.brupdate := brUpdate
+    lsu.io.core.exception    := RegNext(rob.io.flush.valid)
+    lsu.io.core.brupdate     := brUpdate
     lsu.io.core.rob_head_idx := rob.io.rob_head_idx
-
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
@@ -767,14 +768,11 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     //-------------------------------------------------------------
 
-    val ipregSz = pregSz
     var w_cnt = 0
-
     for (i <- 0 until memWidth) {
-        iregfile.io.write_ports(w_cnt) := WritePort(mem_resps(i), ipregSz, xLen, RT_FIX)
+        iregfile.io.write_ports(w_cnt) := WritePort(mem_resps(i), pregSz, xLen, RT_FIX)
         w_cnt += 1
     }
-
     for (i <- 0 until exe_units.length) {
         if (exe_units(i).writesIrf) {
             val wbresp = exe_units(i).io.iresp
@@ -784,39 +782,33 @@ class iFuCore extends CoreModule {
             def wbIsValid(rtype: UInt) =
                 wbresp.valid && wbresp.bits.uop.rf_wen && wbresp.bits.uop.dst_rtype === rtype
 
-            val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N
+            // val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N
 
             iregfile.io.write_ports(w_cnt).valid := wbIsValid(RT_FIX)
             iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
             wbresp.ready := true.B
-            if (exe_units(i).hasCSR) {
-                iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
-            } else {
+            // if (exe_units(i).hasCSR) {
+                // iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
+            // } else {
                 iregfile.io.write_ports(w_cnt).bits.data := wbdata
-            }
+            // }
 
-            assert(!wbIsValid(RT_FLT), "[fppipeline] An FP writeback is being attempted to the Int Regfile.")
-
-            assert(!(wbresp.valid &&
-                    !wbresp.bits.uop.rf_wen &&
-                    wbresp.bits.uop.dst_rtype === RT_FIX),
+            assert(!(wbresp.valid && !wbresp.bits.uop.rf_wen && wbresp.bits.uop.dst_rtype === RT_FIX),
                 "[fppipeline] An Int writeback is being attempted with rf_wen disabled.")
 
-            assert(!(wbresp.valid &&
-                    wbresp.bits.uop.rf_wen &&
-                    wbresp.bits.uop.dst_rtype =/= RT_FIX),
+            assert(!(wbresp.valid && wbresp.bits.uop.rf_wen && wbresp.bits.uop.dst_rtype =/= RT_FIX),
                 "[fppipeline] writeback being attempted to Int RF with dst != Int type exe_units(" + i + ").iresp")
+
             w_cnt += 1
         }
     }
     require(w_cnt == iregfile.io.write_ports.length)
 
     if (enableSFBOpt) {
-        pregfile.io.write_ports(0).valid := jmp_unit.io.iresp.valid && jmp_unit.io.iresp.bits.uop.is_sfb_br
+        pregfile.io.write_ports(0).valid     := jmp_unit.io.iresp.valid && jmp_unit.io.iresp.bits.uop.is_sfb_br
         pregfile.io.write_ports(0).bits.addr := jmp_unit.io.iresp.bits.uop.pdst
         pregfile.io.write_ports(0).bits.data := jmp_unit.io.iresp.bits.data
     }
-
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
@@ -829,64 +821,53 @@ class iFuCore extends CoreModule {
     var cnt = 0
     for (i <- 0 until memWidth) {
         val mem_uop = mem_resps(i).bits.uop
-        rob.io.wb_resps(cnt).valid := mem_resps(i).valid && !(mem_uop.use_stq && !mem_uop.is_amo)
-        rob.io.wb_resps(cnt).bits := mem_resps(i).bits
+        rob.io.wb_resps(cnt).valid  := mem_resps(i).valid && !(mem_uop.use_stq && !mem_uop.is_amo)
+        rob.io.wb_resps(cnt).bits   := mem_resps(i).bits
         rob.io.debug_wb_valids(cnt) := mem_resps(i).valid && mem_uop.dst_rtype =/= RT_X
-        rob.io.debug_wb_wdata(cnt) := mem_resps(i).bits.data
+        rob.io.debug_wb_wdata(cnt)  := mem_resps(i).bits.data
         rob.io.debug_wb_ldst(cnt)   := mem_uop.ldst
         cnt += 1
     }
-    var f_cnt = 0 // rob fflags port index
     for (eu <- exe_units) {
         if (eu.writesIrf) {
-            val resp = eu.io.iresp
+            val resp   = eu.io.iresp
             val wb_uop = resp.bits.uop
-            val data = resp.bits.data
+            val data   = resp.bits.data
 
             rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.use_stq && !wb_uop.is_amo)
-            rob.io.wb_resps(cnt).bits <> resp.bits
+            rob.io.wb_resps(cnt).bits  := resp.bits
             rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
-            if (eu.hasCSR) {
-                rob.io.debug_wb_wdata(cnt) := Mux(wb_uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N,
-                    csr.io.rw.rdata,
-                    data)
-            } else {
+            // if (eu.hasCSR) {
+            //     rob.io.debug_wb_wdata(cnt) := Mux(
+            //         wb_uop.ctrl.csr_cmd =/= CSR.N,
+            //         csr.io.rw.rdata,
+            //         data
+            //     )
+            // } else {
                 rob.io.debug_wb_wdata(cnt) := data
                 rob.io.debug_wb_ldst(cnt)  := wb_uop.ldst
-            }
+            // }
             cnt += 1
         }
     }
-
     require(cnt == numIrfWritePorts)
     require(cnt == rob.numWakeupPorts)
 
-    // branch resolution
     rob.io.brupdate <> brUpdate
 
-/*    exe_units.map(u => u.io.status := csr.io.status)
+    // exe_units.map(u => u.io.status := csr.io.status)
 
-    // Connect breakpoint info to memaddrcalcunit
-    for (i <- 0 until memWidth) {
-        mem_units(i).io.status := csr.io.status
-        mem_units(i).io.bp := csr.io.bp
-        mem_units(i).io.mcontext := csr.io.mcontext
-        mem_units(i).io.scontext := csr.io.scontext
-    }*/
+    // // Connect breakpoint info to memaddrcalcunit
+    // for (i <- 0 until memWidth) {
+    //     mem_units(i).io.status   := csr.io.status
+    //     mem_units(i).io.bp       := csr.io.bp
+    //     mem_units(i).io.mcontext := csr.io.mcontext
+    //     mem_units(i).io.scontext := csr.io.scontext
+    // }
 
     // LSU <> ROB
     rob.io.lsu_clr_bsy := lsu.io.core.clr_bsy
     rob.io.lxcpt <> lsu.io.core.lxcpt
-
-    //-------------------------------------------------------------
-    // **** Flush Pipeline ****
-    //-------------------------------------------------------------
-    // flush on exceptions, miniexeptions, and after some special instructions
-
-
-    for (w <- 0 until exe_units.length) {
-        exe_units(w).io.req.bits.kill := RegNext(rob.io.flush.valid)
-    }
 
     assert(!(rob.io.com_xcpt.valid && !rob.io.flush.valid),
         "[core] exception occurred, but pipeline flush signal not set!")
@@ -894,9 +875,8 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     // *** debug for difftest
     //-------------------------------------------------------------
-    val diff = new debugDiff
-    val lregOut = Vec(lregSz,UInt(xLen.W))
+    val diff = Module(new debugDiff)
+    val lregOut = Wire(Vec(lregSz, UInt(xLen.W)))
     diff.io.commit := rob.io.commit
     lregOut := diff.io.lregOut   //use this for difftest
 }
-
