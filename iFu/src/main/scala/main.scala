@@ -1,17 +1,19 @@
 package iFu
 
-import circt.stage.ChiselStage
 import chisel3.stage.ChiselGeneratorAnnotation
+import firrtl.TargetDirAnnotation
 
 object Main extends App {
     val targetDirectory = args.head
     
-    (new ChiselStage).execute(
+    new chisel3.stage.ChiselStage().execute(
         Array(
             "-X", "sverilog", 
-            "-e", "iFu.iFuCore",
-            "-td", targetDirectory
+            "-e", "verilog",
         ),
-        Seq(ChiselGeneratorAnnotation(() => new iFuCore))
+        Seq(
+            ChiselGeneratorAnnotation(() => new iFuCore),
+            TargetDirAnnotation(targetDirectory)
+        )
     )
 }
