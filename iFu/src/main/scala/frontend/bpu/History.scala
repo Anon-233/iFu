@@ -20,7 +20,7 @@ class GlobalHistory extends Bundle  with HasBPUParameters{
         require (nBanks == 2)
         if(bank == 0) history
         else {
-            Mux( newSawBranchTaken    ,     history << 1 | 1.U,
+            Mux( newSawBranchTaken    ,     (history << 1).asUInt | 1.U,
             (Mux(newSawBrannchNotTaken   ,  history << 1 ,
                                             history)))
         }
@@ -45,8 +45,8 @@ class GlobalHistory extends Bundle  with HasBPUParameters{
         // 这个信号记录了未发生跳转的分支
         val notTakenBranches = branches & 
                             Mux(cfiValid,
-                                MaskLower(cfiIdxOH) & ~Mux(cfiIsBr && cfiTaken , cfiIdxOH, 0.U(fetchWidth.W)),
-                                ~(0.U(fetchWidth.W))
+                                MaskLower(cfiIdxOH) & (~Mux(cfiIsBr && cfiTaken , cfiIdxOH, 0.U(fetchWidth.W))).asUInt,
+                                (~(0.U(fetchWidth.W))).asUInt
                                     )
         
         require(nBanks == 2)
@@ -60,14 +60,14 @@ class GlobalHistory extends Bundle  with HasBPUParameters{
         when(ignoreSecondBank){
 
         }.otherwise{
-            newHistory.history := Mux(cfiIsBr && cfiInBank0  , histories(1) << 1 | 1.U,
+            newHistory.history := Mux(cfiIsBr && cfiInBank0  , (histories(1) << 1).asUInt | 1.U,
                                   Mux(firstBankeSawNotTaken , histories(1) << 1,
                                                             histories(1)))
             newHistory.newSawBrannchNotTaken := notTakenBranches(2*bankWidth-1,bankWidth).orR
             newHistory.newSawBranchTaken := cfiValid && cfiTaken && cfiIsBr && !cfiInBank0
         }
 
-        newHistory.rasIdx := Mux(cfiValid && cfiIsCall, WrapInc(rasIdx, nRasEntries.asUInt),
+        newHistory.rasIdx := Mux(cfiValid && cfiIsCall, WrapInc(rasIdx, nRasEntries),
                                 Mux(cfiValid && cfiIsRet , WrapDec(rasIdx, nRasEntries), rasIdx))
         
         

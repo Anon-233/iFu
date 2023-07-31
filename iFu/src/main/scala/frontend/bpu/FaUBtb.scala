@@ -106,7 +106,7 @@ class FaUBtbPredictior  extends Module with HasUbtbParameters {
 
     // 这里硬算,即使可能被仅有13位的offset阶段,这留给BTB去处理
     val newOffsetValue = (s1update.bits.target.asSInt -
-                            (s1update.bits.pc + (s1update.bits.cfiIdx.bits<<2)).asSInt)
+                            (s1update.bits.pc.asSInt + (s1update.bits.cfiIdx.bits<<2).asSInt))
     
     val s1updateWBtbData = Wire(new UbtbEntry)
     s1updateWBtbData.offset := newOffsetValue
