@@ -62,7 +62,7 @@ class PreDecodeSignals extends CoreBundle {
     val isCall      = Bool()
     val target      = UInt(vaddrBits.W)
     val cfiType     = UInt(CFI_SZ.W)
-    val sfbOffset   = Valid(UInt(log2Ceil(blockBytes).W))   // do we need this?
+    val sfbOffset   = Valid(UInt(log2Ceil(frontendParams.iCacheParams.lineBytes).W))   // do we need this?
     val shadowable  = Bool()
 }
 
@@ -74,7 +74,7 @@ class PreDecode extends CoreModule with PreDecodeTable {
     })
 
     //TODO 换成asBool
-    val bpdSignals = DecodeLogic(io.inst, default, table)
+    val bpdSignals = DecodeLogic(io.instr, default, table)
 
     val isBr          = bpdSignals(0)(0)
     val isJal         = bpdSignals(1)(0)
@@ -88,17 +88,17 @@ class PreDecode extends CoreModule with PreDecodeTable {
      *      2. rd=0 rj=1
      *      3. 立即数值为0
      */
-    io.out.isRet := (isJalr && io.inst(4,0) === 0.U && io.inst(9,5) === 1.U && io.inst(25,10) === 0.U)
+    io.out.isRet := (isJalr && io.instr(4,0) === 0.U && io.instr(9,5) === 1.U && io.instr(25,10) === 0.U)
     /**
      * isCall的情况：为BL指令
      */
-    io.out.isCall := isJal && io.inst(26)
+    io.out.isCall := isJal && io.instr(26)
 
     // target输出一个32位的地址
     io.out.target := ((
         Mux(isBr, 
-            Cat(Fill(14, io.inst(25)), io.inst(25,10), 0.U(2.W)),
-            Cat(Fill(4, io.inst(9)), io.inst(9,0), io.inst(25,10), 0.U(2.W))
+            Cat(Fill(14, io.instr(25)), io.instr(25,10), 0.U(2.W)),
+            Cat(Fill(4, io.instr(9)), io.instr(9,0), io.instr(25,10), 0.U(2.W))
         ).asSInt + io.pc.asSInt).asSInt & (-4).S).asUInt
 
     io.out.cfiType := Mux(isBr,   CFI_BR,
@@ -106,7 +106,7 @@ class PreDecode extends CoreModule with PreDecodeTable {
                       Mux(isJalr, CFI_JALR,
                                   CFI_X)))
 
-    val brOffset = Cat(io.inst(25,10), 0.U(2.W))
+    val brOffset = Cat(io.instr(25,10), 0.U(2.W))
 
     /**
      *  是否是sfb:
@@ -116,9 +116,9 @@ class PreDecode extends CoreModule with PreDecodeTable {
      *      4. 偏移量在一个Cacheline内
      */
     io.out.sfbOffset.valid := isBr &&
-            !io.inst(25) &&
+            !io.instr(25) &&
             brOffset =/= 0.U &&
-            brOffset(17, log2Ceil(blockBytes)) === 0.U
+            brOffset(17, log2Ceil(frontendParams.iCacheParams.lineBytes)) === 0.U
 
     io.out.sfbOffset.bits := brOffset
 
@@ -127,5 +127,5 @@ class PreDecode extends CoreModule with PreDecodeTable {
      *      1. 指令本身是可以shadowable的
      *      2. 没有 RS2 或者 RD == RS1
      */
-    io.out.shadowable   := isShadowable && (!hasRs2 || (io.inst(9,5) === io.inst(4,0)))
+    io.out.shadowable   := isShadowable && (!hasRs2 || (io.instr(9,5) === io.instr(4,0)))
 }
