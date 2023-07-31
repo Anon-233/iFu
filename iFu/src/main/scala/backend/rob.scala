@@ -58,6 +58,7 @@ class RobIO(
     val debug_wb_valids = Input(Vec(numWakeupPorts, Bool()))
     val debug_wb_wdata  = Input(Vec(numWakeupPorts, Bits(xLen.W)))
     val debug_wb_ldst = Input(Vec(numWakeupPorts,UInt(lregSz.W)))
+    val debug_wb_pc = Input(Vec(numWakeupPorts,UInt(32.W)))
 }
 
 class CommitExceptionSignals extends CoreBundle
@@ -213,6 +214,7 @@ class Rob(
 
         val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
         val rob_debug_ldst = Mem(numRobRows,UInt(lregSz.W))
+        val rob_debug_pc = Mem(numRobRows,UInt(32.W))
 
         //------------------dispatch stage------------------
         //enqueue
@@ -345,6 +347,7 @@ class Rob(
             when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx))) {
                 rob_debug_wdata(GetRowIdx(rob_idx)) := io.debug_wb_wdata(i)
                 rob_debug_ldst(GetRowIdx(rob_idx))  := io.debug_wb_ldst(i)
+                rob_debug_pc(GetRowIdx(rob_idx))    := io.debug_wb_pc(i)
             }
             val temp_uop = robUop(GetRowIdx(rob_idx))
 
@@ -360,6 +363,7 @@ class Rob(
             }
         io.commit.debug_wdata(w) := rob_debug_wdata(robHead)
         io.commit.debug_ldst(w) := rob_debug_ldst(robHead)
+        io.commit.debug_pc(w)   := rob_debug_pc(robHead)
 
         //rob_pnr_unsafe(w) := rob_val(rob_pnr) && (rob_unsafe(rob_pnr) || rob_exception(rob_pnr))
 

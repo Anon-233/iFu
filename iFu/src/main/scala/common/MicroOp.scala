@@ -89,6 +89,7 @@ class MicroOp extends CoreBundle {
     val flush_on_commit: Bool = Bool()
 
     val debug_inst: UInt = UInt(coreInstrBits.W)
+    val debug_pc : UInt = UInt(32.W)
 
     def is_sfb_br: Bool             = isBr && isSFB
     def is_sfb_shadow: Bool         = isSFB && !isBr
