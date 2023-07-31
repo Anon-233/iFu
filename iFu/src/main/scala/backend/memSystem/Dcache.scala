@@ -185,9 +185,8 @@ class DcacheMeta extends Module with HasDcacheParameters{
     val dirtyMeta = meta.read(dirtyIdx, true.B)(dirtyPos)
     io.dirtyMeta := dirtyMeta
 
-    val cleanedMask = UInt(nWays.W)
-    cleanedMask := UIntToOH(dirtyPos)
-    val cleanedMeta = new MetaLine
+    val cleanedMask = UIntToOH(dirtyPos)
+    val cleanedMeta = Wire(new MetaLine)
     cleanedMeta.dirty := false.B
     cleanedMeta.valid := true.B
     cleanedMeta.tag := dirtyMeta.tag
@@ -592,7 +591,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     val dontCareReq = 0.U.asTypeOf(new DCacheReq)
 
-    val s0req = Vec(memWidth , new DCacheReq)
+    val s0req = Wire(Vec(memWidth , new DCacheReq))
     val s0replayPipeNumber = mshrs.io.pipeNumberOut
 
     for(w <- 0 until memWidth){
@@ -613,8 +612,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                     Mux(prefetchValid,      prefetch,
                                             nil))))))
 
-    var s0kill = Vec(memWidth, Bool())
-    s0kill = io.lsu.s1_kill
+    val s0kill = WireInit(io.lsu.s1_kill)
 
 
     //rpu拿到的新的写回信息 
@@ -743,7 +741,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // s1阶段,对于meta,接收两个resp,一个是lsu或repaly读出的,是要处理的,叫handleMetaline
     // 另一个是rpu写回的,是要写回的,叫replacedMetaline
     val s1handleMetaLine = Wire(Vec(memWidth , new MetaLine))
-    val s1replacedMetaLine = new MetaLine
+    val s1replacedMetaLine = Wire(new MetaLine)
 
 
     io.lsu.ordered := io.lsu.force_order && !meta.io.hasDirty //只要没有dirty位,就返回forceOrder
@@ -862,8 +860,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s2replaceAddr = RegNext(s1replaceAddr)
     val s2replacePos = RegNext(s1replacePos)
 
-    var sendResp = Vec(memWidth,Bool())
-    var sendNack = Vec(memWidth,Bool())
+    var sendResp = Wire(Vec(memWidth,Bool()))
+    var sendNack = Wire(Vec(memWidth,Bool()))
 
     // bypass (这里做一个s3向s2转就行)
     val s3state = RegNext(s2state)
@@ -872,7 +870,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
       !s2StoreFailed)
     val s3hit = RegNext(s2hit)
 
-    val s3bypass = Vec(memWidth , Bool())
+    val s3bypass = Wire(Vec(memWidth , Bool()))
 
     val s2rdata = Wire(Vec(memWidth , UInt(32.W)))
     // store load bypassing
@@ -905,11 +903,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                             // data写操作
                             val memSize = s2req(w).uop.mem_size
                             val wordOffset = s2req(w).addr(log2Ceil(nRowWords) + 1, 2)
-                            var wdata = s2handleDataLine(w)(wordOffset)
+                            // s2handleDataLine(w)(wordOffset)
+                            val wdata = Wire(Vec(4, UInt(8.W)))
                             for(i <- 0 until 4){
-                                when(s2req(w).mask(i)){ wdata( i*8+8 ,i*8) := s2req(w).data(i*8+8,i*8)}
+                                wdata(i) := Mux(s2req(w).mask(i), s2req(w).data(i*8+7,i*8), s2handleDataLine(w)(wordOffset)(i*8+7,i*8))
                             }
-                            s2handleDataLine(wordOffset) := wdata
+                            s2handleDataLine(w)(wordOffset) := wdata.asUInt
 
                         }.otherwise{
                             // load，注意这里可能有一个旁路转发的判断，需不需要使用s3的数据
@@ -1006,13 +1005,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                             // data写操作
                             val memSize = s2req(w).uop.mem_size
                             val wordOffset = s2req(w).addr(log2Ceil(nRowWords) + 1, 2)
-                            var wdata = s2handleDataLine(w)(wordOffset)
+                            var wdata = Wire(Vec(4, UInt(8.W)))
                             for (i <- 0 until 4) {
-                                when(s2req(w).mask(i)) {
-                                    wdata(i * 8 + 8, i * 8) := s2req(w).data(i * 8 + 8, i * 8)
-                                }
+                                wdata(i) := Mux(s2req(w).mask(i), s2req(w).data(i*8+7,i*8), s2handleDataLine(w)(wordOffset)(i*8+7,i*8))
                             }
-                            s2handleDataLine(wordOffset) := wdata
+                            s2handleDataLine(w)(wordOffset) := wdata.asUInt
 
                         }.otherwise {
                             // load，注意这里可能有一个旁路转发的判断，需不需要使用s3的数据
@@ -1046,8 +1043,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
         // resp和nack都不发
         for(w <- 0 until memWidth){
-            sendResp := false.B
-            sendNack := false.B
+            sendResp(w) := false.B
+            sendNack(w) := false.B
         }
 
     }.elsewhen(s2state === wb){
@@ -1055,20 +1052,20 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
         // resp和nack都不发
         for (w <- 0 until memWidth) {
-            sendResp := false.B
-            sendNack := false.B
+            sendResp(w) := false.B
+            sendNack(w) := false.B
         }
     }.elsewhen(s2state === prefetch){
         // TODO
         for (w <- 0 until memWidth) {
-            sendResp := false.B
-            sendNack := false.B
+            sendResp(w) := false.B
+            sendNack(w) := false.B
         }
     }.elsewhen(s2state === nil){
         // 什么都不返回
         for (w <- 0 until memWidth) {
-            sendResp := false.B
-            sendNack := false.B
+            sendResp(w) := false.B
+            sendNack(w) := false.B
         }
     }
 
@@ -1080,9 +1077,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
       !(s2state === mshrread && s2valid)
 
     for(w <- 0 until memWidth){
-        io.lsu.resp(w).valid := sendResp
+        io.lsu.resp(w).valid := sendResp(w)
         io.lsu.resp(w).bits := 0.U.asTypeOf(new DCacheResp)
-        io.lsu.nack(w).valid := sendNack
+        io.lsu.nack(w).valid := sendNack(w)
         io.lsu.nack(w).bits := 0.U.asTypeOf(new DCacheReq)
     }
 
