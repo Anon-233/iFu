@@ -2,12 +2,12 @@ package iFu
 
 import circt.stage.ChiselStage
 import chisel3.stage.ChiselGeneratorAnnotation
-import firrtl_interpreter.TargetDirAnnotation
+import firrtl.TargetDirAnnotation
 
 object Main extends App {
     val targetDirectory = args.head
     
-    new ChiselStage().execute(
+    new chisel3.stage.ChiselStage().execute(
         Array(
             "-X", "sverilog", 
             "-e", "verilog",

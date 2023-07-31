@@ -134,9 +134,9 @@ class RegisterRead(
 
         }
 
-        if(numReadPorts > 0) bypassedRs1Data(w) := MuxCase(rrdRs1Data(w),rs1Cases.unsafeWrapArray)
-        if(numReadPorts > 1) bypassedRs2Data(w) := MuxCase(rrdRs2Data(w),rs2Cases.unsafeWrapArray)
-        if(enableSFBOpt) bypassedPredData(w) := MuxCase(rrdPredData(w),predCases.unsafeWrapArray) 
+        if(numReadPorts > 0) bypassedRs1Data(w) := MuxCase(rrdRs1Data(w),rs1Cases)
+        if(numReadPorts > 1) bypassedRs2Data(w) := MuxCase(rrdRs2Data(w),rs2Cases)
+        if(enableSFBOpt) bypassedPredData(w) := MuxCase(rrdPredData(w),predCases) 
     }
 
     for(w <- 0 until issueWidth){
