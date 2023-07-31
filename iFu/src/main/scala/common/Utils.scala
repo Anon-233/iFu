@@ -2,6 +2,8 @@ package iFu.util
 
 import chisel3._
 import chisel3.util._
+import scala.language.implicitConversions
+
 import iFu.backend.HasUop
 import iFu.common._
 import iFu.common.Consts._
@@ -145,4 +147,8 @@ object immGen
         ))
         imm
     }
+}
+
+object ImplicitCast {
+    implicit def uintToBitPat(x: UInt): BitPat = BitPat(x)
 }

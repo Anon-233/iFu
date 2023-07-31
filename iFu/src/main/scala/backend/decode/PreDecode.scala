@@ -6,6 +6,7 @@ import chisel3.util._
 import iFu.isa.Instructions._
 import iFu.common._   
 import iFu.common.Consts._
+import iFu.util.ImplicitCast.uintToBitPat
 
 //TODO 增加PCADDIW等与PC有关的指令
 

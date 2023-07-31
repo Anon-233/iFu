@@ -5,6 +5,7 @@ import chisel3.util._
 
 import iFu.common._
 import iFu.common.Consts._
+import iFu.util.ImplicitCast.uintToBitPat
 
 //TODO 增加CSR相关指令，IDLE，RDCNT等
 

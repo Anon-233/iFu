@@ -12,7 +12,10 @@ compile: $(gen_dir)/iFuCore.v
 $(gen_dir)/iFuCore.v: $(wildcard $(src_dir)/scala/*.scala)
 	$(SBT) "run $(gen_dir)"
 
+log:
+	make > ./log
+
 clean:
 	rm -rf $(gen_dir) $(out_dir) test_run_dir
 
-.PHONY: clean
+.PHONY: clean log
