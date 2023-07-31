@@ -61,7 +61,7 @@ class LSUCoreIO extends CoreBundle {
 
     val clr_bsy     = Output(Vec(memWidth,Valid(UInt(robAddrSz.W))))    // TODO
 
-    val clr_unsafe  = Output(Vec(memWidth, Valid(UInt(robAddrSz.W))))
+//    val clr_unsafe  = Output(Vec(memWidth, Valid(UInt(robAddrSz.W))))
 
     val fence_dmem  = Input(Bool())
 
@@ -125,6 +125,7 @@ class Lsu extends CoreModule {
     def widthMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
 /*=============================================================================*/
     val io = IO(new LSUIO)
+    io <> DontCare  //TODO
     /** *********************************** */
     val numStqEntries   = lsuParameters.numSTQEntries
     val numLdqEntries   = lsuParameters.numLDQEntries
