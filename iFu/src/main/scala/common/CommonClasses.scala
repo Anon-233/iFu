@@ -17,7 +17,7 @@ class BrResolutionInfo extends CoreBundle {
     val cfiType = UInt(CFI_SZ.W)
     val pcSel = UInt(2.W)
     val jalrTarget = UInt(xLen.W)
-    val targetOffset = SInt() // ???
+    val targetOffset = SInt(xLen.W) // ???
 }
 
 class BrUpdateInfo extends CoreBundle  {
