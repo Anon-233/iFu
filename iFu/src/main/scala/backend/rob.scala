@@ -29,7 +29,7 @@ class RobIO(
     //store stage
     val lsu_clr_bsy = Input(Vec(memWidth +1,Valid(UInt(robParameters.robAddrSz.W))))
 
-    val lsu_clr_unsafe = Input(Vec(memWidth,Valid(robParameters.robAddrSz.W)))
+    val lsu_clr_unsafe = Input(Vec(memWidth,Valid(UInt(robParameters.robAddrSz.W))))
 
     val lxcpt = Flipped(new ValidIO(new Exception()))
 
