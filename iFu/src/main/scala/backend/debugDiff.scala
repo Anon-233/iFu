@@ -23,8 +23,9 @@ class debugDiff extends CoreModule {
       val nowPc2 = io.commit.uops(w).debug_pc //这个和上面那个应该要相同
       //require((nowPc == nowPc2) && valid)  //如果不同，说明rob存在问题
 
-
-      debug_reg(lreg) := wdata
+      when(valid) {
+        debug_reg(lreg) := wdata
+      }
     } .otherwise {
       val valid = false
     }
