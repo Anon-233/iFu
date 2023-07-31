@@ -3,12 +3,6 @@ import chisel3._
 import chisel3.util._
 import iFu.common._
 
-
-
-
-
-
-
 class MSHRdata extends CoreBundle with HasDcacheParameters{
     //该项是否有效
     val valid = Bool()
@@ -91,6 +85,7 @@ class MSHR extends CoreModule with HasDcacheParameters{
 
         val isStore = Output(Bool())
     }}
+    io <> DontCare
     // 数据存储
     val mshr = RegInit(Wire(new MSHRdata()))
 
@@ -235,6 +230,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
             
         })
 
+    io <> DontCare
     val firstMSHRs = VecInit(Seq.fill(nFirstMSHRs)(Module(new MSHR)).map(_.io))
     val secondMSHRs = VecInit(Seq.fill(nSecondMSHRs)(Module(new MSHR)).map(_.io))
 
