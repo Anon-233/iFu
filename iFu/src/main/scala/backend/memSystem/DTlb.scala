@@ -7,7 +7,7 @@ import iFu.frontend.{SFenceReq, TLBReq, TLBResp}
 
 class DTlb extends CoreModule{
     val io = IO(new Bundle {
-        val req = Flipped(Vec(memWidth, Decoupled(new TLBReq)))
+        val req = Flipped(Vec(memWidth, Decoupled(new TLBReq(0))))
         val miss_rdy = Output(Bool())
         val resp = Output(Vec(memWidth, new TLBResp))
         val sfence = Input(Valid(new SFenceReq))
