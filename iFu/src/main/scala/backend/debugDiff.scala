@@ -2,7 +2,9 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
+
 import iFu.common._
+import iFu.common.Consts._
 
 class debugDiff extends CoreModule {
   val io = IO(new Bundle {
