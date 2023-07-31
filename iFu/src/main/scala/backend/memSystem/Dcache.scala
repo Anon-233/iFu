@@ -6,6 +6,8 @@ import chisel3._
 import chisel3.util._
 import iFu.common.HasCoreParameters
 import iFu.util._
+
+import javax.sound.sampled.DataLine
 /*
 各部件行为：
 DcacheMeta：
@@ -441,7 +443,7 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
 
     io.cbusReq.valid := state === fetch || state === wb
     io.cbusReq.isStore := state === wb
-    io.cbusReq.mask := 0xff.U
+    io.cbusReq.mask := 0xf.U
     // io.cbusReq.axiLen := 0xf.U
     // io.cbusReq.axiBurstType := 1.U
 
@@ -840,11 +842,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s2hit = RegNext(s1hit)
 
 
-    val s2handleMetaLine = RegNext(s1handleMetaLine)
+    var s2handleMetaLine = RegNext(s1handleMetaLine)
     val s2replacedMetaLine = RegNext(s1replacedMetaLine)
 
     // 用于repaly或者lsu的一组handledataline，以及metaread或者fence的一个replacedataline
-    val s2handleDataLine = Wire(Vec(memWidth ,Vec(nRowWords,UInt(32.W))))
+    var s2handleDataLine = Wire(Vec(memWidth ,Vec(nRowWords,UInt(32.W))))
 
     for(w <- 0 until memWidth){
         s2handleDataLine(w) := lsuDataRead(w).resp.bits.rdata
@@ -874,7 +876,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     val s2rdata = Wire(Vec(memWidth , UInt(32.W)))
     // store load bypassing
-    val s2loaddata = Wire(Vec(memWidth , UInt(32.W)))
+
     for(w <- 0 until memWidth){
         // 只有0号流水线Store执行成功才可能发生bypass
         s3bypass(w) :=  s3valid &&
@@ -897,20 +899,26 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 sendResp(w) := true.B
                 sendNack(w) := false.B
 
-                when(isStore(s2req(w))){
-                    // store
-                    s2handleMetaLine(w).dirty := true.B
-                    // TODO:data写操作
+                        when(isStore(s2req(w))){
+                            // store
+                            s2handleMetaLine(w).dirty := true.B
+                            // data写操作
+                            val memSize = s2req(w).uop.mem_size
+                            var wdata = s2handleDataLine(w)(s2req(w).addr(log2Ceil(nRowWords)+1,2))
+                            for(i <- 0 until 4){
+                                when(s2req(w).mask(i)){ wdata( i*8+8 ,i*8) := s2req(w).data(i*8+8,i*8)}
+                            }
+                            s2handleDataLine(s2req(w).addr(log2Ceil(nRowWords)+1,2)) := wdata
 
-                    // 处理resp
+                        }.otherwise{
+                            // load，注意这里可能有一个旁路转发的判断，需不需要使用s3的数据
+                            s2rdata(w) := s2handleDataLine(w)(s2req(w).addr(log2Ceil(nRowWords)+1,2))
+                            // store load bypassing
+                            val s2loaddata = Wire(UInt(32.W))
+                            s2loaddata := Mux(s3bypass(w) , s3req(w).data , s2rdata(w))
 
-                }.otherwise{
-                    // load，注意这里可能有一个旁路转发的判断，需不需要使用s3的数据
-                    s2rdata(w) := 0.U
-                    // store load bypassing
-                    s2loaddata(w) := Mux(s3bypass(w) , s3req(w).data , s2rdata(w))
-
-                    // 准备resp
+                            // 准备resp
+                            io.lsu.resp(w).bits.data := s2loaddata
                 }
             }
         }
@@ -991,6 +999,30 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             sendNack(w) := false.B//nack始终不发
             sendResp(w) := Mux(s2replayPipeNumber === w.asUInt , true.B , false.B)//resp只发给对应的流水线
             // 准备resp
+                        when(isStore(s2req(w))) {
+                            // store
+                            s2handleMetaLine(w).dirty := true.B
+                            // data写操作
+                            val memSize = s2req(w).uop.mem_size
+                            var wdata = s2handleDataLine(w)(s2req(w).addr(log2Ceil(nRowWords) + 1, 2))
+                            for (i <- 0 until 4) {
+                                when(s2req(w).mask(i)) {
+                                    wdata(i * 8 + 8, i * 8) := s2req(w).data(i * 8 + 8, i * 8)
+                                }
+                            }
+                            s2handleDataLine(s2req(w).addr(log2Ceil(nRowWords) + 1, 2)) := wdata
+
+                        }.otherwise {
+                            // load，注意这里可能有一个旁路转发的判断，需不需要使用s3的数据
+                            s2rdata(w) := s2handleDataLine(w)(s2req(w).addr(log2Ceil(nRowWords) + 1, 2))
+                            // store load bypassing
+                            val s2loaddata = Wire(UInt(32.W))
+                            s2loaddata := Mux(s3bypass(w), s3req(w).data, s2rdata(w))
+
+                            // 准备resp
+                            io.lsu.resp(w).bits.data := s2loaddata
+                        }
+
         }
     }.elsewhen((s2state === fence ||s2state === mshrread )&& s2valid && RPU.io.ready){
         //一条指令的fetch和dirty写回主存，都需要RPU请求

@@ -1,5 +1,8 @@
 package iFu
 
+import chisel3.stage.ChiselGeneratorAnnotation
+import firrtl.TargetDirAnnotation
+
 object Main extends App {
     val targetDirectory = args.head
     
