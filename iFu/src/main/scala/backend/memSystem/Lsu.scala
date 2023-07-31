@@ -19,46 +19,7 @@ import scala.collection.Seq
 //TODO 删除release，observed等代码，load可以乱序   Done
 //TODO 增加TLB相关逻辑，包括异常检测，发送DCache请求时的地址,发送数据给tlb
 //TODO LSU会将vaddr的idx位发给DCache，TLB_MISS在s1_kill掉请求
-class StoreGen(typ: UInt, addr: UInt, dat: UInt, maxSize: Int) {
-    val size = typ(log2Up(log2Up(maxSize)+1)-1,0)
-    def misaligned: Bool = (addr & ((1.U << size) - 1.U)(log2Up(maxSize)-1,0)).orR
 
-    def mask = {
-        var res = 1.U
-        for (i <- 0 until log2Up(maxSize)) {
-            val upper = Mux(addr(i), res, 0.U) | Mux(size >= (i+1).U, ((BigInt(1) << (1 << i))-1).U, 0.U)
-            val lower = Mux(addr(i), 0.U, res)
-            res = Cat(upper, lower)
-        }
-        res
-    }
-
-    protected def genData(i: Int): UInt =
-        if (i >= log2Up(maxSize)) dat
-        else Mux(size === i.U, Fill(1 << (log2Up(maxSize)-i), dat((8 << i)-1,0)), genData(i+1))
-
-    def data = genData(0)
-    def wordData = genData(2)
-}
-
-class LoadGen(typ: UInt, signed: Bool, addr: UInt, dat: UInt, zero: Bool, maxSize: Int) {
-    private val size = new StoreGen(typ, addr, dat, maxSize).size
-
-    private def genData(logMinSize: Int): UInt = {
-        var res = dat
-        for (i <- log2Up(maxSize)-1 to logMinSize by -1) {
-            val pos = 8 << i
-            val shifted = Mux(addr(i), res(2*pos-1,pos), res(pos-1,0))
-            val doZero = (i == 0).B && zero
-            val zeroed = Mux(doZero, 0.U, shifted)
-            res = Cat(Mux(size === i.U || doZero, Fill(8*maxSize-pos, signed && zeroed(pos-1)), res(8*maxSize-1,pos)), zeroed)
-        }
-        res
-    }
-
-    def wordData = genData(2)
-    def data = genData(0)
-}
 
 object AgePriorityEncoder {
     def apply(in: Seq[Bool], head: UInt): UInt = {
@@ -587,11 +548,10 @@ class Lsu extends CoreModule {
         }.elsewhen(will_fire_store_commit(w)) {
             dmem_req(w).valid := true.B
             dmem_req(w).bits.addr := stq_commit_e.bits.addr.bits
-            dmem_req(w).bits.data := (new StoreGen(
-                stq_commit_e.bits.uop.mem_size, 0.U,
-                stq_commit_e.bits.data.bits,
-                xLen
-            )).data
+            dmem_req(w).bits.data := stq_commit_e.bits.data.bits
+            dmem_req(w).bits.mask := storeMaskGen(stq_commit_e.bits.addr.bits(1,0),
+                stq_commit_e.bits.uop.mem_size)
+
             dmem_req(w).bits.uop := stq_commit_e.bits.uop
 
             stq_execute_head := Mux(dmem_req_fire(w),
@@ -1003,7 +963,12 @@ class Lsu extends CoreModule {
 
                 io.core.exe(w).iresp.bits.uop := ldq(ldq_idx).bits.uop
                 io.core.exe(w).iresp.valid := send_iresp
-                io.core.exe(w).iresp.bits.data := dcache.io.lsu.resp(w).bits.data
+                io.core.exe(w).iresp.bits.data := loadDataGen(
+                    ldq(ldq_idx).bits.addr.bits(1,0),
+                    dcache.io.lsu.resp(w).bits.data,
+                    dcache.io.lsu.resp(w).bits.uop.mem_size,
+                    dcache.io.lsu.resp(w).bits.uop.mem_signed
+                )
 
                 dmem_resp_fired(w) := true.B
 
@@ -1028,19 +993,21 @@ class Lsu extends CoreModule {
             val stq_e = stq(wb_forward_stq_idx(w))
             val data_ready = stq_e.bits.data.valid
             val live = !IsKilledByBranch(io.core.brupdate, forward_uop)
-            val storegen = new StoreGen(
-                stq_e.bits.uop.mem_size, stq_e.bits.addr.bits,
-                stq_e.bits.data.bits, xLen/8
+            val storegen = storeDataGen(
+                stq_e.bits.addr.bits(1,0),
+                stq_e.bits.data.bits,
+                stq_e.bits.uop.mem_size
             )
-            val loadgen = new LoadGen(
-                forward_uop.mem_size, forward_uop.mem_signed,
-                wb_forward_ld_addr(w),
-                storegen.data, false.B, xLen/8
+            val loadgen = loadDataGen(
+                wb_forward_ld_addr(w)(1,0),
+                storegen,
+                forward_uop.mem_size,
+                forward_uop.mem_signed
             )
 
             io.core.exe(w).iresp.valid := (forward_uop.dst_rtype === RT_FIX) && data_ready && live
             io.core.exe(w).iresp.bits.uop := forward_uop
-            io.core.exe(w).iresp.bits.data := loadgen.data
+            io.core.exe(w).iresp.bits.data := loadgen
 
             when(data_ready && live) {
                 ldq(f_idx).bits.succeeded := data_ready
@@ -1276,4 +1243,95 @@ class ForwardingAgeLogic(num_entries: Int) extends CoreModule{
     }
 
     io.forwarding_val := found_match
+}
+object storeMaskGen{
+    def apply(addr: UInt, memSize: UInt): UInt = {
+        val mask = WireInit(0.U(4.W))
+        when(memSize === 0.U){
+            when(addr === 0.U){mask := "b0001".U}
+                    .elsewhen(addr === 1.U){mask := "b0010".U}
+                    .elsewhen(addr === 2.U){mask := "b0100".U}
+                    .elsewhen(addr === 3.U){mask := "b1000".U}
+        }.elsewhen(memSize === 1.U){
+            when(addr(1) === 0.U){mask := "b0011".U}
+                    .elsewhen(addr(1) === 1.U){mask := "b1100".U}
+        }.elsewhen(memSize === 2.U){
+            mask := "b1111".U
+        }
+        mask
+    }
+
+}
+
+object loadDataGen{
+    def apply(addr: UInt, data:UInt, memSize:UInt,memSigned: Bool): UInt = {
+        val loadData = WireInit(0.U(32.W))
+        when(memSize === 0.U){
+            when(addr === 0.U){
+                when(memSigned){
+                    loadData := Cat(Fill(24,data(7)),data(7,0))}
+                        .otherwise{
+                            loadData := data(7,0)
+                        }}
+                    .elsewhen(addr === 1.U) {
+                        when(memSigned) {
+                            loadData := Cat(Fill(24, data(15)), data(15, 8))
+                        }
+                                .otherwise {
+                                    loadData := data(15, 8)
+                                }
+                    }
+                    .elsewhen(addr === 2.U){
+                        when(memSigned) {
+                            loadData := Cat(Fill(24, data(23)), data(23, 16))
+                        }
+                                .otherwise {
+                                    loadData := data(23, 16)
+                                }
+                    }
+                    .elsewhen(addr === 3.U){
+                        when(memSigned) {
+                            loadData := Cat(Fill(24, data(15)), data(31, 24))
+                        }
+                                .otherwise {
+                                    loadData := data(31, 24)
+                                }
+                    }
+        }.elsewhen(memSize === 1.U){
+            when(addr(1) === 0.U){
+                when(memSigned){
+                    loadData := Cat(Fill(16,data(15)),data(15,0))
+                }.otherwise{
+                    loadData := data(15,0)
+                }
+            }
+                    .elsewhen(addr(1) === 1.U){
+                        when(memSigned) {
+                            loadData := Cat(Fill(16, data(31)), data(31, 16))
+                        }.otherwise {
+                            loadData := data(31, 16)
+                        }
+                    }
+        }.elsewhen(memSize === 2.U){
+            loadData := data(31,0)
+        }
+        loadData
+    }
+}
+object storeDataGen{
+    def apply(addr: UInt, data:UInt, memSize:UInt): UInt = {
+        val storeData = WireInit(0.U(32.W))
+        when(memSize === 0.U){
+            when(addr === 0.U){ storeData(7,0) := data(7,0)}
+                    .elsewhen(addr === 1.U){storeData(15,8) := data(15,8)}
+                    .elsewhen(addr === 2.U){storeData(23,16) := data(23,16)}
+                    .elsewhen(addr === 3.U){storeData(31,24) := data(31,24)}
+        }.elsewhen(memSize === 1.U){
+            when(addr(1) === 0.U){storeData(15,0) := data(15,0)}
+                    .elsewhen(addr(1) === 1.U){storeData(31,16) := data(31,16)}
+        }.elsewhen(memSize === 2.U){
+            storeData := data
+        }
+        storeData
+    }
 }
