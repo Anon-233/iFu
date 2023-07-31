@@ -90,8 +90,7 @@ class LSUCoreIO extends CoreBundle {
     val stqAddrSz = lsuParameters.stqAddrSz
     /** ************************************ */
 
-
-    val exe = Vec(memWidth, new LSUExeIO)
+    val exe     = Vec(memWidth, new LSUExeIO)
 
     val dis_uops    = Flipped(Vec(coreWidth, Valid(new MicroOp)))
     val dis_ldq_idx = Output(Vec(coreWidth, UInt(ldqAddrSz.W)))
@@ -124,7 +123,8 @@ class LSUCoreIO extends CoreBundle {
 
 class LSUIO extends CoreBundle {
     val core    = new LSUCoreIO
-    val dmem    = new LSUDMemIO
+    val dreq = Output(new CBusReq)
+    val dresp = Input(new CBusResp)
 }
 
 trait HasUop extends Bundle{
@@ -176,7 +176,8 @@ class Lsu extends CoreModule {
     val MINI_EXCEPTION_MEM_ORDERING = 2.U
     /** ************************************ */
     val dcache  = Module(new NonBlockingDcache)
-
+    io.dreq             := dcache.io.cbusReq
+    dcache.io.cbusResp  := io.dresp
 
     val ldq = Reg(Vec(numLdqEntries, Valid(new LDQEntry)))
     val stq = Reg(Vec(numStqEntries, Valid(new STQEntry)))
