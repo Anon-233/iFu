@@ -135,7 +135,7 @@ object immGen
 {
     def apply(immPacked: UInt, immType: UInt): SInt = {
         val imm = WireInit(0.U(32.W))
-        imm := MuxLookup(immType, 0.U, Seq(
+        imm := MuxLookup(immType, 0.U)(Seq(
             immU5   -> Cat(Fill(27,0.U),immPacked(14,10)),
             immU12  -> Cat(Fill(20,0.U),immPacked(21,10)),
             immS12  -> Cat(Fill(20,immPacked(21)),immPacked(21,10)),
