@@ -243,7 +243,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     io.resp.valid := s2_valid && s2_hit
     io.resp.bits.data := s2_data
 
-    io.cbusReq.valid := (s2_miss && !io.s2_kill) || (iCacheState === s_Fetch)
+    io.cbusReq.valid := ((s2_miss && !io.s2_kill) || (iCacheState === s_Fetch)) && !RegNext(io.cbusResp.isLast)
     io.cbusReq.isStore := false.B
     io.cbusReq.size := MSIZE4
     io.cbusReq.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
