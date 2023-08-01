@@ -5,12 +5,14 @@ src_dir = $(base_dir)/src/main
 gen_dir = $(base_dir)/generated_src
 out_dir = $(base_dir)/outputs
 
+SPLIT = true
+
 SBT = sbt
 
 compile: $(gen_dir)/iFuCore.v
 
 $(gen_dir)/iFuCore.v: $(wildcard $(src_dir)/scala/*.scala)
-	$(SBT) "run $(gen_dir)"
+	$(SBT) "run $(gen_dir) $(SPLIT)"
 
 log:
 	make > ./log

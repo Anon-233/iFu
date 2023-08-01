@@ -5,12 +5,19 @@ import firrtl.TargetDirAnnotation
 
 object Main extends App {
     val targetDirectory = args.head
-    
-    new chisel3.stage.ChiselStage().execute(
+    val buildArgs = if (args.tail) {
+        Array(
+            "-X", "sverilog", 
+        ),
+    } else {
         Array(
             "-X", "sverilog", 
             "-e", "verilog",
         ),
+    }
+    
+    new chisel3.stage.ChiselStage().execute(
+        buildArgs,
         Seq(
             ChiselGeneratorAnnotation(() => new iFuCore),
             TargetDirAnnotation(targetDirectory)
