@@ -35,7 +35,7 @@ object FrontendUtils extends FrontendParameters {
         val idx = addr(log2Ceil(fetchWidth) + log2Ceil(instrBytes) - 1, log2Ceil(instrBytes))
         val shamt = idx(log2Ceil(fetchWidth) - 2, 0)
         val end_mask = Mux(isLastBankInBlock(addr), Fill(fetchWidth / 2, 1.U), Fill(fetchWidth, 1.U))
-        ((1 << fetchWidth) - 1).U << shamt & end_mask
+        (((1 << fetchWidth) - 1).U << shamt & end_mask)(fetchWidth - 1, 0)
     }
 
     def bankMask(addr: UInt):UInt = {

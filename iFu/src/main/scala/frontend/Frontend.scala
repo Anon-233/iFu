@@ -494,7 +494,7 @@ class Frontend extends CoreModule {
 
             // i << 1是防止溢出，因为sfbOffset <= Cacheline
             val offset_from_aligned_pc = (
-                (i << 1).U((log2Ceil(lineBytes) + 1).W) + brsigs.sfbOffset.bits
+                (i << 2).U((log2Ceil(lineBytes) + 1).W) + brsigs.sfbOffset.bits
             )
             val lower_mask = Wire(UInt((2 * fetchWidth).W))
             val upper_mask = Wire(UInt((2 * fetchWidth).W))
