@@ -259,7 +259,7 @@ class Lsu extends CoreModule {
     val will_fire_stad_incoming = Wire(Vec(memWidth, Bool()))
     val will_fire_sta_incoming = Wire(Vec(memWidth, Bool()))
     val will_fire_std_incoming = Wire(Vec(memWidth, Bool()))
-    val will_fire_sfence = Wire(Vec(memWidth, Bool()))
+//    val will_fire_sfence = Wire(Vec(memWidth, Bool()))
     val will_fire_store_commit = Wire(Vec(memWidth, Bool()))
     val will_fire_load_wakeup = Wire(Vec(memWidth, Bool()))
 
@@ -405,17 +405,17 @@ class Lsu extends CoreModule {
         exe_tlb_valid(w) := !tlb_avail
     }
 
-    assert((memWidth == 1).B ||
-           (!(will_fire_sfence.reduce(_ || _) && !will_fire_sfence.reduce(_ && _)) &&
-            !will_fire_store_commit.reduce(_ && _) && !will_fire_load_wakeup.reduce(_ && _)),
-        "Some operations is proceeding down multiple pipes")
-    require(memWidth <= 2)
+//    assert((memWidth == 1).B ||
+//           (!(will_fire_sfence.reduce(_ || _) && !will_fire_sfence.reduce(_ && _)) &&
+//            !will_fire_store_commit.reduce(_ && _) && !will_fire_load_wakeup.reduce(_ && _)),
+//        "Some operations is proceeding down multiple pipes")
+//    require(memWidth <= 2)
 
     //--------------------------------------------
     // TLB Access
     val exe_tlb_uop = widthMap(w =>
         Mux(will_fire_load_incoming(w) || will_fire_stad_incoming(w) ||
-            will_fire_sta_incoming(w) || will_fire_sfence(w),
+            will_fire_sta_incoming(w) /*|| will_fire_sfence(w)*/,
             exe_req(w).bits.uop, NullMicroOp)
     )
     val exe_tlb_vaddr = widthMap(w =>
@@ -435,7 +435,7 @@ class Lsu extends CoreModule {
 
     val exe_size = widthMap(w =>
         Mux(will_fire_load_incoming(w) || will_fire_stad_incoming(w) ||
-            will_fire_sta_incoming(w) || will_fire_sfence(w),
+            will_fire_sta_incoming(w) /*|| will_fire_sfence(w)*/,
             exe_tlb_uop(w).mem_size, 0.U)
     )
     /*val exe_cmd = widthMap(w =>
@@ -640,7 +640,7 @@ class Lsu extends CoreModule {
     val fired_stad_incoming = widthMap(w => RegNext(will_fire_stad_incoming(w) && !exe_req_killed(w)))
     val fired_sta_incoming = widthMap(w => RegNext(will_fire_sta_incoming(w) && !exe_req_killed(w)))
     val fired_std_incoming = widthMap(w => RegNext(will_fire_std_incoming(w) && !exe_req_killed(w)))
-    val fired_sfence = RegNext(will_fire_sfence)
+//    val fired_sfence = RegNext(will_fire_sfence)
     val fired_store_commit = RegNext(will_fire_store_commit)
     val fired_load_wakeup = widthMap(w => RegNext(will_fire_load_wakeup(w) && !IsKilledByBranch(io.core.brupdate, ldq_wakeup_e.bits.uop)))
 
