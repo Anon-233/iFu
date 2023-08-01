@@ -470,7 +470,7 @@ class Frontend extends CoreModule {
             // bpu.io.scontext := io.exe.scontext
 
             val i = (b * bankWidth) + w
-            val pc = (f3_aligned_pc + (i << log2Ceil(coreInstrBits)).U)
+            val pc = (f3_aligned_pc + (i << log2Ceil(coreInstrBytes)).U)
             val instr = bank_data(w * coreInstrBits + coreInstrBits - 1,w * coreInstrBits)
 
             val bpd_decoder = Module(new PreDecode)
