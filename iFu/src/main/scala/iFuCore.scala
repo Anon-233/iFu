@@ -857,7 +857,7 @@ class iFuCore extends CoreModule {
         }
     }
     require(cnt == numWritePorts)
-    require(cnt == rob.numWakeupPorts)
+    require(cnt == rob.numWritePorts)
 
     rob.io.brupdate <> brUpdate
 
