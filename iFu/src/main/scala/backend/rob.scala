@@ -2,42 +2,45 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
-
 import iFu.common._
 import iFu.util._
 import iFu.common.Consts._
 
 
-class RobIO (val numWritePorts: Int) extends CoreBundle {
-    // dispatch stage
-    val enq_valids        = Input(Vec(coreWidth, Bool()))
-    val enq_uops          = Input(Vec(coreWidth, new MicroOp))
+class RobIO(
+    val numWakeupPorts: Int
+) extends CoreBundle
+{
+
+    val enq_valids = Input(Vec(coreWidth,Bool()))
+    val enq_uops = Input(Vec(coreWidth,new MicroOp()))
     val enq_partial_stall = Input(Bool())
 
-    // decode stage read, next stage get pc from ftq
     val xcpt_fetch_pc = Input(UInt(vaddrBits.W))
-
-    // output
+    //output
     val rob_tail_idx = Output(UInt(robParameters.robAddrSz.W))
+    // val rob_pnr_idx = Output(UInt(robParameters.robAddrSz.W))
     val rob_head_idx = Output(UInt(robParameters.robAddrSz.W))
 
     val brupdate = Input(new BrUpdateInfo())
-
-    // 写回阶段
-    val wb_resps = Flipped(Vec(numWritePorts, Valid(new ExeUnitResp)))
+    //写回阶段
+    val wb_resps = Flipped(Vec(numWakeupPorts,Valid(new ExeUnitResp)))
 
     //store stage
-    val lsu_clr_bsy = Input(Vec(memWidth, Valid(UInt(robParameters.robAddrSz.W))))
-    val lxcpt = Flipped(new ValidIO(new Exception))
+    val lsu_clr_bsy = Input(Vec(memWidth,Valid(UInt(robParameters.robAddrSz.W))))
+
+    // val lsu_clr_unsafe = Input(Vec(memWidth,Valid(UInt(robParameters.robAddrSz.W))))
+
+    val lxcpt = Flipped(new ValidIO(new Exception()))
 
     //commit stage
-    val commit = Output(new CommitSignals)
+    val commit = Output(new CommitSignals())
 
     //load指令位于ROB头指针处
     val com_load_is_at_rob_head = Output(Bool())
 
     //excetion to CSR
-    val com_xcpt = Valid(new CommitExceptionSignals)
+    val com_xcpt = Valid(new CommitExceptionSignals())
 
     // val csr_stall = Input(Bool())
 
@@ -50,73 +53,118 @@ class RobIO (val numWritePorts: Int) extends CoreBundle {
 
     val flush_frontend = Output(Bool())
 
+
     //---------------------debug
-    val debug_wb_valids = Input(Vec(numWritePorts, Bool()))
-    val debug_wb_wdata  = Input(Vec(numWritePorts, Bits(xLen.W)))
-    val debug_wb_ldst   = Input(Vec(numWritePorts, UInt(lregSz.W)))
-    val debug_wb_pc     = Input(Vec(numWritePorts, UInt(coreInstrBits.W)))
+    val debug_wb_valids = Input(Vec(numWakeupPorts, Bool()))
+    val debug_wb_wdata  = Input(Vec(numWakeupPorts, Bits(xLen.W)))
+    val debug_wb_ldst = Input(Vec(numWakeupPorts,UInt(lregSz.W)))
+    val debug_wb_pc = Input(Vec(numWakeupPorts,UInt(32.W)))
 }
 
-class DebugRobSignals extends CoreBundle {
-    val state = UInt()    // width????
-    val rob_head = UInt(robParameters.robAddrSz.W)
-    val rob_pnr = UInt(robParameters.robAddrSz.W)
-    val xcpt_val = Bool()
-    val xcpt_uop = new MicroOp
-    val xcpt_badvaddr = UInt(xLen.W)
+class CommitExceptionSignals extends CoreBundle
+{
+    val ftq_idx = UInt(log2Ceil(frontendParams.numFTQEntries).W)
+    val pc_lob = UInt(log2Ceil(frontendParams.iCacheParams.lineBytes).W)
+    val cause = UInt(xLen.W)
+    val badvaddr = UInt(xLen.W)
+
+    val flush_typ = FlushTypes()
 }
 
-class Rob (val numWritePorts: Int) extends CoreModule {
-    val io = IO(new RobIO(numWritePorts))
+
+class Exception extends CoreBundle
+{
+    val uop = new MicroOp()
+    //TODO:update cause to loogarch
+    val cause = Bits(CauseCode.causeCodeBits.W)
+    val badvaddr = UInt(paddrBits.W)
+}
+
+class DebugRobSignals extends CoreBundle
+{
+  val state = UInt()
+  val rob_head = UInt(robParameters.robAddrSz.W)
+  val rob_pnr = UInt(robParameters.robAddrSz.W)
+  val xcpt_val = Bool()
+  val xcpt_uop = new MicroOp()
+  val xcpt_badvaddr = UInt(xLen.W)
+}
+
+
+class Rob(
+    val numWakeupPorts: Int
+) extends CoreModule
+{
+    val io = IO(new RobIO(numWakeupPorts))
 
     //-------------------------------
-    val numRobRows    = robParameters.numRobRows
+    val numRobRows = robParameters.numRobRows
     val numRobEntries = robParameters.numRobEntries
     //-------------------------------
 
     //state
-    val stateReset :: stateNormal ::stateRollback ::stateWatiTillEmpty :: Nil = Enum(4)
+    val stateReset :: stateNormal ::stateRollback ::stateWatiTillEmpty ::Nil = Enum(4)
     val robState = RegInit(stateReset)
 
-    val robHead    = RegInit(0.U(log2Ceil(numRobRows).W))
-    val robHeadLsb = RegInit(0.U(log2Ceil(coreWidth).W))
-    val robHeadIdx = Cat(robHead, robHeadLsb)
+    val robHead = RegInit(0.U(log2Ceil(robParameters.numRobRows).W))
+    val robHeadLsb = RegInit(0.U((1 max log2Ceil(coreWidth)).W))
+    val robHeadIdx = if (coreWidth == 1) robHead else Cat(robHead,robHeadLsb)
 
-    val robTail    = RegInit(0.U(log2Ceil(numRobRows).W))
-    val robTailLsb = RegInit(0.U(log2Ceil(coreWidth).W))
-    val robTailIdx = Cat(robTail, robTailLsb)
+    val robTail = RegInit(0.U(log2Ceil(robParameters.numRobRows).W))
+    val robTailLsb = RegInit(0.U((1 max log2Ceil(coreWidth)).W))
+    val robTailIdx = if (coreWidth ==1 )robTail else Cat(robTail,robTailLsb)
+    
+    //maybe not use
+    //val robPnr = RegInit(0.U(log2Ceil(numRobRows).W))
+    //val robPnrLsb = RegInit(0.U((1 max log2Ceil(coreWidth)).W))
+    //val robPnrIdx = if(coreWidth ==1) robPnr else Cat(robPnr,robPnrLsb)
 
-    val comIdx = Mux(robState === stateRollback, robTail, robHead)
+    val comIdx = Mux(robState === stateRollback,robTail,robHead)
 
     val maybeFull = RegInit(false.B)
-    val full  = Wire(Bool())
+    val full = Wire(Bool())
     val empty = Wire(Bool())
 
-    val willCommit        = Wire(Vec(coreWidth, Bool()))
-    val canCommit         = Wire(Vec(coreWidth, Bool()))
-    val canThrowException = Wire(Vec(coreWidth, Bool()))
+    val willCommit = Wire(Vec(coreWidth,Bool()))
+    val canCommit = Wire(Vec(coreWidth,Bool()))
+    val canThrowException = Wire(Vec(coreWidth,Bool()))
 
-    val robHeadVals    = Wire(Vec(coreWidth, Bool()))
-    val robTailVals    = Wire(Vec(coreWidth, Bool()))
-    val robHeadUsesStq = Wire(Vec(coreWidth, Bool()))
-    val robHeadUsesLdq = Wire(Vec(coreWidth, Bool()))
+    //val rob_pnr_unsafe      = Wire(Vec(coreWidth, Bool())) // are the instructions at the pnr unsafe?
+    val robHeadVals = Wire(Vec(coreWidth,Bool()))
+    val robTailVals = Wire(Vec(coreWidth,Bool()))
+    val robHeadUsesStq = Wire(Vec(coreWidth,Bool()))
+    val robHeadUsesLdq = Wire(Vec(coreWidth,Bool()))
     
     val exceptionThrown = Wire(Bool())
 
-    val rXcptVal      = RegInit(false.B)
-    val rXcptUop      = Reg(new MicroOp)
+    val rXcptVal = RegInit(false.B)
+    val rXcptUop = Reg(new MicroOp())
     val rXcptBadvaddr = Reg(UInt(paddrBits.W))
-
     io.flush_frontend := rXcptVal
 
     //-----------------tool def---------------------
+    def GetRowIdx(robIdx : UInt) :UInt ={
+        if(coreWidth == 1) return robIdx
+        else return robIdx >> log2Ceil(coreWidth).U
+    }
+    def GetBankIdx(robIdx :UInt):UInt ={
+        if (coreWidth ==1 ) return 0.U
+        else {return robIdx(log2Ceil(coreWidth)-1,0).asUInt}
+    }
 
-    def GetRowIdx(robIdx : UInt): UInt = {
-        return robIdx >> log2Ceil(coreWidth)
+  // **************************************************************************
+  // Debug
+
+    class DebugRobBundle extends CoreBundle
+    {
+        val valid      = Bool()
+        val busy       = Bool()
+        val unsafe     = Bool()
+        val uop        = new MicroOp()
+        val exception  = Bool()
     }
-    def GetBankIdx(robIdx :UInt): UInt ={
-        return robIdx(log2Ceil(coreWidth) - 1, 0).asUInt
-    }
+    val debug_entry = Wire(Vec(numRobEntries, new DebugRobBundle))
+    debug_entry := DontCare // override in statements below
 
     // Used for trace port, for debug purposes only
     val rob_debug_inst_mem   = SyncReadMem(numRobRows, Vec(coreWidth, UInt(32.W)))
@@ -127,18 +175,21 @@ class Rob (val numWritePorts: Int) extends CoreModule {
 
     //---------------------------------------------
 
-    for (w <- 0 until coreWidth) {
+    val robUnsafeMasked = WireInit(VecInit(Seq.fill(numRobRows << log2Ceil(coreWidth)){false.B}))
+
+    for (w <-0 until coreWidth) {
         def MatchBank(bankIdx : UInt) :Bool = (bankIdx === w.U)
 
-        val robVal        = RegInit(VecInit(Seq.fill(numRobRows){ false.B }))
-        val robBsy        = Reg(Vec(numRobRows, Bool()))
-        val robUop        = Reg(Vec(numRobRows, new MicroOp))
-        val robException  = Reg(Vec(numRobRows, Bool()))
+        val robVal = RegInit(VecInit(Seq.fill(numRobRows){false.B}))
+        val robBsy = Reg(Vec(numRobRows, Bool()))
+        val robUnsafe = Reg(Vec(numRobRows, Bool()))
+        val robUop = Reg(Vec(numRobRows,new MicroOp()))
+        val robException = Reg(Vec(numRobRows, Bool()))
         val robPredicated = Reg(Vec(numRobRows, Bool()))
 
         val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
-        val rob_debug_ldst  = Mem(numRobRows, UInt(lregSz.W))
-        val rob_debug_pc    = Mem(numRobRows, UInt(vaddrBits.W))
+        val rob_debug_ldst = Mem(numRobRows,UInt(lregSz.W))
+        val rob_debug_pc = Mem(numRobRows,UInt(32.W))
 
         //------------------dispatch stage------------------
         //enqueue
@@ -146,23 +197,26 @@ class Rob (val numWritePorts: Int) extends CoreModule {
         rob_debug_inst_wmask(w) := io.enq_valids(w)
         rob_debug_inst_wdata(w) := io.enq_uops(w).debug_inst
 
-        when (io.enq_valids(w)) {
-            robVal(robTail)        := true.B
-            robBsy(robTail)        := !(io.enq_uops(w).is_fence || io.enq_uops(w).is_fencei)
-            robException(robTail)  := io.enq_uops(w).exception
-            robUop(robTail)        := io.enq_uops(w)
+        when (io.enq_valids(w)){
+            robVal(robTail) := true.B
+            robBsy(robTail) := !(io.enq_uops(w).is_fence || io.enq_uops(w).is_fencei)
+            robUnsafe(robTail) := io.enq_uops(w).unsafe
+            robException(robTail) := io.enq_uops(w).exception
+            robUop(robTail) := io.enq_uops(w)
             robPredicated(robTail) := false.B
-        } .elsewhen (io.enq_valids.reduce(_|_) && !robVal(robTail)) {
+
+        }.elsewhen (io.enq_valids.reduce(_|_) && !robVal(robTail)) {
             robUop(robTail).debug_inst := BUBBLE // just for debug purposes
         }
 
         //------------------writeback-----------------------
-        for(i <- 0 until numWritePorts){
+        for(i <- 0 until numWakeupPorts){
             val wbResp = io.wb_resps(i)
             val wbUop = wbResp.bits.uop
             val rowIdx = GetRowIdx(wbUop.robIdx)
             when(wbResp.valid && MatchBank(GetBankIdx(wbUop.robIdx))){
                 robBsy(rowIdx) := false.B
+                robUnsafe(rowIdx) := false.B
                 robPredicated(rowIdx) := wbResp.bits.predicated
             }
         }
@@ -173,8 +227,15 @@ class Rob (val numWritePorts: Int) extends CoreModule {
             when(clr_rob_idx.valid && MatchBank(GetBankIdx(clr_rob_idx.bits))){
                 val cidx = GetRowIdx(clr_rob_idx.bits)
                 robBsy(cidx) := false.B
+                robUnsafe(cidx) := false.B
             }
         }
+        // for (clr <- io.lsu_clr_unsafe){
+        //     when(clr.valid && MatchBank(GetBankIdx(clr.bits))){
+        //         val cidx = GetRowIdx(clr.bits)
+        //         robUnsafe(cidx) := false.B
+        //     }
+        // }
 
         //----------------exception-----------------
         when(io.lxcpt.valid && MatchBank(GetBankIdx(io.lxcpt.bits.uop.robIdx))) {
@@ -213,11 +274,14 @@ class Rob (val numWritePorts: Int) extends CoreModule {
         //------------------wrong branch-------------------
 
         for(i <- 0 until numRobRows){
-            when (IsKilledByBranch(io.brupdate, robUop(i))) {
-                robVal(i) := false.B
-                robUop(i).debug_inst := BUBBLE
-            } .elsewhen (robVal(i)) {
-                robUop(i).brMask := GetNewBrMask(io.brupdate, robUop(i))
+            var brMask = robUop(i).brMask
+
+            when(IsKilledByBranch(io.brupdate,brMask))
+            {
+                robVal(i) :=false.B
+                robUop(i.U).debug_inst := BUBBLE
+            } .elsewhen (robVal(i)){
+                robUop(i).brMask := GetNewBrMask(io.brupdate,brMask)
             }
         }
 
@@ -239,6 +303,12 @@ class Rob (val numWritePorts: Int) extends CoreModule {
         robHeadUsesLdq(w) := robUop(robHead).use_ldq
         robHeadUsesStq(w) := robUop(robHead).use_stq
 
+
+        for( i<- 0 until numRobRows){
+            robUnsafeMasked((i<<log2Ceil(coreWidth)) + w) := robVal(i) && (robUnsafe(i) || robException(i))
+
+        }
+
         when (willCommit(w)) {
             robUop(robHead).debug_inst := BUBBLE
             } .elsewhen (rbkRow)
@@ -246,7 +316,7 @@ class Rob (val numWritePorts: Int) extends CoreModule {
             robUop(robTail).debug_inst := BUBBLE
             }
 
-        for (i <- 0 until numWritePorts) {
+        for (i <- 0 until numWakeupPorts) {
             val rob_idx = io.wb_resps(i).bits.uop.robIdx
             when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx))) {
                 rob_debug_wdata(GetRowIdx(rob_idx)) := io.debug_wb_wdata(i)
@@ -458,3 +528,5 @@ class Rob (val numWritePorts: Int) extends CoreModule {
 
 
 }
+
+

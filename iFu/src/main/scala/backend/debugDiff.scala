@@ -9,10 +9,10 @@ import iFu.common.Consts._
 class debugDiff extends CoreModule {
   val io = IO(new Bundle {
     val commit = Input(new CommitSignals())
-    val lregOut = Output(Vec(lregSz,UInt(xLen.W)))
+    val lregOut = Output(Vec(numLRegs,UInt(xLen.W)))
   })
 
-  val debug_reg = Mem(lregSz,UInt(xLen.W))
+  val debug_reg = Mem(numLRegs,UInt(xLen.W))
 
 
   for(w <- 0 until coreWidth){
@@ -32,7 +32,7 @@ class debugDiff extends CoreModule {
       val valid = false
     }
   }
-  for(w <-0 until lregSz){
+  for(w <-0 until numLRegs){
     val regRead = debug_reg(w)   //这个接寄存器堆
     io.lregOut(w) := regRead //接寄存器堆
   }
