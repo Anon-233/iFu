@@ -45,7 +45,6 @@ class BtbPredictor extends Module with HasBtbParameters{
 
     val clockcnt = RegInit((0.U)(10.W))
     clockcnt := clockcnt + 1.U
-    printf("Btb Clock %d :\n", clockcnt)
 
     val s0idx = fetchIdx(io.s0pc)
     val s1idx = RegNext(s0idx) 
