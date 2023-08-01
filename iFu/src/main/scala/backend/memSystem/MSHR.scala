@@ -230,20 +230,21 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
             
         })
 
-    io := DontCare
-    val firstMSHRs = VecInit((Seq.fill(nFirstMSHRs)(Module(new MSHR))).map(_.io))
-    val secondMSHRs = VecInit((Seq.fill(nSecondMSHRs)(Module(new MSHR))).map(_.io))
+    
+    val firstMSHRs = Vec(nFirstMSHRs , Module(new MSHR))
+    val secondMSHRs = Vec(nSecondMSHRs , Module(new MSHR))
 
     when(io.fenceClear){
         // 清空所有mshr
         for(i <- 0 until nFirstMSHRs){
-            firstMSHRs(i).reset := true.B
+            firstMSHRs(i).io.reset := true.B
         }
         for(i <- 0 until nSecondMSHRs){
-            secondMSHRs(i).reset := true.B
+            secondMSHRs(i).io.reset := true.B
         }
 
     }
+    io <> DontCare
 
     //记录一表match的信息
         // 一表中的每一项是否match
@@ -260,25 +261,25 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     
         
         for(i <- 0 until nFirstMSHRs){ 
-        firstMSHRs(i):= DontCare
-        firstMSHRs(i).req.bits := io.req.bits
-        firstMSHRs(i).replacePos := io.replacePos
-        firstMSHRs(i).pipeNumber := io.pipeNumberIn
+        firstMSHRs(i).io <> DontCare
+        firstMSHRs(i).io.req.bits := io.req.bits
+        firstMSHRs(i).io.replacePos := io.replacePos
+        firstMSHRs(i).io.pipeNumber := io.pipeNumberIn
 
         // 一表的id是定好的行号
-        firstMSHRs(i).id := i.U(log2Up(nFirstMSHRs).W)
+        firstMSHRs(i).io.id := i.U(log2Up(nFirstMSHRs).W)
 
         // 进行匹配，找空位等操作
 
-        firstAllocatable(i) := firstMSHRs(i).req.ready
+        firstAllocatable(i) := firstMSHRs(i).io.req.ready
 
-        firstMSHRs(i).newBlockAddr := getBlockAddr(io.req.bits.addr)
-        newblockAddrMatches(i) := firstMSHRs(i).newblockAddrMatch
+        firstMSHRs(i).io.newBlockAddr := getBlockAddr(io.req.bits.addr)
+        newblockAddrMatches(i) := firstMSHRs(i).io.newblockAddrMatch
 
-        firstMSHRs(i).brupdate := io.brupdate
+        firstMSHRs(i).io.brupdate := io.brupdate
 
-        firstMSHRs(i).fetchingBlockAddr := io.fetchingBlockAddr
-        fetchingBlockAddrMatches(i) := firstMSHRs(i).fetchingBlockAddrMatch
+        firstMSHRs(i).io.fetchingBlockAddr := io.fetchingBlockAddr
+        fetchingBlockAddrMatches(i) := firstMSHRs(i).io.fetchingBlockAddrMatch
     }
 
     
@@ -307,21 +308,21 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
     for(i <- 0 until nSecondMSHRs) {
         // 二表相对于一表，只用来写入，和brupdate调整
-        secondMSHRs(i):= DontCare
+        secondMSHRs(i).io <> DontCare
 
-        secondMSHRs(i).req.bits := io.req.bits
-        secondMSHRs(i).replacePos := io.replacePos
-        secondMSHRs(i).pipeNumber := io.pipeNumberIn
+        secondMSHRs(i).io.req.bits := io.req.bits
+        secondMSHRs(i).io.replacePos := io.replacePos
+        secondMSHRs(i).io.pipeNumber := io.pipeNumberIn
         
-        secondAllocatable(i) := secondMSHRs(i).req.ready
+        secondAllocatable(i) := secondMSHRs(i).io.req.ready
         
-        secondMSHRs(i).brupdate := io.brupdate
+        secondMSHRs(i).io.brupdate := io.brupdate
 
         // 检查replay是否执行完毕
-        secondMSHRs(i).replayDone := io.replayDone
+        secondMSHRs(i).io.replayDone := io.replayDone
 
         // 搜索存储store的信息
-        hasStores(i) := secondMSHRs(i).isStore
+        hasStores(i) := secondMSHRs(i).io.isStore
     }
 
     // 任意一个满了，外界都不能再往里面写入新的请求
@@ -334,14 +335,14 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     when( !mshrFull && !(hasStore && isStore(io.req.bits)) ){
         // 首次miss，一表二表都要写入
         when(firstMiss){
-            firstMSHRs(allocFirstMSHR).req.valid := io.req.valid
+            firstMSHRs(allocFirstMSHR).io.req.valid := io.req.valid
             // 二表的id是一表中的行号id
-            secondMSHRs(allocSecondMSHR).id := allocFirstMSHR
-            secondMSHRs(allocSecondMSHR).req.valid := io.req.valid
+            secondMSHRs(allocSecondMSHR).io.id := allocFirstMSHR
+            secondMSHRs(allocSecondMSHR).io.req.valid := io.req.valid
         }.otherwise{
         // 非首次miss，只写入二表，id是一表它对应的那一项的id
-            secondMSHRs(allocSecondMSHR).id := firstNewMatchway
-            secondMSHRs(allocSecondMSHR).req.valid := io.req.valid
+            secondMSHRs(allocSecondMSHR).io.id := firstNewMatchway
+            secondMSHRs(allocSecondMSHR).io.req.valid := io.req.valid
         }
 
     }.otherwise{
@@ -357,8 +358,8 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
         // 激活second表中的fetch地址项
         for(i <- 0 until nSecondMSHRs) {
-            when(secondMSHRs(i).getID === firstFetchMatchway){
-                secondMSHRs(i).fetchReady := true.B
+            when(secondMSHRs(i).io.getID === firstFetchMatchway){
+                secondMSHRs(i).io.fetchReady := true.B
             }   
         }
 
@@ -378,8 +379,8 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     // 向外发出需要fetch的信号
     when(fetchable){
         io.newFetchAddr.valid := true.B
-        io.newFetchAddr.bits := (firstMSHRs(waitingpos).replayReq.bits.addr)
-        io.readPos := firstMSHRs(waitingpos).hitPos
+        io.newFetchAddr.bits := (firstMSHRs(waitingpos).io.replayReq.bits.addr)
+        io.readPos := firstMSHRs(waitingpos).io.hitPos
     }.otherwise{
         io.newFetchAddr.valid := false.B
     }
@@ -388,7 +389,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     // 记录被激活的二表项
     val actives = WireInit(0.U.asTypeOf(Vec(nSecondMSHRs, Bool())))
     for(i <- 0 until nSecondMSHRs) {
-        actives(i) := secondMSHRs(i).active
+        actives(i) := secondMSHRs(i).io.active
     }
 
     // 选取replay阶段
@@ -398,11 +399,11 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     val replaypos = PriorityEncoder(actives)
     when(repalyactive){
         io.replay.valid := true.B
-        io.replay.bits := secondMSHRs(replaypos).replayReq.bits
-        io.hitPos := secondMSHRs(replaypos).hitPos
-        io.pipeNumberOut := secondMSHRs(replaypos).getPipeNumber
+        io.replay.bits := secondMSHRs(replaypos).io.replayReq.bits
+        io.hitPos := secondMSHRs(replaypos).io.hitPos
+        io.pipeNumberOut := secondMSHRs(replaypos).io.getPipeNumber
         // 如果外面接了，就告诉二表项，我已经取走了你的请求，可以准备清空了
-        secondMSHRs(replaypos).replayReq.ready := io.replay.ready
+        secondMSHRs(replaypos).io.replayReq.ready := io.replay.ready
     }.otherwise{
         io.replay.valid := false.B
     }
