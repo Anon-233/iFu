@@ -88,6 +88,8 @@ trait HasDcacheParameters extends HasCoreParameters{
     def getBlockAddr(vaddr: UInt): UInt = dcacheParameters.getBlockAddr(vaddr)
     def isStore(req : DCacheReq): Bool = dcacheParameters.isStore(req)
 
+    def isKilledByBranch(  brupdate : BrUpdateInfo,uop : MicroOp) : Bool = dcacheParameters.IsKilledByBranch(brupdate, uop)
+
 }
 
 class MetaLine extends CoreBundle with HasDcacheParameters{
@@ -137,6 +139,7 @@ class DcacheMeta extends Module with HasDcacheParameters{
         val mshrRead = new DcacheMetaIO
         val rpuWrite = new DcacheMetaIO
         val replayRead = new DcacheMetaIO
+        val replayWrite = new DcacheMetaIO
         val reset = Input(Bool())
 
         val hasDirty = Output(Bool())
@@ -284,6 +287,14 @@ class DcacheMeta extends Module with HasDcacheParameters{
     io.rpuWrite.resp.valid := RegNext(io.rpuWrite.req.valid)
     io.rpuWrite.resp.bits := DontCare
 
+
+    //replayWrite
+    when(!reseting && io.replayWrite.req.valid) {
+        meta.write(io.replayWrite.req.bits.idx, VecInit(Seq.fill(nWays)(io.replayWrite.req.bits.wmeta)), io.replayWrite.req.bits.wayMask.asBools)
+    }
+    io.rpuWrite.resp.valid := RegNext(io.rpuWrite.req.valid)
+    io.rpuWrite.resp.bits := DontCare
+
 }
 
 class DataReq extends CoreBundle with HasDcacheParameters{
@@ -317,9 +328,10 @@ class DcacheData extends Module with HasDcacheParameters{
         val mshrRead = new DcacheDataIO
         val rpuWrite = new DcacheDataIO
         val replayRead = new DcacheDataIO
+        val replayWrite = new DcacheDataIO
         val reset = Input(Bool())
     })
-
+    io <> DontCare
     // 数据结构
     val data = SyncReadMem(nSets, Vec(nWays,Vec(nRowWords, UInt(32.W))))
 
@@ -380,6 +392,15 @@ class DcacheData extends Module with HasDcacheParameters{
     val hitDataSet = data.read(io.replayRead.req.bits.idx, io.replayRead.req.valid)
     io.replayRead.resp.valid := RegNext(io.replayRead.req.valid)
     io.replayRead.resp.bits.rdata := hitDataSet(hitPos)
+
+    //replayWrite
+    when(!reseting && io.replayWrite.req.valid) {
+        data.write(io.replayWrite.req.bits.idx, VecInit(Seq.fill(nWays)(io.replayWrite.req.bits.wdata)), io.replayWrite.req.bits.wayMask.asBools)
+    }
+    io.rpuWrite.resp.valid := RegNext(io.rpuWrite.req.valid)
+    io.rpuWrite.resp.bits := DontCare
+
+
 
 }
 
@@ -527,6 +548,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val mshrMetaRead = meta.io.mshrRead
     val rpuMetaWrite = meta.io.rpuWrite
     val replayMetaRead = meta.io.replayRead
+    val replayMetaWrite = meta.io.replayWrite
 
     // 存储data信息
     val data = Module(new DcacheData)
@@ -538,6 +560,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val mshrDataRead = data.io.mshrRead
     val rpuDataWrite = data.io.rpuWrite
     val replayDataRead = data.io.replayRead
+    val replayDataWrite = data.io.replayWrite
 
     // 替换单元
     val RPU = Module(new ReplaceUnit)
@@ -558,12 +581,13 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // 只有流水线里面没有正在执行的fetch请求,才能发起新的fetch请求
 
     mshrs.io.replay.ready := true.B//有就接
+    mshrs.io.brupdate := io.lsu.brupdate
 
     mshrReplayValid := mshrs.io.replay.valid
 
     fenceValid := io.lsu.force_order
     // 只要meta没有dirty，就可以回应fence，不需要管流水线和mshr状态（如果里面有没做完的指令，lsu肯定非空，unique仍然会停留在dispatch）
-    io.lsu.ordered := (fenceValid && !meta.io.hasDirty)
+    io.lsu.ordered := !meta.io.hasDirty
 
     // TODO prefetch
 
@@ -762,7 +786,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                         s1hit(w) := true.B
 
                         s1hitPos(w) := lsuMetaRead(w).resp.bits.hitPos
-
                         // 接下来要去读data
                         lsuDataRead(w).req.valid := s1valid
                         lsuDataRead(w).req.bits.idx := getIdx(s1req(w).addr)
@@ -835,6 +858,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     val s2req = RegNext(s1req)
     val s2replayPipeNumber = RegNext(s1replayPipeNumber)
+    val s2replayIdx = RegNext(s1replayIdx)
+    val s2replayHitPos = RegNext(s1replayHitPos)
+
     val s2state = RegNext(s1state)
     val s2valid = RegNext(s1valid                                      &&
       !(io.lsu.exception && s1req(0).uop.use_ldq),
@@ -842,14 +868,19 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     val s2kill = RegNext(s1_kill)
     val s2hit = RegNext(s1hit)
+    val s2hitPos = RegNext(s1hitPos)
+
 
 
     var s2handleMetaLine = RegNext(s1handleMetaLine)
     val s2replacedMetaLine = RegNext(s1replacedMetaLine)
 
     // 用于repaly或者lsu的一组handledataline，以及metaread或者fence的一个replacedataline
-    var s2handleDataLine = WireInit(0.U.asTypeOf(Vec(memWidth ,Vec(nRowWords,UInt(32.W)))))
-
+    val s2handleDataLine = WireInit(0.U.asTypeOf(Vec(memWidth ,Vec(nRowWords,UInt(32.W)))))
+    val s2finalwbDataLine = WireInit(0.U.asTypeOf(Vec(memWidth ,Vec(nRowWords,UInt(32.W)))))
+    val s2finalwbMetaLine = WireInit(0.U.asTypeOf(Vec(memWidth ,new MetaLine)))
+    s2finalwbDataLine := s2handleDataLine
+    s2finalwbMetaLine := s2handleMetaLine
     for(w <- 0 until memWidth){
         s2handleDataLine(w) := lsuDataRead(w).resp.bits.rdata
     }
@@ -907,12 +938,24 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                             // data写操作
                             val memSize = s2req(w).uop.mem_size
                             val wordOffset = s2req(w).addr(log2Ceil(nRowWords) + 1, 2)
-                            // s2handleDataLine(w)(wordOffset)
                             val wdata = Wire(Vec(4, UInt(8.W)))
                             for(i <- 0 until 4){
                                 wdata(i) := Mux(s2req(w).mask(i), s2req(w).data(i*8+7,i*8), s2handleDataLine(w)(wordOffset)(i*8+7,i*8))
                             }
-                            s2handleDataLine(w)(wordOffset) := wdata.asUInt
+                            s2finalwbDataLine(w)(wordOffset) := wdata.asUInt
+                            s2finalwbMetaLine(w).dirty := true.B
+
+                            lsuMetaWrite(w).req.valid := true.B
+                            lsuMetaWrite(w).req.bits.idx := getIdx(s2req(w).addr)
+                            lsuMetaWrite(w).req.bits.wmeta := s2finalwbMetaLine(w)
+                            lsuMetaWrite(w).req.bits.wayMask := 1.U << s2replayHitPos(w).asUInt
+
+
+                            lsuDataWrite(w).req.valid := true.B
+                            lsuDataWrite(w).req.bits.wayMask := 1.U << s2hitPos(w).asUInt
+                            lsuDataWrite(w).req.bits.idx   := getIdx(s2req(w).addr)
+                            lsuDataWrite(w).req.bits.wdata := s2finalwbDataLine(w)
+
 
                             io.lsu.resp(w).bits.data := DontCare
                             io.lsu.resp(w).bits.uop := s2req(w).uop
@@ -1017,8 +1060,19 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                             for (i <- 0 until 4) {
                                 wdata(i) := Mux(s2req(w).mask(i), s2req(w).data(i*8+7,i*8), s2handleDataLine(w)(wordOffset)(i*8+7,i*8))
                             }
-                            s2handleDataLine(w)(wordOffset) := wdata.asUInt
 
+                            s2finalwbMetaLine(w).dirty := true.B
+                            s2finalwbDataLine(w)(wordOffset) := wdata.asUInt
+
+                            replayMetaWrite.req.valid := true.B
+                            replayMetaWrite.req.bits.idx := s2replayIdx
+                            replayMetaWrite.req.bits.wmeta := s2finalwbMetaLine(w)
+                            replayMetaWrite.req.bits.wayMask := 1.U << s2replayHitPos(w).asUInt
+
+                            replayDataWrite.req.valid := true.B
+                            replayDataWrite.req.bits.wayMask := 1.U << s2replayHitPos(w).asUInt
+                            replayDataWrite.req.bits.idx := s2replayIdx
+                            replayDataWrite.req.bits.wdata := s2finalwbDataLine(w)
 
                             io.lsu.resp(w).bits.data := DontCare
                             io.lsu.resp(w).bits.uop := s2req(w).uop

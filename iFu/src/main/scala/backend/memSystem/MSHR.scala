@@ -53,7 +53,7 @@ class MSHR extends CoreModule with HasDcacheParameters{
         val replayDone = Input(Bool())
 
         // 分支预测调整TODO
-        val brupdate = Input(Valid(new BrUpdateInfo()))
+        val brupdate = Input(new BrUpdateInfo())
 
         // 之后发进来的每条新的miss请求的地址
         val newBlockAddr = Input(UInt(nBlockAddrBits.W))
@@ -131,11 +131,9 @@ class MSHR extends CoreModule with HasDcacheParameters{
     // 传出流水线号
     io.getPipeNumber := mshr.pipeNumber
 
-    // TODO分支预测调整
-    when(io.brupdate.valid){
-        // when(io.brupdate.bits.isTaken){
-        //     mshr.valid := false.B
-        // }
+    //分支预测调整
+    when(isKilledByBranch(io.brupdate,mshr.req.uop)){
+        mshr.valid := false.B
     }
 
     // 给外界返回match判断
@@ -225,7 +223,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
         // 传入的更新信息，这回逐一检测每一个LOAD指令是不是分支错误，如果是，就把它删掉
         // 对于STORE来说，由于LSU传来的STORE一定是分支预测正确的，所以不用管
-            val brupdate = Input(Valid(new BrUpdateInfo()))
+            val brupdate = Input(new BrUpdateInfo())
         
         // fence指令会清空所有的mshr
             val fenceClear = Input(Bool())
