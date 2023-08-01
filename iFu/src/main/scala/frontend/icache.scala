@@ -47,8 +47,10 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         isPow2(refillCycles),
         "Refill cycles must be a power of 2."
     )
+
     val packetBits = frontendParams.fetchBytes * 8
     val refillToOneBank = refillCycles == iParams.banksPerLine
+    require(fetchBytes / nBanks == bankBytes)
 //========== ----i$ params--- ==========
 /*---------------------------------------------------------------------*/
 //========== ----i$ funcs---- ==========
@@ -165,7 +167,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         refillOneBankData = io.cbusResp.data
         refillLastBank = io.cbusResp.ready && io.cbusResp.isLast
     } else {
-        val refillBufCnt = RegInit(0.U(log2Ceil(refillCycles / nBanks).W))
+        val refillBufCnt = RegInit(0.U(log2Ceil(refillCycles / banksPerLine).W))
         val refillBuf = RegInit(
             VecInit(Seq.fill(refillCycles / banksPerLine)(0.U((lineBytes * 8 / refillCycles).W)))
         )
