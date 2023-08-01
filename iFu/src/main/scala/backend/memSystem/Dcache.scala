@@ -772,8 +772,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s1replacedMetaLine = WireInit(0.U.asTypeOf(new MetaLine))
 
 
-    io.lsu.ordered := io.lsu.force_order && !meta.io.hasDirty //只要没有dirty位,就返回forceOrder
-
     when(s1state === lsu  && s1valid ){
         for(w <- 0 until memWidth){
             when((s2StoreFailed && isStore(s1req(w))) || IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)){
