@@ -14,6 +14,9 @@ compile: $(gen_dir)/iFuCore.v
 $(gen_dir)/iFuCore.v: $(wildcard $(src_dir)/scala/*.scala)
 	$(SBT) "run $(gen_dir) $(SPLIT)"
 
+split:
+    make SPLIT=false
+
 log:
 	make > ./log
 

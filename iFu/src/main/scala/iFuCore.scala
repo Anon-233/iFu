@@ -35,8 +35,6 @@ class iFuCore extends CoreModule {
 
     val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
     val dec_brmask_logic = Module(new BranchMaskGenerationLogic)
-//    decode_units.map(_.io  <> DontCare)
-    dec_brmask_logic.io <> DontCare
 
     val dispatcher = Module(new BasicDispatcher)
 
