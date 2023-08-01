@@ -91,7 +91,7 @@ class ALUExeUnit(
     numStages        = if (hasAlu && hasMul) 3 else if (hasAlu) 1 else 0
 ) {
     io <> DontCare
-    
+    dontTouch(io)
     val div_busy  = WireInit(false.B)
 
     val iresp_fu_units = ArrayBuffer[FuncUnit]()
