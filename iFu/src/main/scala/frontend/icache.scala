@@ -215,16 +215,14 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     when(refillLastBank){
         tagArray.write(
             refillIdx,
-            VecInit(
-                Seq.fill(iParams.nWays)(refillTag)),
-                Seq.tabulate(iParams.nWays)(replWay === _.U
-            )
+            VecInit(Seq.fill(iParams.nWays)(refillTag)),
+            Seq.tabulate(iParams.nWays)(replWay === _.U)
+        )
+        validArray := validArray.bitSet(
+            Cat(replWay, refillIdx), refillLastBank && !invalidated
         )
     }
 
-    validArray := validArray.bitSet(
-        Cat(replWay, refillIdx), refillLastBank && !invalidated
-    )
 
 //========== --Refill Logic-- ==========
 /*---------------------------------------------------------------------*/
