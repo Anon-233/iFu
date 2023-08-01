@@ -156,7 +156,7 @@ class FrontendToExeIO extends CoreBundle {  // from core to frontend instead of 
     // val mcontext        = Output(UInt(mcontextWidth.W))
     // val scontext        = Output(UInt(scontextWidth.W))
 
-    val sfence          = Valid(new SFenceReq)
+    /*val sfence          = Valid(new SFenceReq)*/
 
     val brupdate        = Output(new BrUpdateInfo)
 
@@ -207,8 +207,6 @@ class Frontend extends CoreModule {
     val fb     = Module(new FetchBuffer)
     val ftq    = Module(new FetchTargetQueue)
 
-    tlb.io <> DontCare
-
     io.ireq            := icache.io.cbusReq
     icache.io.cbusResp := io.iresp
 
@@ -226,7 +224,7 @@ class Frontend extends CoreModule {
     // val s0_tsrc               = WireInit(0.U(BSRC_SZ.W))
     val s0_valid              = WireInit(false.B)
     val s0_is_replay          = WireInit(false.B)
-    val s0_is_sfence          = WireInit(false.B)
+    /*val s0_is_sfence          = WireInit(false.B)*/
     val s0_replay_tlb_resp    = Wire(new TLBResp)
     val s0_replay_bpd_resp    = Wire(new BranchPredictionBundle)
     val s0_replay_ppc         = Wire(UInt(vaddrBits.W))
@@ -254,20 +252,20 @@ class Frontend extends CoreModule {
     val s1_valid     = RegNext(s0_valid, false.B)
     val s1_ghist     = RegNext(s0_ghist)
     val s1_is_replay = RegNext(s0_is_replay)
-    val s1_is_sfence = RegNext(s0_is_sfence)
+    /*val s1_is_sfence = RegNext(s0_is_sfence)*/
     // val s1_tsrc      = RegNext(s0_tsrc) // TODO: maybe more simple
 
     val f1_clear     = WireInit(false.B)
 
-    tlb.io.req.valid            := (s1_valid && !s1_is_replay && !f1_clear) || s1_is_sfence
+    tlb.io.req.valid            := (s1_valid && !s1_is_replay && !f1_clear) /*|| s1_is_sfence*/
     // tlb.io.req.bits.cmd         := DontCare
     tlb.io.req.bits.vaddr       := s1_vpc
     tlb.io.req.bits.passthrough := false.B  // may be changed
     tlb.io.req.bits.size        := log2Ceil(fetchWidth * instrBytes).U  // what is this?
     // tlb.io.req.bits.v           := io.ptw.status.v
     // tlb.io.req.bits.prv         := io.ptw.status.prv
-    tlb.io.sfence               := RegNext(io.exe.sfence)
-    // tlb.io.kill                 := false.B
+//    tlb.io.sfence               := RegNext(io.exe.sfence)
+//     tlb.io.kill                 := false.B
 
     // 如果s1阶段将要进行replay，则不考虑tlb miss
     // 因为此时tlb resp的值是被replay的值，而被replay的值来源之前的s2
@@ -708,7 +706,7 @@ class Frontend extends CoreModule {
     
     fb.io.clear := false.B
 
-    when (io.exe.sfence.valid) {
+    /*when (io.exe.sfence.valid) {
         fb.io.clear  := true.B
         f4_clear     := true.B
         f3_clear     := true.B
@@ -719,7 +717,7 @@ class Frontend extends CoreModule {
         s0_vpc       := io.exe.sfence.bits.addr
         s0_is_replay := false.B
         s0_is_sfence := true.B
-    } .elsewhen(io.exe.redirect_flush) {
+    } .else*/when(io.exe.redirect_flush) {
         fb.io.clear := true.B
         f4_clear    := true.B
         f3_clear    := true.B
