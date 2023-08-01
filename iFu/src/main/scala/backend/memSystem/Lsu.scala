@@ -134,7 +134,14 @@ class Lsu extends CoreModule {
     val MINI_EXCEPTION_MEM_ORDERING = 2.U
     /** ************************************ */
     val dcache  = Module(new NonBlockingDcache)
-//    dcache.io <> DontCare
+    /** *********************************** */
+    dcache.io.lsu.resp(0).bits.uop.is_amo := DontCare
+    dcache.io.lsu.resp(1).bits.uop.is_amo := DontCare
+    io.core.exe(0).iresp.bits.uop := DontCare
+    io.core.exe(1).iresp.bits.uop := DontCare
+    /** ************************************ */
+
+    //    dcache.io <> DontCare
     io.dreq             := dcache.io.cbusReq
     dcache.io.cbusResp  := io.dresp
 
