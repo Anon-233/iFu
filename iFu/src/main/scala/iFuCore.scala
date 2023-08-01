@@ -908,6 +908,7 @@ class iFuCore extends CoreModule {
         io.commit.debug_insts(w) := RegNext(rob.io.commit.debug_insts(w))
         io.commit.debug_wdata(w) := RegNext(rob.io.commit.debug_wdata(w))
         io.commit.debug_wen(w) := RegNext(rob.io.commit.uops(w).ldst_val)
+        io.commit.arch_valids(w) := RegNext(rob.io.commit.arch_valids(w))
     }
     io.register := lregOut
 }
