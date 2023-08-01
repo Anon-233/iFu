@@ -125,18 +125,21 @@ class RenameStage (
         32,
         numPhysRegs
     ))
+    maptable.io <> DontCare
 
     val freelist = Module(new FreeList(
         plWidth,
         numPhysRegs,
         31
     ))
+    freelist.io <> DontCare
 
     val busytable = Module(new BusyTable(
         plWidth,
         numPhysRegs,
         numWakeupPorts
     ))
+    busytable.io <> DontCare
 
     val ren2BrTags = Wire(Vec(plWidth, Valid(UInt(brTagSz.W))))
 
@@ -248,6 +251,7 @@ class PredRenameStage (
     val numFTQEntries = frontendParams.numFTQEntries
     def DoBypass(uop: MicroOp, older: Seq[MicroOp], allocReqs: Seq[Bool]): MicroOp = { uop }
 
+    io <> DontCare
     ren2AllocReqs := DontCare
 
     val busyTable = RegInit(VecInit(0.U(numFTQEntries.W).asBools))

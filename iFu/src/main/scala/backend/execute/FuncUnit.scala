@@ -86,6 +86,8 @@ class ALUUnit(
     isAluUnit = true,
     isJmpUnit = isJmpUnit
 ) {
+    io <> DontCare
+    
     val uop = io.req.bits.uop
 
     val imm = immGen(uop.immPacked, uop.ctrl.imm_sel)
@@ -205,6 +207,8 @@ class ALUUnit(
 class PipelinedMulUnit(numStages: Int = 3) extends PipelinedFuncUnit (
     numStages = numStages,
 ) {
+    io <> DontCare
+
     val imult = Module(new MultStar)
 
     imult.io.req.valid := io.req.valid
@@ -290,6 +294,8 @@ abstract class IterativeFuncUnit extends FuncUnit (
 }
 
 class DivUnit extends IterativeFuncUnit {
+    io <> DontCare
+
     val div = Module(new SRT16Divider())
 
     div.io.req.valid := io.req.valid

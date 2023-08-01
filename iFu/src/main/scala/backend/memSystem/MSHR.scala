@@ -85,11 +85,13 @@ class MSHR extends CoreModule with HasDcacheParameters{
 
         val isStore = Output(Bool())
     }}
-    io <> DontCare
     // 数据存储
-    val mshr = RegInit(Wire(new MSHRdata()))
+    val mshr = RegInit(0.U.asTypeOf(new MSHRdata))
+    mshr := DontCare
+    io<>DontCare
 
     when(io.reset){
+        mshr := 0.U.asTypeOf(new MSHRdata)
         mshr.valid := false.B
     }
 
@@ -230,7 +232,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
             
         })
 
-    io <> DontCare
+    io := DontCare
     val firstMSHRs = VecInit(Seq.fill(nFirstMSHRs)(Module(new MSHR)).map(_.io))
     val secondMSHRs = VecInit(Seq.fill(nSecondMSHRs)(Module(new MSHR)).map(_.io))
 
@@ -247,19 +249,20 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
     //记录一表match的信息
         // 一表中的每一项是否match
-    val newblockAddrMatches = Wire(Vec(nFirstMSHRs, Bool()))
-    val firstNewMatchway = Wire(UInt(log2Up(nFirstMSHRs).W))
+    val newblockAddrMatches = WireInit(0.U.asTypeOf(Vec(nFirstMSHRs, Bool())))
+    val firstNewMatchway = WireInit(0.U(log2Up(nFirstMSHRs).W))
         // 一表中的每一项是否是fetch对应的地址
-    val fetchingBlockAddrMatches = Wire(Vec(nFirstMSHRs, Bool()))
-    val firstFetchMatchway = Wire(UInt(log2Up(nFirstMSHRs).W))
+    val fetchingBlockAddrMatches = WireInit(0.U.asTypeOf((Vec(nFirstMSHRs, Bool()))))
+    val firstFetchMatchway = WireInit((0.U(log2Up(nFirstMSHRs).W)))
     // 一表中的每一项是否可以写入新的请求
-    val firstAllocatable = Wire(Vec(nFirstMSHRs, Bool()))
+    val firstAllocatable = WireInit(0.U.asTypeOf(Vec(nFirstMSHRs, Bool())))
     // 一表是否已满
-    val firstFull = Wire(Bool())
+    val firstFull = WireInit(false.B)
     
     
         
         for(i <- 0 until nFirstMSHRs){ 
+        firstMSHRs(i):= DontCare
         firstMSHRs(i).req.bits := io.req.bits
         firstMSHRs(i).replacePos := io.replacePos
         firstMSHRs(i).pipeNumber := io.pipeNumberIn
@@ -295,17 +298,19 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
     
     // 二表中的每一项是否可以写入新的请求
-    val secondAllocatable = Wire(Vec(nSecondMSHRs, Bool()))
+    val secondAllocatable = WireInit(0.U.asTypeOf(Vec(nSecondMSHRs, Bool())))
     val allocSecondMSHR = PriorityEncoder(secondAllocatable.asUInt)
     // 二表是否已满
     val secondFull = !(secondAllocatable.reduce(_ || _))
 
 
-    val hasStores = Wire(Vec(nSecondMSHRs, Bool()))
+    val hasStores = WireInit(0.U.asTypeOf(Vec(nSecondMSHRs, Bool())))
     val hasStore = hasStores.reduce(_ || _)
 
     for(i <- 0 until nSecondMSHRs) {
         // 二表相对于一表，只用来写入，和brupdate调整
+        secondMSHRs(i):= DontCare
+
         secondMSHRs(i).req.bits := io.req.bits
         secondMSHRs(i).replacePos := io.replacePos
         secondMSHRs(i).pipeNumber := io.pipeNumberIn
@@ -363,7 +368,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     }
 
     // 搜索是否有等待fetch的项
-    val waitinglist = Wire(Vec(nFirstMSHRs, Bool()))
+    val waitinglist = WireInit(0.U.asTypeOf(Vec(nFirstMSHRs, Bool())))
     val haswait = waitinglist.reduce(_ || _)
     val waitingpos = PriorityEncoder(waitinglist)
 
@@ -383,7 +388,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
 
     // 记录被激活的二表项
-    val actives = Wire(Vec(nSecondMSHRs, Bool()))
+    val actives = WireInit(0.U.asTypeOf(Vec(nSecondMSHRs, Bool())))
     for(i <- 0 until nSecondMSHRs) {
         actives(i) := secondMSHRs(i).active
     }

@@ -19,7 +19,7 @@ class RobIO(
     val xcpt_fetch_pc = Input(UInt(vaddrBits.W))
     //output
     val rob_tail_idx = Output(UInt(robParameters.robAddrSz.W))
-    val rob_pnr_idx = Output(UInt(robParameters.robAddrSz.W))
+    // val rob_pnr_idx = Output(UInt(robParameters.robAddrSz.W))
     val rob_head_idx = Output(UInt(robParameters.robAddrSz.W))
 
     val brupdate = Input(new BrUpdateInfo())
@@ -29,7 +29,7 @@ class RobIO(
     //store stage
     val lsu_clr_bsy = Input(Vec(memWidth,Valid(UInt(robParameters.robAddrSz.W))))
 
-    val lsu_clr_unsafe = Input(Vec(memWidth,Valid(UInt(robParameters.robAddrSz.W))))
+    // val lsu_clr_unsafe = Input(Vec(memWidth,Valid(UInt(robParameters.robAddrSz.W))))
 
     val lxcpt = Flipped(new ValidIO(new Exception()))
 
@@ -42,7 +42,7 @@ class RobIO(
     //excetion to CSR
     val com_xcpt = Valid(new CommitExceptionSignals())
 
-    val csr_stall = Input(Bool())
+    // val csr_stall = Input(Bool())
 
     //flush signals
     //可能因为异常，流水线延迟或者访存阶段错误等,发送给frondend
@@ -255,13 +255,12 @@ class Rob(
                 robUnsafe(cidx) := false.B
             }
         }
-        for (clr <- io.lsu_clr_unsafe){
-            when(clr.valid && MatchBank(GetBankIdx(clr.bits))){
-                val cidx = GetRowIdx(clr.bits)
-                robUnsafe(cidx) := false.B
-            }
-        }
-
+        // for (clr <- io.lsu_clr_unsafe){
+        //     when(clr.valid && MatchBank(GetBankIdx(clr.bits))){
+        //         val cidx = GetRowIdx(clr.bits)
+        //         robUnsafe(cidx) := false.B
+        //     }
+        // }
 
         //----------------exception-----------------
         when(io.lxcpt.valid && MatchBank(GetBankIdx(io.lxcpt.bits.uop.robIdx))) {
@@ -273,7 +272,7 @@ class Rob(
         canThrowException(w) := robVal(robHead) && robException(robHead)
 
         //---------------output:commit------------
-        canCommit(w) := robVal(robHead) && !(robBsy(robHead)) && !io.csr_stall
+        canCommit(w) := robVal(robHead) && !(robBsy(robHead)) /* && !io.csr_stall */
 
         io.commit.valids(w) := willCommit(w)
         io.commit.arch_valids(w) := willCommit(w) && !robPredicated(comIdx)

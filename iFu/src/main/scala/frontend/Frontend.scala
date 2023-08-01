@@ -207,6 +207,8 @@ class Frontend extends CoreModule {
     val fb     = Module(new FetchBuffer)
     val ftq    = Module(new FetchTargetQueue)
 
+    tlb.io <> DontCare
+
     io.ireq            := icache.io.cbusReq
     icache.io.cbusResp := io.iresp
 
