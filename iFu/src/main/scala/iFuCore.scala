@@ -33,12 +33,10 @@ class iFuCore extends CoreModule {
 /*-----------------------------*/
 
     val ifu = Module(new Frontend)
-    ifu.io <> DontCare
 
     val decode_units = Seq.fill(decodeWidth) { Module(new DecodeUnit) }
     val dec_brmask_logic = Module(new BranchMaskGenerationLogic)
-    decode_units.map(_.io  <> DontCare)
-    dec_brmask_logic.io <> DontCare
+
 
     val dispatcher = Module(new BasicDispatcher)
 
@@ -273,6 +271,13 @@ class iFuCore extends CoreModule {
         ifu.io.exe.redirect_ghist.currentSawBranchNotTaken := use_same_ghist
     } .elsewhen (rob.io.flush_frontend || brUpdate.b1.mispredictMask =/= 0.U) {
         ifu.io.exe.redirect_flush := true.B
+        ifu.io.exe.redirect_pc := DontCare
+        ifu.io.exe.redirect_ghist := DontCare
+        ifu.io.exe.redirect_ftq_idx := DontCare
+    } .otherwise {
+        ifu.io.exe.redirect_pc := DontCare
+        ifu.io.exe.redirect_ghist := DontCare
+        ifu.io.exe.redirect_ftq_idx := DontCare
     }
 
     val youngest_com_idx = (coreWidth - 1).U - PriorityEncoder(rob.io.commit.valids.reverse)
