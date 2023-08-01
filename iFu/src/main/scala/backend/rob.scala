@@ -71,22 +71,16 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     val robHeadIdx = Cat(robHead, robHeadLsb)
 
     val robTail    = RegInit(0.U(log2Ceil(numRobRows).W))
-    val robTailLsb = RegInit(0.U(log2Ceil(coreWidth)).W)
+    val robTailLsb = RegInit(0.U(log2Ceil(coreWidth).W))
     val robTailIdx = Cat(robTail, robTailLsb)
 
     val comIdx = Mux(robState === stateRollback, robTail, robHead)
-
-    val maybeFull = RegInit(false.B)
-    val full  = Wire(Bool())
-    val empty = Wire(Bool())
 
     val willCommit        = Wire(Vec(coreWidth, Bool()))
     val canCommit         = Wire(Vec(coreWidth, Bool()))
     val canThrowException = Wire(Vec(coreWidth, Bool()))
 
     val robHeadVals    = Wire(Vec(coreWidth, Bool()))
-    val robTailVals    = Wire(Vec(coreWidth, Bool()))
-    val robHeadUsesStq = Wire(Vec(coreWidth, Bool()))
     val robHeadUsesLdq = Wire(Vec(coreWidth, Bool()))
     
     val exceptionThrown = Wire(Bool())
@@ -96,6 +90,10 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     val rXcptBadvaddr = Reg(UInt(paddrBits.W))
 
     io.flush_frontend := rXcptVal
+
+    val maybeFull = RegInit(false.B)
+    val full  = (robHead === robTail) && maybeFull
+    val empty = (robHead === robTail) && (robHeadVals.asUInt === 0.U)
 
     //-----------------tool def---------------------
     def GetRowIdx(robIdx : UInt): UInt ={
@@ -181,6 +179,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         io.commit.uops(w)        := robUop(comIdx)
         io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
 
+        // 感觉没什么用
         when (
             io.brupdate.b2.mispredict &&
             MatchBank(GetBankIdx(io.brupdate.b2.uop.robIdx)) &&
@@ -192,52 +191,49 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         val rbkRow = robState === stateRollback && !full
 
         io.commit.rbk_valids(w) := rbkRow && robVal(comIdx)
-        io.commit.rollback := (robState === stateRollback)
+        io.commit.rollback      := (robState === stateRollback)
 
-        when(rbkRow){
-            robVal(comIdx) := false.B
+        when (rbkRow) {
+            robVal(comIdx)       := false.B
             robException(comIdx) := false.B
         }
 
-        //------------------wrong branch-------------------
-
-        for(i <- 0 until numRobRows){
+        for (i <- 0 until numRobRows) {
             var brMask = robUop(i).brMask
-
-            when(IsKilledByBranch(io.brupdate,brMask))
-            {
-                robVal(i) :=false.B
-                robUop(i.U).debug_inst := BUBBLE
-            } .elsewhen (robVal(i)){
+            when (IsKilledByBranch(io.brupdate,brMask)) {
+                robVal(i)            := false.B
+                robUop(i).debug_inst := BUBBLE
+            } .elsewhen (robVal(i)) {
                 robUop(i).brMask := GetNewBrMask(io.brupdate,brMask)
             }
         }
 
-        when(io.brupdate.b2.mispredict &&
-        MatchBank(GetBankIdx(io.brupdate.b2.uop.robIdx))){
+        // 感觉这个也没什么地方用
+        when (
+            io.brupdate.b2.mispredict &&
+            MatchBank(GetBankIdx(io.brupdate.b2.uop.robIdx))
+        ) {
             robUop(GetRowIdx(io.brupdate.b2.uop.robIdx)).taken := io.brupdate.b2.taken
         }
 
-
-
         //------------------commit--------------------------
-        when(willCommit(w)) {
+
+        when (willCommit(w)) {
             robVal(robHead) := false.B
         }
 
         //--------------------output-----------------------
-        robHeadVals(w) := robVal(robHead)
-        robTailVals(w) := robVal(robTail)
+
+        robHeadVals(w)    := robVal(robHead)
         robHeadUsesLdq(w) := robUop(robHead).use_ldq
-        robHeadUsesStq(w) := robUop(robHead).use_stq
 
         when (willCommit(w)) {
             robUop(robHead).debug_inst := BUBBLE
-            } .elsewhen (rbkRow)
-            {
+        } .elsewhen (rbkRow) {
             robUop(robTail).debug_inst := BUBBLE
-            }
+        }
 
+        // 给 debug 用的
         for (i <- 0 until numWritePorts) {
             val rob_idx = io.wb_resps(i).bits.uop.robIdx
             when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx))) {
@@ -256,15 +252,11 @@ class Rob(val numWritePorts: Int) extends CoreModule {
             assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
                     temp_uop.ldst_val && temp_uop.pdst =/= io.wb_resps(i).bits.uop.pdst),
                     "[rob] writeback (" + i + ") occurred to the wrong pdst.")
-            }
+        }
         io.commit.debug_wdata(w) := rob_debug_wdata(robHead)
-        io.commit.debug_ldst(w) := rob_debug_ldst(robHead)
-        io.commit.debug_pc(w)   := rob_debug_pc(robHead)
-
-        //rob_pnr_unsafe(w) := rob_val(rob_pnr) && (rob_unsafe(rob_pnr) || rob_exception(rob_pnr))
-
+        io.commit.debug_ldst(w)  := rob_debug_ldst(robHead)
+        io.commit.debug_pc(w)    := rob_debug_pc(robHead)
     }
-
 
     var blockCommit = (robState =/= stateNormal) && (robState =/= stateWatiTillEmpty) || RegNext(exceptionThrown) ||RegNext(RegNext(exceptionThrown))
     var willThrowException = false.B
@@ -293,7 +285,6 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     io.com_xcpt.bits.pc_lob := comXcptUop.pcLowBits
     io.com_xcpt.bits.flush_typ := DontCare
 
-
     //------------------flush-------------------
 
     val flushCommitMask = Range(0,coreWidth).map{i => io.commit.valids(i) && io.commit.uops(i).flush_on_commit}
@@ -314,8 +305,6 @@ class Rob(val numWritePorts: Int) extends CoreModule {
                                                 refetchInst)
     io.flush.bits.cause :=DontCare
     io.flush.bits.badvaddr := DontCare
-
-    
 
     //------------------exception-------------------
     val nextXcptUop = Wire(new MicroOp())
@@ -361,6 +350,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     "rob_idx does not match the rob_head")
 
     //--------------------Robhead-------------------
+
     val robDeq = WireInit(false.B)
     val rPartialRow = RegInit(false.B)
 
@@ -381,9 +371,8 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         robHeadLsb := OHToUInt(PriorityEncoderOH(robHeadVals.asUInt))
     }
 
-    //TODO:pnr??
-
     //------------------------robtail-------------------
+
     val robEnq = WireInit(false.B)
 
     when(robState === stateRollback && (robTail =/= robHead || maybeFull)){
@@ -405,8 +394,6 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     //----------------------maybefull--------------------
     maybeFull := !robDeq &&(robEnq||maybeFull) || io.brupdate.b1.mispredictMask =/= 0.U
-    full := robTail === robHead && maybeFull
-    empty :=(robHead === robTail) && (robHeadVals.asUInt ===0.U)
 
     io.rob_head_idx := robHeadIdx
     io.rob_tail_idx := robTailIdx
@@ -415,8 +402,8 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     //---------------------state change(FSM)-------------------
 
-    switch(robState){
-        is(stateReset){
+    switch (robState) {
+        is (stateReset) {
             robState := stateNormal
         }
         is(stateNormal){
@@ -444,11 +431,5 @@ class Rob(val numWritePorts: Int) extends CoreModule {
             }
         }
     }
-
-
     io.com_load_is_at_rob_head := RegNext(robHeadUsesLdq(PriorityEncoder(robHeadVals.asUInt)) && !willCommit.reduce(_||_))
-
-
 }
-
-
