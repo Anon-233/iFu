@@ -137,8 +137,8 @@ class Lsu extends CoreModule {
     /** *********************************** */
     dcache.io.lsu.resp(0).bits.uop.is_amo := DontCare
     dcache.io.lsu.resp(1).bits.uop.is_amo := DontCare
-    io.core.exe(0).iresp.bits.uop := DontCare
-    io.core.exe(1).iresp.bits.uop := DontCare
+    io.core.exe(0).iresp := DontCare
+    io.core.exe(1).iresp := DontCare
     /** ************************************ */
 
     //    dcache.io <> DontCare

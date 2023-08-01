@@ -13,6 +13,7 @@ class DTlb extends CoreModule{
         val sfence = Input(Valid(new SFenceReq))
         val kill = Input(Bool())
     })
+    io := DontCare
     for(w <- 0 until memWidth){
         io.resp(w).miss := false.B
         io.resp(w).paddr:= io.req(w).bits.vaddr
