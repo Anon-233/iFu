@@ -31,7 +31,7 @@ class RegisterRead(
         val brupdate = Input(new BrUpdateInfo())
 
     })
-//    io <> DontCare
+   io <> DontCare
 
     val rrdValid = Wire(Vec(issueWidth,Bool()))
     val rrdUops = Wire(Vec(issueWidth,new MicroOp()))
@@ -156,7 +156,7 @@ class RegisterRead(
 
         if(numReadPorts > 0) io.exe_reqs(w).bits.rs1Data := exeRegRs1Data(w)
         if(numReadPorts > 1) io.exe_reqs(w).bits.rs2Data := exeRegRs2Data(w)
-        //if(numReadPorts > 2) io.exe_reqs(w).bits.rs3_data := exeRegRs3Data(w)
+        //if(numReadPorts > 2) io.exe_reqs(w).bits.rs3_data :=p exeRegRs3Data(w)
         if(enableSFBOpt) io.exe_reqs(w).bits.predData := exeRegPredData(w)
     }
 }

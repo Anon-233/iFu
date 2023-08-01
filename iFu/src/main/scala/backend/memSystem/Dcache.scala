@@ -575,7 +575,14 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     rpuJustDone := RPU.io.ready && RegNext(!RPU.io.ready)
     // 存储mshr的信息
     val mshrs = Module(new MSHRFile)
-    mshrs.io <> DontCare
+    mshrs.io.req.valid := false.B
+    mshrs.io.req.bits := 0.U.asTypeOf(new DCacheReq)
+    mshrs.io.replacePos := 0.U
+    mshrs.io.pipeNumberIn := 0.U
+    mshrs.io.RPUnotBusy := RPU.io.ready
+    mshrs.io.replayDone := false.B
+    mshrs.io.fetchingBlockAddr := 0.U
+    mshrs.io.fetchReady := false.B
 
 
     // 只有流水线里面没有正在执行的fetch请求,才能发起新的fetch请求
@@ -586,6 +593,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     mshrReplayValid := mshrs.io.replay.valid
 
     fenceValid := io.lsu.force_order
+    //清掉里面所有的load指令
+    mshrs.io.fenceClear := fenceValid
     // 只要meta没有dirty，就可以回应fence，不需要管流水线和mshr状态（如果里面有没做完的指令，lsu肯定非空，unique仍然会停留在dispatch）
     io.lsu.ordered := !meta.io.hasDirty
 
@@ -1101,6 +1110,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         RPU.io.replaceAddr := s2replaceAddr
         RPU.io.fetchAddr := s2fetchAddr
         RPU.io.replaceWay := s2replacePos
+        //告诉mshr去激活
+        mshrs.io.fetchReady := true.B
 
         //成功进入s2state fence的RPU的话，告诉meta拿到了这个dirty，让他清空
         meta.io.fenceTakeDirtyMeta := s2state === fence

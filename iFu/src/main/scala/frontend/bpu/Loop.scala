@@ -222,7 +222,7 @@ class LoopPredictor extends Module with HasLoopParameters {
   })
 
 
-  val clockcnt = RegInit((0.U)(10.W))
+  val clockcnt = RegInit((0.U)(32.W))
     clockcnt := clockcnt + 1.U
     printf("Loop Clock %d :\n", clockcnt)
 
