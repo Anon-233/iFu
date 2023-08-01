@@ -442,7 +442,7 @@ class Lsu extends CoreModule {
         dtlb.io.req(w).valid := exe_tlb_valid(w)
         dtlb.io.req(w).bits.vaddr := exe_tlb_vaddr(w)
         dtlb.io.req(w).bits.size := exe_size(w)
-
+    }
     // exceptions
     //TODO ma_ld和ma_st的条件判断需要更改
     val ma_ld = widthMap(w => will_fire_load_incoming(w) && /*exe_req(w).bits.mxcpt.valid*/false.B) // We get ma_ld in memaddrcalc
