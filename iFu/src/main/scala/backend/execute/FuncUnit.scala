@@ -43,7 +43,7 @@ abstract class PipelinedFuncUnit (
     isMemAddrCalcUnit = isMemAddrCalcUnit
 ) {
     io.req.ready := true.B
-
+    dontTouch(io.resp.bits.uop)
     var rValids: Vec[Bool]  = null
     var rUops: Vec[MicroOp] = null
     if (numStages > 0) {
