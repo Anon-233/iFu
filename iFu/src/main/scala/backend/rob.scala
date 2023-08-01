@@ -394,6 +394,7 @@ class Rob(
     //io.com_xcpt.bits.edge_inst := comXcptUop.edge_inst
     //io.com_xcpt.bits.is_rvc := comXcptUop.is_rvc
     io.com_xcpt.bits.pc_lob := comXcptUop.pcLowBits
+    io.com_xcpt.bits.flush_typ := DontCare
 
 
     //------------------flush-------------------
@@ -414,6 +415,8 @@ class Rob(
                                                 exceptionThrown && !isMiniException,
                                                 flushCommit && flushUop.uopc === uopERET,
                                                 refetchInst)
+    io.flush.bits.cause :=DontCare
+    io.flush.bits.badvaddr := DontCare
 
     
 
