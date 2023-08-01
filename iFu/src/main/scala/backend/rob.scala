@@ -55,6 +55,11 @@ class RobIO(val numWritePorts: Int) extends CoreBundle {
 }
 
 class Rob(val numWritePorts: Int) extends CoreModule {
+
+    printf("\n\nROB:\n")
+
+
+
     val io = IO(new RobIO(numWritePorts))
 
     //-------------------------------
@@ -178,6 +183,9 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         io.commit.arch_valids(w) := willCommit(w) && !robPredicated(comIdx)
         io.commit.uops(w)        := robUop(comIdx)
         io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
+
+        printf(p"rob commit: pc:${Hexadecimal(io.commit.uops(w).pc)} inst:${Hexadecimal(io.commit.debug_insts(w))}\n")
+        printf(p"rob arch_valids($w) = ${io.commit.arch_valids(w)}\n")
 
         // 感觉没什么用
         when (

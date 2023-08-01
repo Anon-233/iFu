@@ -277,8 +277,6 @@ class TagePredictor(params: TageParams = TageParams())extends Module with HasTag
 
     val clockcnt = RegInit((0.U)(10.W))
     clockcnt := clockcnt + 1.U
-    printf("Tage Clock %d :\n", clockcnt)
-
 
 // 6个表,越往后的表信息越完善置信度越高
     val tageTables = params.tableInfo.map{

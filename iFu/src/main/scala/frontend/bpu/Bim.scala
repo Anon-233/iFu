@@ -26,7 +26,6 @@ class BimPredictor extends Module with HasBimParameters{
 
     val clockcnt = RegInit((0.U)(10.W))
     clockcnt := clockcnt + 1.U
-    printf("Bim Clock %d :\n", clockcnt)
 
     val s2meta = Wire(Vec(bankWidth,new BimPredictMeta))
 

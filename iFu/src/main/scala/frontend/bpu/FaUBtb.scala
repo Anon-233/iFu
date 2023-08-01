@@ -40,7 +40,6 @@ class FaUBtbPredictior  extends Module with HasUbtbParameters {
 
     val clockcnt = RegInit((0.U)(10.W))
     clockcnt := clockcnt + 1.U
-    printf("FaUBtb Clock %d :\n", clockcnt)
     
     // 都是Reg类型存储,故当周期可读,下一周期可写
     val meta     = RegInit((0.U).asTypeOf(Vec(nWays, Vec(bankWidth, new UbtbMeta))))

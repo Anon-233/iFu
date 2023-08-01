@@ -88,9 +88,7 @@ class MSHR extends CoreModule with HasDcacheParameters{
     // 数据存储
     val mshr = RegInit(0.U.asTypeOf(new MSHRdata))
     mshr := DontCare
-    io<>DontCare
-
-    printf(p"mshr\n")
+    io <> DontCare
 
     when(io.reset){
         mshr := 0.U.asTypeOf(new MSHRdata)
