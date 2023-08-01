@@ -3,6 +3,7 @@ package iFu.common
 import chisel3._
 import chisel3.util._
 
+import iFu.backend.CauseCode
 class BrUpdateMasks extends CoreBundle {
     val resolveMask = UInt(maxBrCount.W)
     val mispredictMask = UInt(maxBrCount.W)

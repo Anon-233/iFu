@@ -48,6 +48,7 @@ class LSUParameters{
     val numLDQEntries: Int = 32
     val ldqAddrSz    : Int = log2Ceil(numLDQEntries)
     val stqAddrSz    : Int = log2Ceil(numSTQEntries)
+    val MINI_EXCEPTION_MEM_ORDERING: Int = 2
 }
 
 class DcacheParameters {
