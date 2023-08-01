@@ -33,14 +33,16 @@ class MicroOp extends CoreBundle {
 
     val ldst_is_rs1: Bool = Bool()
     val ldst: UInt        = UInt(lregSz.W)
+    dontTouch(ldst)
     val lrs1: UInt        = UInt(lregSz.W)
     val lrs2: UInt        = UInt(lregSz.W)
     val ldst_val: Bool    = Bool()
     val dst_rtype: UInt   = UInt(RT_X.getWidth.W)
     val lrs1_rtype: UInt  = UInt(RT_X.getWidth.W)
     val lrs2_rtype: UInt  = UInt(RT_X.getWidth.W)
-
+    dontTouch(ldst_val)
     val pdst: UInt       = UInt(pregSz.W)
+    dontTouch(pdst)
     val prs1: UInt       = UInt(pregSz.W)
     val prs2: UInt       = UInt(pregSz.W)
     val ppred: UInt      = UInt(log2Ceil(maxBrCount).W)
