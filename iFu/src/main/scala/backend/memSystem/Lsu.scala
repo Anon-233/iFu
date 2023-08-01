@@ -125,7 +125,7 @@ class Lsu extends CoreModule {
     def widthMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
 /*=============================================================================*/
     val io = IO(new LSUIO)
-    io <> DontCare  //TODO
+//    io <> DontCare  //TODO
     /** *********************************** */
     val numStqEntries   = lsuParameters.numSTQEntries
     val numLdqEntries   = lsuParameters.numLDQEntries
@@ -134,6 +134,7 @@ class Lsu extends CoreModule {
     val MINI_EXCEPTION_MEM_ORDERING = 2.U
     /** ************************************ */
     val dcache  = Module(new NonBlockingDcache)
+//    dcache.io <> DontCare
     io.dreq             := dcache.io.cbusReq
     dcache.io.cbusResp  := io.dresp
 
@@ -436,6 +437,12 @@ class Lsu extends CoreModule {
             exe_tlb_uop(w).mem_cmd, 0.U)
     )*/
     val dtlb = Module(new DTlb)
+    dtlb.io <> DontCare
+    for (w <- 0 until memWidth) {
+        dtlb.io.req(w).valid := exe_tlb_valid(w)
+        dtlb.io.req(w).bits.vaddr := exe_tlb_vaddr(w)
+        dtlb.io.req(w).bits.size := exe_size(w)
+
     // exceptions
     //TODO ma_ld和ma_st的条件判断需要更改
     val ma_ld = widthMap(w => will_fire_load_incoming(w) && /*exe_req(w).bits.mxcpt.valid*/false.B) // We get ma_ld in memaddrcalc
