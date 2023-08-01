@@ -544,6 +544,7 @@ class Lsu extends CoreModule {
         dmem_req(w).bits.uop := NullMicroOp
         dmem_req(w).bits.addr := 0.U
         dmem_req(w).bits.data := 0.U
+        dmem_req(w).bits.mask := 0.U
 
         dcache.io.lsu.s1_kill(w) := false.B
 
