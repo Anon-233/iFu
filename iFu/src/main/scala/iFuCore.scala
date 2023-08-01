@@ -10,6 +10,16 @@ import iFu.frontend.FrontendUtils.bankAlign
 import iFu.backend._
 import iFu.util._
 
+class debugCommit extends CoreBundle{
+    val debug_insts = Vec(robParameters.retireWidth, UInt(32.W))
+    val debug_wdata = Vec(robParameters.retireWidth, UInt(xLen.W))
+    val debug_ldst = Vec(robParameters.retireWidth, UInt(lregSz.W))
+    val debug_pc = Vec(robParameters.retireWidth, UInt(32.W))
+    val debug_wen =  Vec(robParameters.retireWidth,Bool())
+
+    val arch_valids = Vec(robParameters.retireWidth,Bool())
+}
+
 class iFuCore extends CoreModule {
     val io = IO(new CoreBundle {
         val ext_int = Input(UInt(8.W))
@@ -17,7 +27,7 @@ class iFuCore extends CoreModule {
         val iresp = Input(new CBusResp)
         val dreq = Output(new CBusReq)
         val dresp = Input(new CBusResp)
-        val commit = Output(new CommitSignals)
+        val commit = Output(new debugCommit)
         val register = Output(Vec(32 , UInt(32.W) ))
     })
 /*-----------------------------*/
@@ -864,7 +874,6 @@ class iFuCore extends CoreModule {
         }
     }
     require(cnt == numWritePorts)
-    require(cnt == rob.numWakeupPorts)
 
     rob.io.brupdate <> brUpdate
 
@@ -893,6 +902,12 @@ class iFuCore extends CoreModule {
     diff.io.commit := rob.io.commit
     lregOut := diff.io.lregOut   //用这个接difftest，或者进入后端debugDiff文件中接入
 
-    io.commit := RegNext(rob.io.commit)
+    for(w <- 0 until robParameters.retireWidth) {
+        io.commit.debug_pc(w) := RegNext(rob.io.commit.debug_pc(w))
+        io.commit.debug_ldst(w) := RegNext(rob.io.commit.debug_ldst(w))
+        io.commit.debug_insts(w) := RegNext(rob.io.commit.debug_insts(w))
+        io.commit.debug_wdata(w) := RegNext(rob.io.commit.debug_wdata(w))
+        io.commit.debug_wen(w) := RegNext(rob.io.commit.uops(w).ldst_val)
+    }
     io.register := lregOut
 }
