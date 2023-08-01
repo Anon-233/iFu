@@ -494,12 +494,12 @@ class Frontend extends CoreModule {
 
             // i << 1是防止溢出，因为sfbOffset <= Cacheline
             val offset_from_aligned_pc = (
-                (i << 1).U((log2Ceil(lineBytes) + 1).W) + brsigs.sfbOffset.bits
+                (i << 2).U((log2Ceil(lineBytes) + 1).W) + brsigs.sfbOffset.bits
             )
             val lower_mask = Wire(UInt((2 * fetchWidth).W))
             val upper_mask = Wire(UInt((2 * fetchWidth).W))
             lower_mask := UIntToOH(i.U)
-            upper_mask := UIntToOH(offset_from_aligned_pc(log2Ceil(fetchBytes) + 1,1)) << Mux(f3_is_last_bank_in_block, bankWidth.U, 0.U)
+            upper_mask := UIntToOH(offset_from_aligned_pc(log2Ceil(fetchBytes) + 2,2)) << Mux(f3_is_last_bank_in_block, bankWidth.U, 0.U)
 
             /**
              * 判断是否是sfb指令，如果是Cacheline的最后一个bank，那么最多只能取3个bank（跨Cacheline）
