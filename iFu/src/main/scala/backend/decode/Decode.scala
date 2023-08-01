@@ -271,7 +271,7 @@ class DecodeUnitIO() extends CoreBundle {
 //TODO 添加对CSR环境下异常指令的检测
 class DecodeUnit extends CoreModule {
     val io = IO(new DecodeUnitIO)
-    io <> DontCare
+//    io <> DontCare
 
     val uop = Wire(new MicroOp)
     uop := io.enq.uop
@@ -363,9 +363,10 @@ class DecodeUnit extends CoreModule {
 
     uop.immPacked := inst(25,0)
 
-    uop.isBr   := cs.is_br
-    uop.isJal  := (uop.uopc === uopJAL)
-    uop.isJalr := (uop.uopc === uopJIRL)
+    uop.isBr    := cs.is_br
+    uop.isJal   := (uop.uopc === uopJAL)
+    uop.isJalr  := (uop.uopc === uopJIRL)
+    io.deq.uop  := uop
 }
 
 class BranchMaskGenerationLogic extends CoreModule
