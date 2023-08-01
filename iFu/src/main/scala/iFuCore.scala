@@ -17,6 +17,8 @@ class iFuCore extends CoreModule {
         val iresp = Input(new CBusResp)
         val dreq = Output(new CBusReq)
         val dresp = Input(new CBusResp)
+        val commit = Output(new CommitSignals)
+        val register = Output(Vec(32 , UInt(32.W) ))
     })
 /*-----------------------------*/
 
@@ -33,9 +35,9 @@ class iFuCore extends CoreModule {
     val ifu = Module(new Frontend)
     ifu.io <> DontCare
 
-    val decode_units     = for (w <- 0 until decodeWidth) yield { val d = Module(new DecodeUnit); d }
+    val decode_units = Seq.fill(decodeWidth) { Module(new DecodeUnit) }
     val dec_brmask_logic = Module(new BranchMaskGenerationLogic)
-//    decode_units.map(_.io  <> DontCare)
+    decode_units.map(_.io  <> DontCare)
     dec_brmask_logic.io <> DontCare
 
     val dispatcher = Module(new BasicDispatcher)
@@ -857,7 +859,7 @@ class iFuCore extends CoreModule {
         }
     }
     require(cnt == numWritePorts)
-    require(cnt == rob.numWritePorts)
+    require(cnt == rob.numWakeupPorts)
 
     rob.io.brupdate <> brUpdate
 
@@ -882,7 +884,10 @@ class iFuCore extends CoreModule {
     // *** debug for difftest
     //-------------------------------------------------------------
     val diff = Module(new debugDiff)
-    val lregOut = Wire(Vec(lregSz, UInt(xLen.W)))
+    val lregOut = Wire(Vec(32, UInt(xLen.W)))
     diff.io.commit := rob.io.commit
     lregOut := diff.io.lregOut   //用这个接difftest，或者进入后端debugDiff文件中接入
+
+    io.commit := RegNext(rob.io.commit)
+    io.register := lregOut
 }
