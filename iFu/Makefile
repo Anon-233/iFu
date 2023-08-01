@@ -18,9 +18,9 @@ split:
     make SPLIT=false
 
 log:
-	make > ./log
+	make split > ./log
 
 clean:
 	rm -rf $(gen_dir) $(out_dir) test_run_dir
 
-.PHONY: clean log
+.PHONY: clean log split
