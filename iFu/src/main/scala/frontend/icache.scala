@@ -33,7 +33,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 /*---------------------------------------------------------------------*/
 //========== ----i$ params--- ==========
     val nBanks = iParams.nBanks
-    val refillCycles = iParams.lineBytes / io.cbusResp.data.getWidth
+    val refillCycles = iParams.lineBytes * 8 / io.cbusResp.data.getWidth
     require(
         iParams.lineBytes % io.cbusResp.data.getWidth == 0,
         "LineBytes must be divisible by data width."
@@ -253,16 +253,16 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 /*---------------------------------------------------------------------*/
 //========== ----for debug--- ==========
     // val clk = RegInit(0.U(64.W))
-    printf(p"=>=>=>=>=>=>=welcom to iCache=<=<=<=<=<=<=\n")
-    printf(p"\tnow state: ${iCacheState}\n")
-    printf(p"\ts0_valid: ${s0_valid}, s0_vaddr: ${s0_vaddr}\n")
-    printf(p"\ts1_valid: ${s1_valid}, s1_paddr: ${io.s1_paddr}\n")
-    printf(p"\ts1_kill: ${io.s1_kill}, s2_kill: ${io.s2_kill}\n")
-    printf(p"\tibusreq: ${io.cbusReq}\n")
-    when (io.cbusResp.ready) {
-        printf(p"\tibusresp: ${io.cbusResp}\n")
-    }
-    printf(p"\trefillbuf: ${refillBuf}, refillbufcnt: ${refillBufCnt}\n")
+    // printf(p"=>=>=>=>=>=>=welcom to iCache=<=<=<=<=<=<=\n")
+    // printf(p"\tnow state: ${iCacheState}\n")
+    // printf(p"\ts0_valid: ${s0_valid}, s0_vaddr: ${s0_vaddr}\n")
+    // printf(p"\ts1_valid: ${s1_valid}, s1_paddr: ${io.s1_paddr}\n")
+    // printf(p"\ts1_kill: ${io.s1_kill}, s2_kill: ${io.s2_kill}\n")
+    // printf(p"\tibusreq: ${io.cbusReq}\n")
+    // when (io.cbusResp.ready) {
+    //     printf(p"\tibusresp: ${io.cbusResp}\n")
+    // }
+    // printf(p"\trefillbuf: ${refillBuf}, refillbufcnt: ${refillBufCnt}\n")
 //========== ----for debug--- ==========
 /*---------------------------------------------------------------------*/
 }
