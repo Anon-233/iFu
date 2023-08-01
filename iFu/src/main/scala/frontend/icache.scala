@@ -33,6 +33,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 /*---------------------------------------------------------------------*/
 //========== ----i$ params--- ==========
     val nBanks = iParams.nBanks
+    val lineBytes = iParams.lineBytes
     val refillCycles = iParams.lineBytes * 8 / io.cbusResp.data.getWidth
     require(
         iParams.lineBytes % io.cbusResp.data.getWidth == 0,
@@ -166,7 +167,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     } else {
         val refillBufCnt = RegInit(0.U(log2Ceil(refillCycles / nBanks).W))
         val refillBuf = RegInit(
-            VecInit(Seq.fill(refillCycles / nBanks)(0.U((packetBits / refillCycles).W)))
+            VecInit(Seq.fill(refillCycles / nBanks)(0.U((lineBytes * 8 / refillCycles).W)))
         )
         val refillBufWriteEn = io.cbusReq.valid && io.cbusResp.ready
         when (refillBufWriteEn) {
