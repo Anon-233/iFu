@@ -31,7 +31,7 @@ class RegisterRead(
         val brupdate = Input(new BrUpdateInfo())
 
     })
-    io <> DontCare
+//    io <> DontCare
 
     val rrdValid = Wire(Vec(issueWidth,Bool()))
     val rrdUops = Wire(Vec(issueWidth,new MicroOp()))
