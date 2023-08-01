@@ -210,3 +210,26 @@ object Consts {
         uop
     }
 }
+
+object FlushTypes {
+    def SZ =3
+    def apply() = UInt(SZ.W)
+    def none = 0.U
+    def xcpt = 1.U
+    def eret = (2+1).U
+    def refetch = 2.U
+    def next = 4.U
+
+    def useCsrEvec(typ: UInt): Bool = typ(0)
+    def useSamePC(typ: UInt): Bool  = typ === refetch
+    def usePCplus4(typ: UInt): Bool = typ === next
+
+    def getType(valid: Bool, i_xcpt: Bool, i_eret: Bool, i_refetch: Bool): UInt = {
+        val ret = Mux(!valid, none,
+                  Mux(i_eret, eret,
+                  Mux(i_xcpt, xcpt,
+                  Mux(i_refetch,refetch,
+                  next))))
+        ret
+    }
+}

@@ -83,8 +83,7 @@ class LSUDMemIO extends CoreBundle {
 class CommitSignals extends CoreBundle {
     val valids = Vec(robParameters.retireWidth, Bool())
     val arch_valids = Vec(robParameters.retireWidth,Bool())
-    val uops = Vec(robParameters.retireWidth, new MicroOp() )
-    //val fflags = Valid(UInt(5.W))
+    val uops = Vec(robParameters.retireWidth, new MicroOp)
 
     //maybe use
     //val debug
@@ -108,3 +107,19 @@ case class SupportedFuncs (
     // val cnt: Boolean    = false
     // val tlb: Boolean    = false
 )
+
+class Exception extends CoreBundle {
+    val uop = new MicroOp()
+    //TODO:update cause to loogarch
+    val cause = Bits(CauseCode.causeCodeBits.W)
+    val badvaddr = UInt(paddrBits.W)
+}
+
+class CommitExceptionSignals extends CoreBundle {
+    val ftq_idx = UInt(log2Ceil(frontendParams.numFTQEntries).W)
+    val pc_lob = UInt(log2Ceil(frontendParams.iCacheParams.lineBytes).W)
+    val cause = UInt(xLen.W)
+    val badvaddr = UInt(xLen.W)
+
+    val flush_typ = FlushTypes()
+}
