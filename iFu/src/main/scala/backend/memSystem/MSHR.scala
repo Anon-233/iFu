@@ -90,6 +90,8 @@ class MSHR extends CoreModule with HasDcacheParameters{
     mshr := DontCare
     io<>DontCare
 
+    printf(p"mshr\n")
+
     when(io.reset){
         mshr := 0.U.asTypeOf(new MSHRdata)
         mshr.valid := false.B
@@ -231,8 +233,8 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         })
 
     io := DontCare
-    val firstMSHRs = VecInit(Seq.fill(nFirstMSHRs)(Module(new MSHR)).map(_.io))
-    val secondMSHRs = VecInit(Seq.fill(nSecondMSHRs)(Module(new MSHR)).map(_.io))
+    val firstMSHRs = VecInit((Seq.fill(nFirstMSHRs)(Module(new MSHR))).map(_.io))
+    val secondMSHRs = VecInit((Seq.fill(nSecondMSHRs)(Module(new MSHR))).map(_.io))
 
     when(io.fenceClear){
         // 清空所有mshr
