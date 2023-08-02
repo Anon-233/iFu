@@ -902,12 +902,13 @@ class iFuCore extends CoreModule {
     lregOut := diff.io.lregOut   //用这个接difftest，或者进入后端debugDiff文件中接入
 
     for(w <- 0 until robParameters.retireWidth) {
-        io.commit.debug_pc(w) := RegNext(rob.io.commit.debug_pc(w))
-        io.commit.debug_ldst(w) := RegNext(rob.io.commit.debug_ldst(w))
-        io.commit.debug_insts(w) := RegNext(rob.io.commit.debug_insts(w))
-        io.commit.debug_wdata(w) := RegNext(rob.io.commit.debug_wdata(w))
-        io.commit.debug_wen(w) := RegNext(rob.io.commit.uops(w).ldst_val)
-        io.commit.arch_valids(w) := RegNext(rob.io.commit.arch_valids(w))
+        io.commit.debug_pc(w) := RegNext(rob.io.commit.uops(w).debug_pc , 0.U)
+        io.commit.debug_ldst(w) := RegNext(rob.io.commit.uops(w).ldst, 0.U)
+        io.commit.debug_insts(w) := RegNext(rob.io.commit.uops(w).debug_inst,0.U)
+        io.commit.debug_wdata(w) := RegNext(rob.io.commit.debug_wdata(w), 0.U)
+        io.commit.debug_wen(w) := RegNext(rob.io.commit.uops(w).ldst_val && rob.io.commit.arch_valids(w), 0.U)
+        io.commit.arch_valids(w) := RegNext(rob.io.commit.arch_valids(w), 0.U)
     }
     io.register := lregOut
+
 }
