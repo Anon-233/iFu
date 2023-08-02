@@ -86,68 +86,65 @@ object AluRRdDecode extends RRdDecodeConstants {
 object JmpRRdDecode extends RRdDecodeConstants {
     val table: Array[(BitPat, List[BitPat])] =
         Array[(BitPat, List[BitPat])](
-                                // br type
-                                // |      use alu pipe                    op1 sel   op2 sel
-                                // |      |  use muldiv pipe              |         |         immsel       csr_cmd
-                                // |      |  |  use mem pipe              |         |         |     rf wen |
-                                // |      |  |  |  alu fcn        wd/word?|         |         |     |      |
-                                // |      |  |  |  |              |       |         |         |     |      |
-            BitPat(uopJIRL)     -> List(BR_JR , Y, N, N, aluFn.FN_ADD  , OP1_PC , OP2_NEXT, immS16, REN_1, CSR.N),
-            BitPat(uopJAL)      -> List(BR_J  , Y, N, N, aluFn.FN_ADD  , OP1_PC , OP2_NEXT, immS26, REN_1, CSR.N),
-            BitPat(uopPCADDU12I)-> List(BR_N  , Y, N, N, aluFn.FN_ADD  , OP1_PC , OP2_IMM , immU20, REN_1, CSR.N),
-            BitPat(uopPCADDI)   -> List(BR_N  , Y, N, N, aluFn.FN_ADD  , OP1_PC , OP2_IMM , immS20, REN_1, CSR.N)
+                                       // br type
+                                       // |    use alu pipe               op1 sel   op2 sel
+                                       // |    |  use muldiv pipe         |         |        immsel       csr_cmd
+                                       // |    |  |  use mem pipe         |         |        |       rf wen |
+                                       // |    |  |  |       alu fcn      |         |        |       |      |
+                                       // |    |  |  |       |            |         |        |       |      |                                                              BitPat(uopJIRL)     -> List(BR_JR , Y, N, N, aluFn.FN_ADD  , OP1_PC , OP2_NEXT, immS16, REN_1, CSR.N),
+            BitPat(uopJAL)      -> List(BR_J , Y, N, N, aluFn.FN_ADD  , OP1_PC , OP2_NEXT, immS26, REN_1, CSR.N),
+            BitPat(uopPCADDU12I)-> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_PC , OP2_IMM , immU20, REN_1, CSR.N),
+            BitPat(uopPCADDI)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_PC , OP2_IMM , immS20, REN_1, CSR.N)
         )
 }
 
 object MulDivRRdDecode extends RRdDecodeConstants {
     val table: Array[(BitPat, List[BitPat])] =
         Array[(BitPat, List[BitPat])](
-                                        // br type
-                                        // |      use alu pipe                    op1 sel   op2 sel
-                                        // |      |  use muldiv pipe              |         |         immsel       csr_cmd
-                                        // |      |  |  use mem pipe              |         |         |     rf wen |
-                                        // |      |  |  |  alu fcn        wd/word?|         |         |     |      |
-                                        // |      |  |  |  |              |       |         |         |     |      |
-            BitPat(uopMODWU)    -> List(BR_N  , N, Y, N, divFn.FN_REMU , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
-            BitPat(uopDIVWU)    -> List(BR_N  , N, Y, N, divFn.FN_DIVU , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
-            BitPat(uopDIVW)     -> List(BR_N  , N, Y, N, divFn.FN_DIV  , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
-            BitPat(uopMODW)     -> List(BR_N  , N, Y, N, divFn.FN_REM  , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
-            BitPat(uopMULHW)    -> List(BR_N  , N, Y, N, mulFn.FN_MULH , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
-            BitPat(uopMULHWU)   -> List(BR_N  , N, Y, N, mulFn.FN_MULHU, OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
-            BitPat(uopMULW)     -> List(BR_N  , N, Y, N, mulFn.FN_MUL  , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N)
+                                       // br type
+                                       // |    use alu pipe                op1 sel op2 sel
+                                       // |    |  use muldiv pipe          |       |        immsel       csr_cmd
+                                       // |    |  |  use mem pipe          |       |        |        rf wen |
+                                       // |    |  |  |       alu fcn       |       |        |        |      |
+                                       // |    |  |  |       |             |       |        |        |      |                                                             BitPat(uopMODWU)    -> List(BR_N  , N, Y, N, divFn.FN_REMU , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
+            BitPat(uopDIVWU)    -> List(BR_N , N, Y, N, divFn.FN_DIVU , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
+            BitPat(uopDIVW)     -> List(BR_N , N, Y, N, divFn.FN_DIV  , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
+            BitPat(uopMODW)     -> List(BR_N , N, Y, N, divFn.FN_REM  , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
+            BitPat(uopMULHW)    -> List(BR_N , N, Y, N, mulFn.FN_MULH , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
+            BitPat(uopMULHWU)   -> List(BR_N , N, Y, N, mulFn.FN_MULHU, OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N),
+            BitPat(uopMULW)     -> List(BR_N , N, Y, N, mulFn.FN_MUL  , OP1_RS1, OP2_RS2 , immX  , REN_1, CSR.N)
         )
 }
 
 object MemRRdDecode extends RRdDecodeConstants {
     val table: Array[(BitPat, List[BitPat])] =
         Array[(BitPat, List[BitPat])](
-            // br type
-            // |      use alu pipe                    op1 sel   op2 sel
-            // |      |  use muldiv pipe              |         |         immsel       csr_cmd
-            // |      |  |  use mem pipe              |         |         |     rf wen |
-            // |      |  |  |  alu fcn        wd/word?|         |         |     |      |
-            // |      |  |  |  |              |       |         |         |     |      |
-            BitPat(uopLD)       -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS12, REN_0, CSR.N),
-            BitPat(uopSTA)      -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS12, REN_0, CSR.N),
-            BitPat(uopSTD)      -> List(BR_N  , N, N, Y, aluFn.FN_X    , OP1_RS1, OP2_RS2 , immS12, REN_0, CSR.N),
-            BitPat(uopLLW)      -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS14, REN_0, CSR.N),
-            BitPat(uopAMO_AG)   -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_ZERO, immS14, REN_0, CSR.N)
+                                       // br type
+                                       // |    use alu pipe              op1 sel   op2 sel
+                                       // |    |  use muldiv pipe          |         |        immsel       csr_cmd
+                                       // |    |  |  use mem pipe          |         |        |     rf wen |
+                                       // |    |  |  |       alu fcn       |         |        |     |      |
+                                       // |    |  |  |       |             |         |        |     |      |                                                              BitPat(uopLD)       -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS12, REN_0, CSR.N),
+            BitPat(uopSTA)      -> List(BR_N , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS12, REN_0, CSR.N),
+            BitPat(uopSTD)      -> List(BR_N , N, N, Y, aluFn.FN_X    , OP1_RS1, OP2_RS2 , immS12, REN_0, CSR.N),
+            BitPat(uopLLW)      -> List(BR_N , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS14, REN_0, CSR.N),
+            BitPat(uopAMO_AG)   -> List(BR_N , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_ZERO, immS14, REN_0, CSR.N)
         )
 }
 
  object CsrRRdDecode extends RRdDecodeConstants {
      val table: Array[(BitPat, List[BitPat])] =
          Array[(BitPat, List[BitPat])](
-             // br type
-             // |      use alu pipe                    op1 sel   op2 sel
-             // |      |  use muldiv pipe              |         |         immsel       csr_cmd
-             // |      |  |  use mem pipe              |         |         |     rf wen |
-             // |      |  |  |  alu fcn        wd/word?|         |         |     |      |
-             // |      |  |  |  |              |       |         |         |     |      |
+                                     // br type
+                                     // |    use alu pipe              op1 sel   op2 sel
+                                     // |    |  use muldiv pipe        |         |        immsel       csr_cmd
+                                     // |    |  |  use mem pipe        |         |        |     rf wen |
+                                     // |    |  |  |       alu fcn     |         |        |     |      |
+                                     // |    |  |  |       |           |         |        |     |      |
              BitPat(uopCSRWR) -> List(BR_N , Y, N, N, aluFn.FN_ADD ,OP1_RS1 , OP2_ZERO, immX, REN_1, CSR.W),
-             BitPat(uopCSRRD) -> List(BR_N , Y, N, N, aluFn.FN_ADD ,OP1_RS1 , OP2_ZERO, immX, REN_1, CSR.S),
-             BitPat(uopCSRXCHG) -> List(BR_N , Y, N, N, aluFn.FN_ADD, OP1_RS1 , OP2_ZERO, immX, REN_1, CSR.C),
-             BitPat(uopERET)  -> List(BR_N , Y, N, N, aluFn.FN_ADD ,OP1_X, OP2_X, immX, REN_0, CSR.I)
+             BitPat(uopCSRRD) -> List(BR_N , Y, N, N, aluFn.FN_ADD ,OP1_ZERO, OP2_ZERO, immX, REN_1, CSR.S),
+             BitPat(uopCSRXCHG)->List(BR_N , Y, N, N, aluFn.FN_ADD, OP1_RS1 , OP2_RS2 , immX, REN_1, CSR.C),
+             BitPat(uopERET)  -> List(BR_N , Y, N, N, aluFn.FN_ADD ,OP1_X   , OP2_X   , immX, REN_0, CSR.I)
          )
  }
 

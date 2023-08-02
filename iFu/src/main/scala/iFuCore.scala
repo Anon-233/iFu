@@ -326,7 +326,12 @@ class iFuCore extends CoreModule {
     ifu.io.exe.getFtqPc(0).ftqIdx := ftq_arb.io.out.bits
     ftq_arb.io.out.ready := true.B
 
-    jmp_unit.io.getFtqPc <> ifu.io.exe.getFtqPc(0)
+    // jmp_unit.io.getFtqPc <> ifu.io.exe.getFtqPc(0)
+    jmp_unit.io.getFtqPc := DontCare
+    jmp_unit.io.getFtqPc.pc      := ifu.io.exe.getFtqPc(0).pc
+    jmp_unit.io.getFtqPc.entry   := ifu.io.exe.getFtqPc(0).entry
+    jmp_unit.io.getFtqPc.nextVal := ifu.io.exe.getFtqPc(0).nextVal
+    jmp_unit.io.getFtqPc.nextpc  := ifu.io.exe.getFtqPc(0).nextpc
     rob.io.xcpt_fetch_pc := ifu.io.exe.getFtqPc(0).pc
 
     //-------------------------------------------------------------

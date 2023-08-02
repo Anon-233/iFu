@@ -213,26 +213,28 @@ object XDecode extends DecodeTable  {
 //     )
 // }
 
-// object CSRDecode extends DecodeTable with MicroOpCode {
-//                 //                                                                                          wakeup_delay
-//                 //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
-//                 //      |  micro-code                                                |    uses_ldg               |   |  is_br
-//                 //      |     |           iq-type                        rs1 regtype |    |  uses_stq            |   |  |  is_pc2epc
-//                 //      |     |              |       func unit                       |    |  |  is_amo           |   |  |  |  is_unique(clear pipeline for it)
-//                 //      |     |              |        |       dst_type          |    |    |  |  |  is_fence      |   |  |  |  |  flush_on_commit
-//                 //      |     |              |        |       |       rs1_type       |    |  |  |  |  is_fencei  |   |  |  |  |  |  csr_cmd
-//                 //      |     |              |        |       |       |              |    |  |  |  |  |          |   |  |  |  |  |  |
-//                 //      |     |              |        |       |       |    rs2_type  |    |  |  |  |  |          |   |  |  |  |  |  |
-//                 //      |     |              |        |       |       |       |      |    |  |  |  |  |  mem_cmd |   |  |  |  |  |  |
-//     val table: Array[(BitPat, List[BitPat])] = Array( //      |       |       |      |    |  |  |  |  |    |     |   |  |  |  |  |  |
-//         CSRRD  -> List(Y, uopCSRRD       , IQT_INT, FU_CSR, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, M_X, 0.U, N, N, N, Y, Y, CSR.R),
-//         CSRWR  -> List(Y, uopCSRWR       , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_X  , immX, N, N, N, N, N, M_X, 0.U, N, N, N, Y, Y, CSR.W),
-//         CSRXCHG-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N, M_X, 0.U, N, N, N, Y, Y, CSR.W),
-//         ERTN   -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N, M_X, 0.U, Y, N, N, Y, Y, CSR.I),
-//         SYSCALL-> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N, M_X, 0.U, N, N, Y, Y, Y, CSR.I),
-//         BREAK  -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N, M_X, 0.U, N, N, Y, Y, Y, CSR.I),
-//     )
-// }
+ object CSRDecode extends DecodeTable with MicroOpCode {
+                  //                                                                                          wakeup_delay
+                  //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
+                  //      |  micro-code                                                |    uses_ldg               |   |  is_br
+                  //      |     |           iq-type                        rs1 regtype |    |  uses_stq            |   |  |  is_pc2epc
+                  //      |     |              |       func unit                       |    |  |  is_amo           |   |  |  |  is_unique(clear pipeline for it)
+                  //      |     |              |        |       dst_type          |    |    |  |  |  is_fence      |   |  |  |  |  flush_on_commit
+                  //      |     |              |        |       |       rs1_type       |    |  |  |  |  is_fencei  |   |  |  |  |  |  csr_cmd
+                  //      |     |              |        |       |       |              |    |  |  |  |  |          |   |  |  |  |  |  |
+                  //      |     |              |        |       |       |    rs2_type  |    |  |  |  |  |          |   |  |  |  |  |  |
+                  //      |     |              |        |       |       |       |      |    |  |  |  |  |  mem_cmd |   |  |  |  |  |  |
+     val table:  Array[(BitPat, List[BitPat])] = Array( //      |       |       |      |    |  |  |  |  |    |     |   |  |  |  |  |  |
+         CSRRD   -> List(Y, uopCSRRD       , IQT_INT, FU_CSR, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.R),
+         CSRWR   -> List(Y, uopCSRWR       , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.W),
+         CSRXCHG1-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.W),
+         CSRXCHG2-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.W),
+         CSRXCHG3-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.W),
+         ERTN    -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.I),
+         SYSCALL -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR.I),
+         BREAK   -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR.I),
+     )
+ }
 
 // object WeirdDecode extends DecodeTable with MicroOpCode {
 //                     //                                                                                          wakeup_delay
