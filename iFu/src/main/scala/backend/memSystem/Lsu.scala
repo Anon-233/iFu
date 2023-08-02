@@ -1100,7 +1100,6 @@ class Lsu extends CoreModule {
             assert(ldq(idx).valid, "[lsu] trying to commit an un-allocated load entry.")
             assert((ldq(idx).bits.executed || ldq(idx).bits.forward_std_val) && ldq(idx).bits.succeeded,
                 "[lsu] trying to commit an un-executed load entry.")
-
             ldq(idx).valid := false.B
             ldq(idx).bits.addr.valid := false.B
             ldq(idx).bits.executed := false.B
@@ -1185,6 +1184,7 @@ class Lsu extends CoreModule {
             ldq(i).valid := false.B
             ldq(i).bits.addr.valid := false.B
             ldq(i).bits.executed := false.B
+            ldq(i).bits.uop      := NullMicroOp //debug 调试
         }
     }
 
