@@ -152,7 +152,7 @@ class ALUUnit(
         }
     }
 
-    val brInfo = Wire(new BrResolutionInfo())
+    val brInfo = WireInit(0.U.asTypeOf(new BrResolutionInfo))
 
     brInfo.valid := isBr || isJalr
     brInfo.mispredict := mispredict

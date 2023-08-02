@@ -120,6 +120,7 @@ class ALUExeUnit(
         alu.io.req.bits.rs2Data  := io.req.bits.rs2Data
         alu.io.req.bits.predData := io.req.bits.predData
         alu.io.brUpdate          := io.brupdate
+        alu.io.resp.ready        := true.B
         io.bypass                := alu.io.bypass
         io.brinfo                := alu.io.brInfo   
         if (hasJmpUnit) { alu.io.getFtqPC <> io.getFtqPc }
@@ -131,12 +132,14 @@ class ALUExeUnit(
     var imul: PipelinedMulUnit = null
     if (hasMul) {
         imul = Module(new PipelinedMulUnit)
+        imul.io.req <> DontCare
         imul.io.req.valid        := io.req.valid && io.req.bits.uop.fu_code_is(FU_MUL)
         imul.io.req.bits.uop     := io.req.bits.uop
         imul.io.req.bits.rs1Data := io.req.bits.rs1Data
         imul.io.req.bits.rs2Data := io.req.bits.rs2Data
         imul.io.req.bits.kill    := io.req.bits.kill
         imul.io.brUpdate         := io.brupdate
+        imul.io.resp.ready       := true.B
 
         iresp_fu_units += imul
     }
@@ -146,6 +149,7 @@ class ALUExeUnit(
     val div_resp_val = WireInit(false.B)
     if (hasDiv) {
         div = Module(new DivUnit)
+        div.io.req <> DontCare
         div.io.req.valid        := io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV)
         div.io.req.bits.uop     := io.req.bits.uop
         div.io.req.bits.rs1Data := io.req.bits.rs1Data
@@ -166,6 +170,7 @@ class ALUExeUnit(
         require(!hasAlu)
         require(numStages == 0)
         val maddrcalc = Module(new MemAddrCalcUnit)
+        maddrcalc.io.req <> DontCare
         maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
         maddrcalc.io.req.bits   := io.req.bits
         maddrcalc.io.brUpdate     <> io.brupdate
@@ -173,6 +178,7 @@ class ALUExeUnit(
         // maddrcalc.io.bp         := io.bp
         // maddrcalc.io.mcontext   := io.mcontext
         // maddrcalc.io.scontext   := io.scontext
+        maddrcalc.io.resp.ready := true.B
 
         io.lsu_io.req := maddrcalc.io.resp
         io.mem_iresp <> io.lsu_io.iresp
