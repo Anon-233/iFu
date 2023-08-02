@@ -193,7 +193,7 @@ object XDecode extends DecodeTable  {
     )
 }
 
-// object TLBDeocde extends DecodeTable with MicroOpCode {
+// object TLBDeocde extends DecodeTable {
 //                 //                                                                                          wakeup_delay
 //                 //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
 //                 //      |  micro-code                                                |    uses_ldg               |   |  is_br
@@ -213,7 +213,7 @@ object XDecode extends DecodeTable  {
 //     )
 // }
 
- object CSRDecode extends DecodeTable with MicroOpCode {
+ object CSRDecode extends DecodeTable {
                   //                                                                                          wakeup_delay
                   //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
                   //      |  micro-code                                                |    uses_ldg               |   |  is_br
@@ -236,7 +236,7 @@ object XDecode extends DecodeTable  {
      )
  }
 
-// object WeirdDecode extends DecodeTable with MicroOpCode {
+// object WeirdDecode extends DecodeTable {
 //                     //                                                                                          wakeup_delay
 //                 //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
 //                 //      |  micro-code                                                |    uses_ldg               |   |  is_br
