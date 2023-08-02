@@ -120,6 +120,7 @@ class ALUExeUnit(
         alu.io.req.bits.rs2Data  := io.req.bits.rs2Data
         alu.io.req.bits.predData := io.req.bits.predData
         alu.io.brUpdate          := io.brupdate
+        alu.io.resp.ready        := true.B
         io.bypass                := alu.io.bypass
         io.brinfo                := alu.io.brInfo   
         if (hasJmpUnit) { alu.io.getFtqPC <> io.getFtqPc }
@@ -137,6 +138,7 @@ class ALUExeUnit(
         imul.io.req.bits.rs2Data := io.req.bits.rs2Data
         imul.io.req.bits.kill    := io.req.bits.kill
         imul.io.brUpdate         := io.brupdate
+        imul.io.resp.ready       := true.B
 
         iresp_fu_units += imul
     }
@@ -173,6 +175,7 @@ class ALUExeUnit(
         // maddrcalc.io.bp         := io.bp
         // maddrcalc.io.mcontext   := io.mcontext
         // maddrcalc.io.scontext   := io.scontext
+        maddrcalc.io.resp.ready := true.B
 
         io.lsu_io.req := maddrcalc.io.resp
         io.mem_iresp <> io.lsu_io.iresp
