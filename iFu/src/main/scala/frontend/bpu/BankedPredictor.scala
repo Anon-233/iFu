@@ -191,7 +191,7 @@ class BankedPredictor extends Module with HasBPUParameters
 
     val clockcnt = RegInit((0.U)(10.W))
     clockcnt := clockcnt + 1.U
-    printf("\n\nBankedPredictor Clock %d :\n", clockcnt)
+    //printf("\n\nBankedPredictor Clock %d :\n", clockcnt)
 
     io.resp := 0.U.asTypeOf ( new BankedPredictorResponse )
     io.f3meta := 0.U.asTypeOf ( Vec ( bankWidth, new PredictionMeta ) )

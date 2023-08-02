@@ -317,6 +317,8 @@ class iFuCore extends CoreModule {
     ftq_arb.io.in(1) <> jmp_pc_req
     ftq_arb.io.in(2) <> xcpt_pc_req
 
+    printf("jump pc req: %d\n", jmp_pc_req.bits)
+
     flush_pc_req.valid := rob.io.flush.valid
     flush_pc_req.bits := rob.io.flush.bits.ftq_idx
 
@@ -905,15 +907,40 @@ class iFuCore extends CoreModule {
     val lregOut = Wire(Vec(32, UInt(xLen.W)))
     diff.io.commit := rob.io.commit
     lregOut := diff.io.lregOut   //用这个接difftest，或者进入后端debugDiff文件中接入
+    io.register := lregOut
+
+    val rawCommit = Wire(new debugCommit)
 
     for(w <- 0 until robParameters.retireWidth) {
-        io.commit.debug_pc(w) := RegNext(rob.io.commit.uops(w).debug_pc , 0.U)
-        io.commit.debug_ldst(w) := RegNext(rob.io.commit.uops(w).ldst, 0.U)
-        io.commit.debug_insts(w) := RegNext(rob.io.commit.uops(w).debug_inst,0.U)
-        io.commit.debug_wdata(w) := RegNext(rob.io.commit.debug_wdata(w), 0.U)
-        io.commit.debug_wen(w) := RegNext(rob.io.commit.uops(w).ldst_val && rob.io.commit.arch_valids(w), 0.U)
-        io.commit.arch_valids(w) := RegNext(rob.io.commit.arch_valids(w), 0.U)
+        rawCommit.debug_pc(w) := RegNext(rob.io.commit.uops(w).debug_pc , 0.U)
+        rawCommit.debug_ldst(w) := RegNext(rob.io.commit.uops(w).ldst, 0.U)
+        rawCommit.debug_insts(w) := RegNext(rob.io.commit.uops(w).debug_inst,0.U)
+        rawCommit.debug_wdata(w) := RegNext(rob.io.commit.debug_wdata(w), 0.U)
+        rawCommit.debug_wen(w) := RegNext(rob.io.commit.uops(w).ldst_val && rob.io.commit.arch_valids(w), 0.U)
+        rawCommit.arch_valids(w) := RegNext(rob.io.commit.arch_valids(w), 0.U)
     }
-    io.register := lregOut
+
+//    var lastidx = 0.U
+
+    io.commit := 0.U.asTypeOf(new debugCommit)
+    
+    var commitIdx = 0
+    when(rawCommit.arch_valids.reduce(_|_)){
+        for (w <- 0 until robParameters.retireWidth) {
+            when(rawCommit.arch_valids(w)){
+                io.commit.debug_pc(commitIdx)   := rawCommit.debug_pc(w)
+                io.commit.debug_ldst(commitIdx) := rawCommit.debug_ldst(w)
+                io.commit.debug_insts(commitIdx):= rawCommit.debug_insts(w)
+                io.commit.debug_wdata(commitIdx):= rawCommit.debug_wdata(w)
+                io.commit.debug_wen(commitIdx)  := rawCommit.debug_wen(w)
+                io.commit.arch_valids(commitIdx):= rawCommit.arch_valids(w)
+                commitIdx += 1
+            }
+        }
+    }
+
+
+
+    
 
 }

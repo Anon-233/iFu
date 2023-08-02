@@ -56,7 +56,7 @@ class RobIO(val numWritePorts: Int) extends CoreBundle {
 
 class Rob(val numWritePorts: Int) extends CoreModule {
 
-    printf("\n\nROB:\n")
+    //printf("\n\nROB:\n")
 
 
 

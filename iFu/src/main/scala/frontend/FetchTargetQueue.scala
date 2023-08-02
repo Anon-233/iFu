@@ -51,7 +51,7 @@ class FetchTargetQueue extends CoreModule {
     val localHistoryLength = frontendParams.bpdParams.localHistoryLength
     val bankBytes     = frontendParams.iCacheParams.bankBytes
     val fetchWidth    = frontendParams.fetchWidth
-    private val idxSz = log2Ceil(numRasEntries)
+    val idxSz = log2Ceil(numFTQEntries)
     /*--------------------------*/
 
     val io = IO(new Bundle {
@@ -287,7 +287,6 @@ class FetchTargetQueue extends CoreModule {
     //-------------------------------------------------------------
 
     for (i <- 0 until 2) {
-        io.getFtqpc(i) <> DontCare
         val idx = io.getFtqpc(i).ftqIdx
         val nextIdx = WrapInc(idx, numFTQEntries)
         val nextIsEnq = (nextIdx === enqPtr) && io.enq.fire
@@ -299,10 +298,11 @@ class FetchTargetQueue extends CoreModule {
             io.getFtqpc(i).gHist   := gHist(1).read(idx, true.B)
         } else {
             io.getFtqpc(i).gHist   := DontCare
-            io.getFtqpc(i).pc      := RegNext(pcs(idx))
-            io.getFtqpc(i).nextpc  := RegNext(nextpc)
-            io.getFtqpc(i).nextVal := RegNext(nextIdx =/= enqPtr || nextIsEnq)
-            io.getFtqpc(i).compc   := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deqPtr)))
         }
+
+        io.getFtqpc(i).pc      := RegNext(pcs(idx))
+        io.getFtqpc(i).nextpc  := RegNext(nextpc)
+        io.getFtqpc(i).nextVal := RegNext(nextIdx =/= enqPtr || nextIsEnq)
+        io.getFtqpc(i).compc   := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, deqPtr)))
     }
 }
