@@ -51,7 +51,7 @@ class FetchTargetQueue extends CoreModule {
     val localHistoryLength = frontendParams.bpdParams.localHistoryLength
     val bankBytes     = frontendParams.iCacheParams.bankBytes
     val fetchWidth    = frontendParams.fetchWidth
-    private val idxSz = log2Ceil(numRasEntries)
+    val idxSz = log2Ceil(numFTQEntries)
     /*--------------------------*/
 
     val io = IO(new Bundle {
@@ -299,7 +299,7 @@ class FetchTargetQueue extends CoreModule {
         } else {
             io.getFtqpc(i).gHist   := DontCare
         }
-        
+
         io.getFtqpc(i).pc      := RegNext(pcs(idx))
         io.getFtqpc(i).nextpc  := RegNext(nextpc)
         io.getFtqpc(i).nextVal := RegNext(nextIdx =/= enqPtr || nextIsEnq)
