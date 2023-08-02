@@ -160,7 +160,6 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val refillIdx = refillPaddr(iParams.untagBits-1, iParams.offsetBits)
 
     var refillOneBankEn: Bool = null
-    dontTouch(refillOneBankEn)
     var refillOneBankData: UInt = null
     var refillLastBank: Bool = null
     if (refillToOneBank) {
