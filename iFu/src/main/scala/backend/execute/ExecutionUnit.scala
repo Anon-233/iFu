@@ -132,6 +132,7 @@ class ALUExeUnit(
     var imul: PipelinedMulUnit = null
     if (hasMul) {
         imul = Module(new PipelinedMulUnit)
+        imul.io.req <> DontCare
         imul.io.req.valid        := io.req.valid && io.req.bits.uop.fu_code_is(FU_MUL)
         imul.io.req.bits.uop     := io.req.bits.uop
         imul.io.req.bits.rs1Data := io.req.bits.rs1Data
@@ -148,6 +149,7 @@ class ALUExeUnit(
     val div_resp_val = WireInit(false.B)
     if (hasDiv) {
         div = Module(new DivUnit)
+        div.io.req <> DontCare
         div.io.req.valid        := io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV)
         div.io.req.bits.uop     := io.req.bits.uop
         div.io.req.bits.rs1Data := io.req.bits.rs1Data
@@ -168,6 +170,7 @@ class ALUExeUnit(
         require(!hasAlu)
         require(numStages == 0)
         val maddrcalc = Module(new MemAddrCalcUnit)
+        maddrcalc.io.req <> DontCare
         maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
         maddrcalc.io.req.bits   := io.req.bits
         maddrcalc.io.brUpdate     <> io.brupdate
