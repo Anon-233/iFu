@@ -12,20 +12,18 @@ class debugDiff extends CoreModule {
     val lregOut = Output(Vec(numLRegs,UInt(xLen.W)))
   })
 
-  val debug_reg = Mem(numLRegs,UInt(xLen.W))
+  val debug_reg = RegInit(VecInit(Seq.fill(numLRegs)(0.U(32.W))))
 
 
   for(w <- 0 until coreWidth){
     when (io.commit.valids(w)) { //TODO:是否要换成arch_valids?
-      val lreg = io.commit.debug_ldst(w) //这个接目的寄存器
+      val lreg = io.commit.uops(w).ldst //这个接目的寄存器
       val wdata = io.commit.debug_wdata(w) //这个接写入数据
-      val nowInst = io.commit.debug_insts(w) //当前指令
-      val valid = nowInst =/= BUBBLE //判断指令是否有效
-      val nowPc = io.commit.debug_pc(w) //这个接pc
-      val nowPc2 = io.commit.uops(w).debug_pc //这个和上面那个应该要相同
-      //require((nowPc == nowPc2) && valid)  //如果不同，说明rob存在问题
+      val valid = io.commit.debug_insts(w) =/= BUBBLE //判断指令是否有效
 
-      when(valid) {
+      val wen = io.commit.uops(w).ldst_val
+
+      when(valid && wen && lreg =/= 0.U) {
         debug_reg(lreg) := wdata
       }
     } .otherwise {
