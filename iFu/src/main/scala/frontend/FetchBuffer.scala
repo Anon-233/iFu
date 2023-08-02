@@ -70,7 +70,7 @@ class FetchBuffer extends CoreModule {
         for (w <- 0 until bankWidth){
             val i = (b * bankWidth) + w     // the index of the uop
 
-            val pc = (bankAlign(io.enq.bits.pc) + (i << 1).U)     // the low bit of the pc of the uop
+            val pc = (bankAlign(io.enq.bits.pc) + (i << 2).U)     // the low bit of the pc of the uop
 
             inUops(i) := DontCare   // set the value afterward
             inMask(i) := io.enq.valid && io.enq.bits.mask(i)
