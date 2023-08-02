@@ -649,7 +649,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                     Mux(prefetchValid,      prefetch,
                                             nil))))))
 
-    val s0kill = WireInit(io.lsu.s1_kill)
+    val s0kill = Wire(Vec( memWidth , Bool()))
+    
+    for(w <- 0 until memWidth){
+        s0kill(w) := !(io.lsu.req.bits(w).valid) || io.lsu.s1_kill(w)
+    }
 
 
     //rpu拿到的新的写回信息 

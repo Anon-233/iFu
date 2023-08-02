@@ -247,6 +247,13 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     val firstAllocatable = WireInit(0.U.asTypeOf(Vec(nFirstMSHRs, Bool())))
     // 一表是否已满
     val firstFull = WireInit(false.B)
+
+
+    // 搜索是否有等待fetch的项
+    val waitinglist = WireInit(0.U.asTypeOf(Vec(nFirstMSHRs, Bool())))
+    val haswait = waitinglist.reduce(_ || _)
+    val waitingpos = PriorityEncoder(waitinglist)
+
     
     
         
@@ -276,6 +283,9 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         firstMSHRs(i).replayReq.ready := false.B
         firstMSHRs(i).replayDone := false.B
         firstMSHRs(i).fetchReady := false.B
+
+        // 查看1表有没有正在等候的
+        waitinglist(i) := firstMSHRs(i).waiting
 
     }
 
@@ -373,11 +383,6 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
         
     }
-
-    // 搜索是否有等待fetch的项
-    val waitinglist = WireInit(0.U.asTypeOf(Vec(nFirstMSHRs, Bool())))
-    val haswait = waitinglist.reduce(_ || _)
-    val waitingpos = PriorityEncoder(waitinglist)
 
 
 
