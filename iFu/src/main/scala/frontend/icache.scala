@@ -55,9 +55,9 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 /*---------------------------------------------------------------------*/
 //========== ----i$ funcs---- ==========
     def b0Row(addr: UInt) =
-        addr(iParams.untagBits - 1, log2Ceil(iParams.bankBytes)) + bank(addr)
+        addr(iParams.untagBits - 1, log2Ceil(iParams.bankBytes * 2)) + bank(addr)
     def b1Row(addr: UInt) =
-        addr(iParams.untagBits - 1, log2Ceil(iParams.bankBytes))
+        addr(iParams.untagBits - 1, log2Ceil(iParams.bankBytes * 2))
 //========== ----i$ funcs---- ==========
 /*---------------------------------------------------------------------*/
 //========== ----i$ body----- ==========
@@ -73,13 +73,13 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val dataArrays =
         (0 until iParams.nWays).map{
             x => SyncReadMem(
-                iParams.nSets,
+                iParams.nSets * banksPerLine/nBanks,
                 UInt((packetBits / nBanks).W)
             )
         } ++
         (0 until iParams.nWays).map{
             x => SyncReadMem(
-                iParams.nSets,
+                iParams.nSets * banksPerLine/nBanks,
                 UInt((packetBits / nBanks).W)
             )
         }
@@ -160,6 +160,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val refillIdx = refillPaddr(iParams.untagBits-1, iParams.offsetBits)
 
     var refillOneBankEn: Bool = null
+    dontTouch(refillOneBankEn)
     var refillOneBankData: UInt = null
     var refillLastBank: Bool = null
     if (refillToOneBank) {
@@ -190,12 +191,12 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     for (i <- 0 until iParams.nWays) {
         val dataArray0Idx = Mux(
             refillOneBankEn,
-            ((refillIdx << (log2Ceil(iParams.banksPerLine) - 1)) | (refillCnt >> 1.U)),
+            ((refillIdx << log2Ceil(iParams.banksPerLine / 2)) | (refillCnt >> 1.U)),
             b0Row(s0_vaddr)
         )
         val dataArray1Idx = Mux(
             refillOneBankEn,
-            ((refillIdx << (log2Ceil(iParams.banksPerLine) - 1)) | (refillCnt >> 1.U)),
+            ((refillIdx << log2Ceil(iParams.banksPerLine / 2)) | (refillCnt >> 1.U)),
             b1Row(s0_vaddr)
         )
         // read data
