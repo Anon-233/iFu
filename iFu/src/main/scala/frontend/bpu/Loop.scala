@@ -224,7 +224,7 @@ class LoopPredictor extends Module with HasLoopParameters {
 
   val clockcnt = RegInit((0.U)(32.W))
     clockcnt := clockcnt + 1.U
-    printf("Loop Clock %d :\n", clockcnt)
+    //printf("Loop Clock %d :\n", clockcnt)
 
   val columns = Seq.fill(bankWidth){Module(new LoopPredictorColumn)}
   val s2idx = fetchIdx(io.f2pc)
