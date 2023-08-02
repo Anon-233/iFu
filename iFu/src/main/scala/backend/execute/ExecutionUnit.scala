@@ -44,7 +44,7 @@ abstract class ExecutionUnit (
         // val mcontext = if (hasMem) Input(UInt(coreParams.mcontextWidth.W)) else null
         // val scontext = if (hasMem) Input(UInt(coreParams.scontextWidth.W)) else null
     })
-
+    io <> DontCare
     if (writesIrf) {
         io.iresp.bits.predicated := false.B
         assert(io.iresp.ready)
@@ -90,8 +90,7 @@ class ALUExeUnit(
     hasDiv           = hasDiv,
     numStages        = if (hasAlu && hasMul) 3 else if (hasAlu) 1 else 0
 ) {
-    io <> DontCare
-    dontTouch(io)
+
     val div_busy  = WireInit(false.B)
 
     val iresp_fu_units = ArrayBuffer[FuncUnit]()
@@ -115,7 +114,6 @@ class ALUExeUnit(
             io.req.bits.uop.fuCode === FU_JMP ||
             io.req.bits.uop.fuCode === FU_CSR
         ))
-        alu.io <> DontCare
         alu.io.req.bits.uop      := io.req.bits.uop
         alu.io.req.bits.kill     := io.req.bits.kill
         alu.io.req.bits.rs1Data  := io.req.bits.rs1Data
@@ -133,7 +131,6 @@ class ALUExeUnit(
     var imul: PipelinedMulUnit = null
     if (hasMul) {
         imul = Module(new PipelinedMulUnit)
-        imul.io <> DontCare
         imul.io.req.valid        := io.req.valid && io.req.bits.uop.fu_code_is(FU_MUL)
         imul.io.req.bits.uop     := io.req.bits.uop
         imul.io.req.bits.rs1Data := io.req.bits.rs1Data
@@ -149,7 +146,6 @@ class ALUExeUnit(
     val div_resp_val = WireInit(false.B)
     if (hasDiv) {
         div = Module(new DivUnit)
-        div.io <> DontCare
         div.io.req.valid        := io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV)
         div.io.req.bits.uop     := io.req.bits.uop
         div.io.req.bits.rs1Data := io.req.bits.rs1Data
@@ -170,7 +166,6 @@ class ALUExeUnit(
         require(!hasAlu)
         require(numStages == 0)
         val maddrcalc = Module(new MemAddrCalcUnit)
-        maddrcalc.io <> DontCare
         maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
         maddrcalc.io.req.bits   := io.req.bits
         maddrcalc.io.brUpdate     <> io.brupdate

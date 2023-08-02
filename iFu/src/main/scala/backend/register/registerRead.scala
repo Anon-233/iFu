@@ -32,7 +32,6 @@ class RegisterRead(
 
     })
    io <> DontCare
-    dontTouch(io)
     val rrdValid = Wire(Vec(issueWidth,Bool()))
     val rrdUops = Wire(Vec(issueWidth,new MicroOp()))
 

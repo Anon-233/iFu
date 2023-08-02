@@ -28,6 +28,7 @@ abstract class FuncUnit (
         // val mcontext = if (isMemAddrCalcUnit) Input(UInt(mcontextWidth.W)) else null
         // val scontext = if (isMemAddrCalcUnit) Input(UInt(scontextWidth.W)) else null
     })
+    io <> DontCare
 }
 
 abstract class PipelinedFuncUnit (
@@ -42,8 +43,8 @@ abstract class PipelinedFuncUnit (
     isAluUnit = isAluUnit,
     isMemAddrCalcUnit = isMemAddrCalcUnit
 ) {
+
     io.req.ready := true.B
-    dontTouch(io.resp.bits.uop)
     var rValids: Vec[Bool]  = null
     var rUops: Vec[MicroOp] = null
     if (numStages > 0) {
@@ -86,8 +87,7 @@ class ALUUnit(
     isAluUnit = true,
     isJmpUnit = isJmpUnit
 ) {
-    io <> DontCare
-    
+
     val uop = io.req.bits.uop
 
     val imm = immGen(uop.immPacked, uop.ctrl.imm_sel)
@@ -160,7 +160,6 @@ class ALUUnit(
     brInfo.cfiType := Mux(isJalr, CFI_JALR, Mux(isBr, CFI_BR, CFI_X))
     brInfo.taken := isTaken
     brInfo.pcSel := pcSel
-    brInfo.jalrTarget := DontCare
     val bankBytes = frontendParams.iCacheParams.bankBytes
     val fetchWidth= frontendParams.fetchWidth
     if (isJmpUnit) {
@@ -207,7 +206,7 @@ class ALUUnit(
 class PipelinedMulUnit(numStages: Int = 3) extends PipelinedFuncUnit (
     numStages = numStages,
 ) {
-    io <> DontCare
+
 
     val imult = Module(new MultStar)
 
@@ -242,7 +241,6 @@ class MemAddrCalcUnit extends PipelinedFuncUnit(
     // val bkptu = Module(new BreakpointUnit(nBreakpoints))
     // bkptu.io.status   := io.status
     // bkptu.io.bp       := io.bp
-    // bkptu.io.pc       := DontCare
     // bkptu.io.ea       := addr
     // bkptu.io.mcontext := io.mcontext
     // bkptu.io.scontext := io.scontext
@@ -294,7 +292,7 @@ abstract class IterativeFuncUnit extends FuncUnit (
 }
 
 class DivUnit extends IterativeFuncUnit {
-    io <> DontCare
+
 
     val div = Module(new SRT16Divider())
 

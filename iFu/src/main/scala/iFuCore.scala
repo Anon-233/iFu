@@ -99,7 +99,6 @@ class iFuCore extends CoreModule {
     val lsu = Module(new Lsu)
 
     val rob = Module(new Rob(numWritePorts))
-    // dontTouch(rob.io)
     /*val csr = Module(new CSRFile)*/
 
 /*-----------------------------*/
