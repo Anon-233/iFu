@@ -201,8 +201,8 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         )
         // read data
         s1_dataOut(i) := Cat(
-            dataArrayB1(i).read(dataArray0Idx, s0_valid),
-            dataArrayB0(i).read(dataArray1Idx, s0_valid)
+            dataArrayB1(i).read(dataArray1Idx, s0_valid),
+            dataArrayB0(i).read(dataArray0Idx, s0_valid)
         )
         // write data
         val writeEn = (refillOneBankEn && !invalidated) && replWay === i.U
