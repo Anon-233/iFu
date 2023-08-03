@@ -317,7 +317,7 @@ class Lsu extends CoreModule {
         !store_needs_order &&
         !block_load_wakeup
     ))
-    dontTouch(ldq_wakeup_e.valid)
+    // dontTouch(ldq_wakeup_e)
     // -----------------------
     // Determine what can fire
 

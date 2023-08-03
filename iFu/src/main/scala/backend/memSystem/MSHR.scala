@@ -35,7 +35,7 @@ class MSHRdata extends CoreBundle with HasDcacheParameters{
 }
 
 
-class MSHR extends CoreModule with HasDcacheParameters{
+class MSHR extends CoreModule with HasDcacheParameters {
     val io = IO{new Bundle{
         // 写入请求111
         val req = Flipped(Decoupled(new DCacheReq))
@@ -90,13 +90,7 @@ class MSHR extends CoreModule with HasDcacheParameters{
     //io<>DontCare
     // 数据存储
     val mshr = RegInit(0.U.asTypeOf(new MSHRdata))
-
-
-    when(io.reset){
-        mshr := 0.U.asTypeOf(new MSHRdata)
-        mshr.valid := false.B
-
-    }
+    dontTouch(mshr)
 
     // 告诉外界是否存了一个store指令
     io.isStore := isStore(mshr.req) && mshr.valid
@@ -135,53 +129,49 @@ class MSHR extends CoreModule with HasDcacheParameters{
     io.getPipeNumber := mshr.pipeNumber
 
     //分支预测调整
-    when(IsKilledByBranch(io.brupdate,mshr.req.uop)){
+    when (IsKilledByBranch(io.brupdate, mshr.req.uop)) {
         mshr.valid := false.B
     }
+    mshr.req.uop.br_mask := GetNewBrMask(io.brupdate, mshr.req.uop)
 
-    val mshrBlockAddr = Mux(mshr.valid,getBlockAddr(mshr.req.addr),0.U)
+    val mshrBlockAddr = Mux(mshr.valid, getBlockAddr(mshr.req.addr), 0.U)
     dontTouch(mshrBlockAddr)
     // 给外界返回match判断
     io.newblockAddrMatch := mshr.valid && mshrBlockAddr === io.newBlockAddr
     io.fetchingBlockAddrMatch := mshr.valid && mshr.fetching && mshrBlockAddr === io.fetchingBlockAddr
     // 状态机
-    when(mshr.valid){
-        when(mshr.waiting){
+    when (mshr.valid) {
+        when (mshr.waiting) {
             // 正在取，则转为fetching,这里没有fire判断,而是直接感知RPU的fetchingBlockAddr信号
-            when(io.fetchingBlockAddr === mshrBlockAddr){
-                mshr.waiting := false.B
+            when (io.fetchingBlockAddr === mshrBlockAddr) {
+                mshr.waiting  := false.B
                 mshr.fetching := true.B
             }
         }
-
-        when(mshr.fetching){
+        when (mshr.fetching) {
             // 取完了，则转为ready
-            when(io.fetchReady){
+            when (io.fetchReady) {
                 mshr.fetching := false.B
-                mshr.ready := true.B
+                mshr.ready    := true.B
             }
         }
-
-        when(mshr.ready && io.replayReq.fire){
+        when (mshr.ready && io.replayReq.fire) {
             // 成功发出replay信号，则转为issued
             mshr.ready := false.B
             mshr.issued := true.B
         }
-
         //转换为issued时，replay已经进了s1,再一个周期检查是否传回了执行完毕的信号
-        when(RegNext(mshr.issued)){
-            when(io.replayDone){
+        when (RegNext(mshr.issued) && mshr.issued) {
+            when (io.replayDone) {
                 // replay执行完毕，则转为无效
                 mshr.valid := false.B
-            }.otherwise{
+            } .otherwise {
                 // replay没有执行完毕，回退到ready状态(还是直接清空?会有导致replay执行失败的情况吗)
                 mshr.issued := false.B
                 mshr.ready := true.B
             }
         }
-
     }
-
 }
 
 
