@@ -599,8 +599,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     mshrs.io.RPUnotBusy := RPU.io.ready
     mshrs.io.replayDone := false.B
     mshrs.io.fetchingBlockAddr := 0.U
-    mshrs.io.fetchReady := false.B
-
+    
+    //告诉mshr去激活(将表1的fetching转成ready)
+    mshrs.io.fetchingBlockAddr := s2newBlockAddr
+    mshrs.io.fetchReady := rpuJustDone
 
     // 只有流水线里面没有正在执行的fetch请求,才能发起新的fetch请求
 
@@ -1174,9 +1176,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             sendNack(w) := false.B
         }
 
-        //告诉mshr去激活(将表1的fetching转成ready)
-        mshrs.io.fetchReady := true.B
-        mshrs.io.fetchingBlockAddr := s2newBlockAddr
 
     }.elsewhen(s2state === prefetch){
         // TODO
