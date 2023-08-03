@@ -90,7 +90,6 @@ trait HasDcacheParameters extends HasCoreParameters{
 
 class MetaLine extends CoreBundle with HasDcacheParameters {
     val valid = Bool()
-    val dirty = Bool()
     val tag   = UInt(nTagBits.W)
     val age   = UInt(10.W)
 }
@@ -126,44 +125,37 @@ class DcacheMetaIO extends CoreBundle with HasDcacheParameters{
 
 class DcacheMeta extends Module with HasDcacheParameters{
     val io = IO(new CoreBundle{
-        val lsuRead = Vec( memWidth ,new DcacheMetaIO)
-        val lsuWrite = Vec( memWidth ,new DcacheMetaIO)
-        val mshrRead = new DcacheMetaIO
-        val rpuWrite = new DcacheMetaIO
-        val replayRead = new DcacheMetaIO
+        val lsuRead     = Vec( memWidth ,new DcacheMetaIO)
+        val lsuWrite    = Vec( memWidth ,new DcacheMetaIO)
+        val mshrRead    = new DcacheMetaIO
+        val rpuWrite    = new DcacheMetaIO
+        val replayRead  = new DcacheMetaIO
         val replayWrite = new DcacheMetaIO
 
         val reset = Input(Bool())
 
-        val hasDirty = Output(Bool())
+        val hasDirty  = Output(Bool())
         val dirtyMeta = Output(new MetaLine)
-        val dirtyIdx = Output(UInt(nIdxBits.W))
-        val dirtyPos = Output(UInt(log2Ceil(nWays).W))
+        val dirtyIdx  = Output(UInt(nIdxBits.W))
+        val dirtyPos  = Output(UInt(log2Ceil(nWays).W))
 
-        val fenceTakeDirtyMeta = Input(Bool())//拿走一个脏行，之后就将其
+        val fenceTakeDirtyMeta = Input(Bool()) //拿走一个脏行，之后就将其
 
         val readOnlyBlockAddr = Input(Valid(UInt(32.W)))
     })
     io <> DontCare
-
 
     // 数据结构
     val meta = SyncReadMem(nSets, Vec(nWays, new MetaLine))
     // 同步记录meta里面有效的的dirty行
     val dirtyTable = RegInit(VecInit(Seq.fill(nSets)(0.U(nWays.W))))
 
-
     // reset
     val reseting = RegInit(true.B)
-    // reseting := io.reset
-    val resetIdx =  RegInit(0.U(nIdxBits.W))
-
-    when(reseting){
-        when(resetIdx === (nSets-1).U){
-            reseting := false.B
-        }.otherwise{
-            resetIdx := resetIdx + 1.U
-        }
+    val resetIdx = RegInit(0.U(nIdxBits.W))
+    resetIdx := WrapInc(resetIdx, nSets)
+    when(resetIdx === (nSets - 1).U) {
+        reseting := false.B
     }
 
     when(reseting){
@@ -182,22 +174,18 @@ class DcacheMeta extends Module with HasDcacheParameters{
     io.dirtyMeta := dirtyMeta
 
     val cleanedMask = UIntToOH(dirtyPos)
-    val cleanedMeta = WireInit(0.U.asTypeOf(new MetaLine))
-    cleanedMeta.dirty := false.B
-    cleanedMeta.valid := true.B
-    cleanedMeta.tag := dirtyMeta.tag
-    cleanedMeta.age := dirtyMeta.age
+    // val cleanedMeta = WireInit(0.U.asTypeOf(new MetaLine))
+    // cleanedMeta.dirty := false.B
+    // cleanedMeta.valid := true.B
+    // cleanedMeta.tag := dirtyMeta.tag
+    // cleanedMeta.age := dirtyMeta.age
 
-    when(io.fenceTakeDirtyMeta){
+    when (io.fenceTakeDirtyMeta) {
         // 将这个脏行的dirty位置为0写回
         dirtyTable(dirtyIdx) := dirtyTable(dirtyIdx).asUInt & (~(1.asUInt << dirtyPos)).asUInt
         dirtyMeta.dirty := false.B
         meta.write(dirtyIdx, VecInit(Seq.fill(nWays)(dirtyMeta)), cleanedMask.asBools)
     }
-
-
-
-
 
     // lsuRead
     for(w <- 0 until memWidth){
@@ -213,20 +201,7 @@ class DcacheMeta extends Module with HasDcacheParameters{
         val isfull = rmetaSet.map(_.valid).reduce(_ && _)
         val invalidPos = PriorityEncoder(VecInit(rmetaSet.map((x: MetaLine) => !(x.valid))).asUInt)
 
-        def getYoungestPos = {
-            var age = 1023.U(10.W)
-            var pos = 0.U(log2Ceil(nWays).W)
-            for (i <- 0 until nWays) {
-                when(rmetaSet(i).valid && rmetaSet(i).age < age) {
-                    age = rmetaSet(i).age
-                    pos = i.U
-                }
-            }
-            pos
-        }
-
-        val youngestPos = getYoungestPos
-
+        val youngestPos = FindMin(VecInit(rmetaSet.map(_.age)), VecInit(rmetaSet.map(_.valid)))
 
         io.lsuRead(w).resp.valid := RegNext(io.lsuRead(w).req.valid)
         io.lsuRead(w).resp.bits.hit := hitoh.orR
@@ -234,7 +209,6 @@ class DcacheMeta extends Module with HasDcacheParameters{
         io.lsuRead(w).resp.bits.rmeta := rmetaSet(PriorityEncoder(hitoh))
         io.lsuRead(w).resp.bits.replacePos := Mux(isfull, youngestPos, invalidPos)
     }
-
 
     // lsuWrite
     for(w <- 0 until memWidth){
@@ -247,9 +221,6 @@ class DcacheMeta extends Module with HasDcacheParameters{
         io.lsuWrite(w).resp.valid := RegNext(io.lsuWrite(w).req.valid)
         io.lsuWrite(w).resp.bits := DontCare
     }
-
-
-
 
     // mshrRead
     val replacePos = RegNext(io.mshrRead.req.bits.replacePos)
@@ -269,9 +240,7 @@ class DcacheMeta extends Module with HasDcacheParameters{
     io.replayRead.resp.bits.hitPos := hitPos
     io.replayRead.resp.bits.replacePos := DontCare
 
-
     // rpuWrite
-
     when(!reseting && io.rpuWrite.req.valid){
         meta.write(io.rpuWrite.req.bits.idx, VecInit(Seq.fill(nWays)(io.rpuWrite.req.bits.wmeta)), io.rpuWrite.req.bits.wayMask.asBools)
         // 维护dirtyTable
@@ -280,14 +249,12 @@ class DcacheMeta extends Module with HasDcacheParameters{
     io.rpuWrite.resp.valid := RegNext(io.rpuWrite.req.valid)
     io.rpuWrite.resp.bits := DontCare
 
-
     //replayWrite
     when(!reseting && io.replayWrite.req.valid) {
         meta.write(io.replayWrite.req.bits.idx, VecInit(Seq.fill(nWays)(io.replayWrite.req.bits.wmeta)), io.replayWrite.req.bits.wayMask.asBools)
     }
     io.rpuWrite.resp.valid := RegNext(io.rpuWrite.req.valid)
     io.rpuWrite.resp.bits := DontCare
-
 }
 
 class DataReq extends CoreBundle with HasDcacheParameters{
