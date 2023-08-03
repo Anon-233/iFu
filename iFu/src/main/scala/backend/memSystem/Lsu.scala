@@ -315,7 +315,7 @@ class Lsu extends CoreModule {
         !p1_block_load_mask(ldq_wakeup_idx) &&
         !p2_block_load_mask(ldq_wakeup_idx) &&
         !store_needs_order &&
-        !block_load_wakeup &&
+        !block_load_wakeup /*&&*/
         /*(!ldq_wakeup_e.bits.addr_is_uncacheable ||*/
         /*(io.core.commit_load_at_rob_head && //
         ldq_head === ldq_wakeup_idx &&
