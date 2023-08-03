@@ -2,6 +2,7 @@ package iFu.backend
 import chisel3._
 import chisel3.util._
 import iFu.common._
+import iFu.util._
 
 class MSHRdata extends CoreBundle with HasDcacheParameters{
     //该项是否有效
@@ -135,7 +136,7 @@ class MSHR extends CoreModule with HasDcacheParameters{
     io.getPipeNumber := mshr.pipeNumber
 
     //分支预测调整
-    when(isKilledByBranch(io.brupdate,mshr.req.uop)){
+    when(IsKilledByBranch(io.brupdate,mshr.req.uop)){
         mshr.valid := false.B
     }
 
