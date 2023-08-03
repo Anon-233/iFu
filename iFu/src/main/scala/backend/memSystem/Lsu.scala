@@ -315,11 +315,11 @@ class Lsu extends CoreModule {
         !p1_block_load_mask(ldq_wakeup_idx) &&
         !p2_block_load_mask(ldq_wakeup_idx) &&
         !store_needs_order &&
-        !block_load_wakeup &&   // TODO: do we need this?
-        (/*!ldq_wakeup_e.bits.addr_is_uncacheable ||*/ 
-        (io.core.commit_load_at_rob_head && // TODO: what is this?
+        !block_load_wakeup &&
+        /*(!ldq_wakeup_e.bits.addr_is_uncacheable ||*/
+        /*(io.core.commit_load_at_rob_head && //
         ldq_head === ldq_wakeup_idx &&
-        ldq_wakeup_e.bits.st_dep_mask.asUInt === 0.U))
+        ldq_wakeup_e.bits.st_dep_mask.asUInt === 0.U))*/
     ))
     // -----------------------
     // Determine what can fire
