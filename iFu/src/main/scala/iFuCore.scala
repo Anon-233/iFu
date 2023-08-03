@@ -317,6 +317,7 @@ class iFuCore extends CoreModule {
     ftq_arb.io.in(1) <> jmp_pc_req
     ftq_arb.io.in(2) <> xcpt_pc_req
 
+    // printf("jump pc req: %d\n", jmp_pc_req.bits)
 
     flush_pc_req.valid := rob.io.flush.valid
     flush_pc_req.bits := rob.io.flush.bits.ftq_idx

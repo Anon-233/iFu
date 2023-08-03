@@ -8,7 +8,6 @@ import iFu.common.HasCoreParameters
 import iFu.util._
 import iFu.common.Consts._
 
-import javax.sound.sampled.DataLine
 /*
 各部件行为：
 DcacheMeta：
@@ -694,8 +693,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     // mshr的read请求所需信息
     // 这个地址是所需的地址是要给RPU,但是通过它可以找到要被替换的行所在的idx
-    val s0fetchAddr = (mshrs.io.newFetchAddr.bits)
-    val s0replaceIdx = (getIdx(s0fetchAddr))
+    val s0fetchAddr = ((mshrs.io.newFetchAddr.bits) >> nOffsetBits.asUInt) << nOffsetBits.asUInt
+    val s0replaceIdx = getIdx(s0fetchAddr.asUInt)
     val s0replacePos = (mshrs.io.readPos)
 
     // mshr的replay请求所需信息
@@ -803,7 +802,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s1replayHitPos = RegNext(s0replayHitPos)
     val s1replayIdx = RegNext(s0replayIdx)
 
-    var s1_kill = RegNext(s0kill)
+    val s1kill = Wire(Vec(memWidth, Bool()))
+    for(w <- 0 until memWidth){
+        s1kill(w) := RegNext(s0kill(w) ||(s2StoreFailed && isStore(s0req(w))))
+    }
     // 如果miss，记录下将要去替换的Pos
     val s1missAllocPos = WireInit(0.U.asTypeOf(Vec(memWidth , UInt(log2Ceil(nWays).W))))
     // 如果hit,记录下hit的Pos
@@ -819,7 +821,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     when(s1state === lsu  && s1valid ){
         for(w <- 0 until memWidth){
             when((s2StoreFailed && isStore(s1req(w))) || IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)){
-                s1_kill(w) := true.B
+                s1kill(w) := true.B
             }.otherwise{
                 when(lsuMetaRead(w).resp.valid){
                     s1handleMetaLine(w) := lsuMetaRead(w).resp.bits.rmeta
@@ -845,7 +847,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // 只保存读出的meta，然后根据他自己的信息去读data
         for(w <- 0 until memWidth){
             when(IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)){
-                s1_kill(w) := true.B
+                s1kill(w) := true.B
             }.otherwise{
                 when(replayMetaRead.resp.valid){
                     s1handleMetaLine(w) := replayMetaRead.resp.bits.rmeta
@@ -910,7 +912,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     val s2newBlockAddr = RegNext(s1newBlockAddr)
 
-    val s2kill = RegNext(s1_kill)
+    val s2kill = Wire(Vec(memWidth , Bool()))
+    for(w <- 0 until memWidth){
+        s2kill(w) := RegNext(s1kill(w) ||(s2StoreFailed && isStore(s1req(w))))
+    }
     val s2hit = RegNext(s1hit)
     val s2hitPos = RegNext(s1hitPos)
 
@@ -962,6 +967,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
           isStore(s3req(0)) &&
           ((s2req(w).addr >> nOffsetBits).asUInt === (s3req(0).addr >> nOffsetBits).asUInt)
     }
+
+
+    
+
+
 
     // 下面是s2执行的内容
     when(s2state === lsu && s2valid){
@@ -1039,7 +1049,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             sendResp(0) := false.B
 
             when(isStore(s2req(0))){
-                sendNack(0) := false.B
+                // store miss是要一定要发回nack的
+                sendNack(0) := true.B
                 s2StoreFailed := true.B
             }.otherwise{
                 sendNack(0) := Mux(mshrs.io.full, true.B, false.B)
@@ -1074,12 +1085,14 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 mshrs.io.pipeNumberIn := 1.U
             }
 
-            // 0号不会写进去，load必反回nack，store不用发
-            sendResp(0) := false.B
-            sendNack(0) := Mux(isStore(s2req(0)) , false.B , true.B)
             // 1号是load指令，看情况返回
             sendResp(1) := false.B
             sendNack(1) := Mux(mshrs.io.full, true.B, false.B)
+
+            // 0号不会写进去，load 和 store 都要发回nack
+            sendResp(0) := false.B
+            sendNack(0) := true.B
+            
         }
 
 
@@ -1198,6 +1211,18 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         io.lsu.nack(w).valid := sendNack(w)
         io.lsu.resp(w).valid := sendResp(w)
     }
+
+
+
+    val debug_Truely_resp_commited = Wire(Vec(memWidth , Bool()))
+    val debug_Truely_nack_commited = Wire(Vec(memWidth , Bool()))
+    dontTouch(debug_Truely_resp_commited)
+    dontTouch(debug_Truely_nack_commited)
+    for(w <- 0 until memWidth){
+        debug_Truely_resp_commited(w) := s2valid && sendResp(w) && !s2kill(w) 
+        debug_Truely_nack_commited(w) := s2valid && sendNack(w) && !s2kill(w)
+    }
+
     
 
     // 检查流水线里面是不是至多有一条mshrread 
