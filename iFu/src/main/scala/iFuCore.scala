@@ -317,7 +317,6 @@ class iFuCore extends CoreModule {
     ftq_arb.io.in(1) <> jmp_pc_req
     ftq_arb.io.in(2) <> xcpt_pc_req
 
-    printf("jump pc req: %d\n", jmp_pc_req.bits)
 
     flush_pc_req.valid := rob.io.flush.valid
     flush_pc_req.bits := rob.io.flush.bits.ftq_idx
@@ -855,7 +854,7 @@ class iFuCore extends CoreModule {
         rob.io.debug_wb_ldst(cnt)   := mem_uop.ldst
         rob.io.debug_wb_pc(cnt)     := mem_uop.debug_pc
 
-        dontTorch(mem_uop.pc)
+        dontTouch(mem_uop.debug_pc)
         cnt += 1
     }
     for (eu <- exe_units) {
@@ -880,7 +879,7 @@ class iFuCore extends CoreModule {
             // }
             cnt += 1
 
-            dontTorch(wb_uop.pc)
+            dontTouch(wb_uop.debug_pc)
         }
     }
     require(cnt == numWritePorts)
