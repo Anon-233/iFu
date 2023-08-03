@@ -304,7 +304,7 @@ class Lsu extends CoreModule {
     val ldq_wakeup_e = ldq(ldq_wakeup_idx)
     // Can we wakeup a load that was nack'd
     val block_load_wakeup = WireInit(false.B)
-    val can_fire_load_wakeup = widthMap(w => (
+    val can_fire_load_wakeup = widthMap(w => (      //TODO 增加uncacheable逻辑
         (w == memWidth - 1).B && // load wakeup只会发射到第1条流水线
         ldq_wakeup_e.valid &&
         ldq_wakeup_e.bits.addr.valid &&
@@ -315,11 +315,7 @@ class Lsu extends CoreModule {
         !p1_block_load_mask(ldq_wakeup_idx) &&
         !p2_block_load_mask(ldq_wakeup_idx) &&
         !store_needs_order &&
-        !block_load_wakeup /*&&*/
-        /*(!ldq_wakeup_e.bits.addr_is_uncacheable ||*/
-        /*(io.core.commit_load_at_rob_head && //
-        ldq_head === ldq_wakeup_idx &&
-        ldq_wakeup_e.bits.st_dep_mask.asUInt === 0.U))*/
+        !block_load_wakeup
     ))
     dontTouch(ldq_wakeup_e.valid)
     // -----------------------
