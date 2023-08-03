@@ -138,15 +138,16 @@ class MSHR extends CoreModule with HasDcacheParameters{
         mshr.valid := false.B
     }
 
+    val mshrBlockAddr = Mux(mshr.valid,getBlockAddr(mshr.req.addr),0.U)
+    dontTouch(mshrBlockAddr)
     // 给外界返回match判断
-    io.newblockAddrMatch := mshr.valid && mshr.req.addr === io.newBlockAddr
-    io.fetchingBlockAddrMatch := mshr.valid && mshr.fetching && mshr.req.addr === io.fetchingBlockAddr
-
+    io.newblockAddrMatch := mshr.valid && mshrBlockAddr === io.newBlockAddr
+    io.fetchingBlockAddrMatch := mshr.valid && mshr.fetching && mshrBlockAddr === io.fetchingBlockAddr
     // 状态机
     when(mshr.valid){
         when(mshr.waiting){
             // 正在取，则转为fetching,这里没有fire判断,而是直接感知RPU的fetchingBlockAddr信号
-            when(io.fetchingBlockAddr === mshr.req.addr){
+            when(io.fetchingBlockAddr === mshrBlockAddr){
                 mshr.waiting := false.B
                 mshr.fetching := true.B
             }
@@ -166,8 +167,8 @@ class MSHR extends CoreModule with HasDcacheParameters{
             mshr.issued := true.B
         }
 
-        //发送出去的两周期之后,检查是否传回了执行完毕的信号
-        when(RegNext(RegNext(mshr.issued))){
+        //转换为issued时，replay已经进了s1,再一个周期检查是否传回了执行完毕的信号
+        when(RegNext(mshr.issued)){
             when(io.replayDone){
                 // replay执行完毕，则转为无效
                 mshr.valid := false.B
@@ -278,11 +279,11 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         firstMSHRs(i).reset := !firstMSHRs(i).isStore && io.fenceClear
 
         firstMSHRs(i).fetchingBlockAddr := io.fetchingBlockAddr
+        firstMSHRs(i).fetchReady := io.fetchReady
         fetchingBlockAddrMatches(i) := firstMSHRs(i).fetchingBlockAddrMatch
 
         firstMSHRs(i).replayReq.ready := false.B
         firstMSHRs(i).replayDone := false.B
-        firstMSHRs(i).fetchReady := false.B
 
         // 查看1表有没有正在等候的
         waitinglist(i) := firstMSHRs(i).waiting
@@ -326,7 +327,10 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         secondAllocatable(i) := secondMSHRs(i).req.ready
 
         secondMSHRs(i).fetchingBlockAddr := io.fetchingBlockAddr
-        
+
+        // 先统一赋为假，之后会赋值
+        secondMSHRs(i).fetchReady := false.B
+
         secondMSHRs(i).brupdate := io.brupdate
         secondMSHRs(i).reset := !secondMSHRs(i).isStore && io.fenceClear
 
@@ -334,7 +338,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         secondMSHRs(i).replayDone := io.replayDone
 
         secondMSHRs(i).replayReq.ready := false.B
-        secondMSHRs(i).fetchReady := false.B
+        
 
         // 搜索存储store的信息
         hasStores(i) := secondMSHRs(i).isStore

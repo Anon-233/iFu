@@ -52,14 +52,14 @@ class LSUParameters{
 }
 
 class DcacheParameters {
-    val nRowBits = 256
+    val nRowBits = 512
     def nRowBytes = nRowBits / 8
     def nRowWords = nRowBits / 32
     val nSets = 64
     val nWays = 8
     val nMSHR = 8
     val nTLBEntries = 32
-    def nOffsetBits = log2Ceil(nRowWords)
+    def nOffsetBits = log2Ceil(nRowBytes)
     def nIdxBits = log2Ceil(nSets)
     def nTagBits = 32 - nOffsetBits - nIdxBits
     val coreDataBits = 32
