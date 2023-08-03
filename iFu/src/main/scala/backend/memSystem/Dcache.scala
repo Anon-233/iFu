@@ -600,9 +600,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     mshrs.io.replayDone := false.B
     mshrs.io.fetchingBlockAddr := 0.U
     
-    //告诉mshr去激活(将表1的fetching转成ready)
-    mshrs.io.fetchingBlockAddr := s2newBlockAddr
-    mshrs.io.fetchReady := rpuJustDone
+    
 
     // 只有流水线里面没有正在执行的fetch请求,才能发起新的fetch请求
 
@@ -681,6 +679,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s0newwbIdx = (getIdx(RPU.io.newAddr))
     val s0newBolckAddr = getBlockAddr(RPU.io.newAddr)
     val s0newAlloceWay = (RPU.io.newWay)
+
+    //告诉mshr去激活(将表1的fetching转成ready)
+    mshrs.io.fetchingBlockAddr := s0newBolckAddr
+    mshrs.io.fetchReady := rpuJustDone
 
     // mshr的read请求所需信息
     // 这个地址是所需的地址是要给RPU,但是通过它可以找到要被替换的行所在的idx
@@ -1158,7 +1160,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         meta.io.fenceTakeDirtyMeta := s2state === fence
 
         // 同时告诉mshr这个fetchaddr,用于感知fetching状态转换
-        mshrs.io.fetchingBlockAddr := getBlockAddr(s2fetchAddr)
+        mshrs.io.fetchingBlockAddr := getBlockAddr(s2fetchAddr.asUInt)
 
 
         // resp和nack都不发

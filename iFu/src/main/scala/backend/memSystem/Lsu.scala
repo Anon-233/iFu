@@ -321,7 +321,7 @@ class Lsu extends CoreModule {
         ldq_head === ldq_wakeup_idx &&
         ldq_wakeup_e.bits.st_dep_mask.asUInt === 0.U))*/
     ))
-    dontTouch(ldq_wakeup_e.valid)
+    // dontTouch(ldq_wakeup_e)
     // -----------------------
     // Determine what can fire
 
