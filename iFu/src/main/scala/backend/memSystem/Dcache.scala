@@ -1,102 +1,98 @@
 package iFu.backend
 
-
-import iFu.common._
 import chisel3._
 import chisel3.util._
-import iFu.common.HasCoreParameters
-import iFu.util._
+
+import iFu.common._
 import iFu.common.Consts._
+import iFu.util._
 
 /*
-各部件行为：
-DcacheMeta：
-
-s0传入的lsu请求信息会进行查找，
-
-s1阶段，如果命中，反馈hit，hitPos，如果miss，传出miss后可以
-进行置换的replacePos，(特别的如果发生了store命中readonly，这也算miss)
-
-s2阶段如果是命中的store指令，就将对应的metaline的dirty置为true后写回
-
-s3写完
-
-
-s1传入的mshr来的fetch请求读取metaline
-然后在s2阶段将读好的信息传给RPU
-
-对于RPU传好的新信息，s1阶段将这些信息发起写回，s2完成
-
-总结：双读写端口，一对读写端口用于lsu请求，
-    一读端口用于mshr的fetch请求，一个写端口用于RPU的写回
-
-
-DcacheData：
-
-s1命中的lsu请求去读取对应的dataline，
-s2读好dataline，load指令就读，store指令的话准备好wdata，最终于s3写回
-
-对于RPU传好的新信息，s1阶段将这些信息发起写回，s2完成
-
-总结：双读写端口，一对读写端口用于lsu请求，
-    一读端口用于mshr的fetch请求，一个写端口用于RPU的写回
-
-
-ReplaceUnit：
-
-负责替换行为，包括fetch和writeback，
-
-mshr要求替换的时候，会先在s0发起请求，随着流水线按照所给地址，命中的路等信息去读metaline，dataline
-然后在s2阶段将将这些信息连同读好的metaline，dataline一并给RPU
-RPU会在s3阶段启动替换行为
-
-当替换完成之后，RPU会将新的metaline，dataline，路号，写回地址等信息在s0随着流水线，
-s1写回DcacheMeta，s2写回DcacheData，同时，将替换完成的信息通知mshr
-
-MSHRFile：
-任何指令发生miss，都会传给mshr
-mshr不满，就能接受任何load指令，同时mshr规定至多存一个store指令
-除了prefetch对Replace的请求之外， mshr负责调控所有miss指令的信号的fetch
-
-mshr的replay会在s0阶段发起，重新随流水线做完这个任务
-
-NonBlockingDcache：
-负责调控整个流水线的行为
-s0阶段，在各种请求之间选择
-
-注：对所有的内部事务，最后不回传任何东西。
-    对成功走到s2的lsu和replay回传resp。
-    对miss的store，必然传回nack，对miss的load，如果mshr未满，什么都不穿，满了传nack
+ * 各部件行为：
+ * DcacheMeta：
+ * 
+ * s0传入的lsu请求信息会进行查找，
+ * 
+ * s1阶段，如果命中，反馈hit，hitPos，如果miss，传出miss后可以
+ * 进行置换的replacePos，(特别的如果发生了store命中readonly，这也算miss)
+ * 
+ * s2阶段如果是命中的store指令，就将对应的metaline的dirty置为true后写回
+ * 
+ * s3写完
+ * 
+ * 
+ * s1传入的mshr来的fetch请求读取metaline
+ * 然后在s2阶段将读好的信息传给RPU
+ * 
+ * 对于RPU传好的新信息，s1阶段将这些信息发起写回，s2完成
+ * 
+ * 总结：双读写端口，一对读写端口用于lsu请求，
+ *     一读端口用于mshr的fetch请求，一个写端口用于RPU的写回
+ * 
+ * 
+ * DcacheData：
+ * 
+ * s1命中的lsu请求去读取对应的dataline，
+ * s2读好dataline，load指令就读，store指令的话准备好wdata，最终于s3写回
+ * 
+ * 对于RPU传好的新信息，s1阶段将这些信息发起写回，s2完成
+ * 
+ * 总结：双读写端口，一对读写端口用于lsu请求，
+ *     一读端口用于mshr的fetch请求，一个写端口用于RPU的写回
+ * 
+ * 
+ * ReplaceUnit：
+ * 
+ * 负责替换行为，包括fetch和writeback，
+ * 
+ * mshr要求替换的时候，会先在s0发起请求，随着流水线按照所给地址，命中的路等信息去读metaline，dataline
+ * 然后在s2阶段将将这些信息连同读好的metaline，dataline一并给RPU
+ * RPU会在s3阶段启动替换行为
+ * 
+ * 当替换完成之后，RPU会将新的metaline，dataline，路号，写回地址等信息在s0随着流水线，
+ * s1写回DcacheMeta，s2写回DcacheData，同时，将替换完成的信息通知mshr
+ * 
+ * MSHRFile：
+ * 任何指令发生miss，都会传给mshr
+ * mshr不满，就能接受任何load指令，同时mshr规定至多存一个store指令
+ * 除了prefetch对Replace的请求之外， mshr负责调控所有miss指令的信号的fetch
+ * 
+ * mshr的replay会在s0阶段发起，重新随流水线做完这个任务
+ * 
+ * NonBlockingDcache：
+ * 负责调控整个流水线的行为
+ * s0阶段，在各种请求之间选择
+ * 
+ * 注：对所有的内部事务，最后不回传任何东西。
+ *     对成功走到s2的lsu和replay回传resp。
+ *     对miss的store，必然传回nack，对miss的load，如果mshr未满，什么都不穿，满了传nack
 */
 
 trait HasDcacheParameters extends HasCoreParameters{
-    val nTagBits = dcacheParameters.nTagBits
-    val nIdxBits = dcacheParameters.nIdxBits
-    val nOffsetBits = dcacheParameters.nOffsetBits
-    val nRowBits = dcacheParameters.nRowBits
-    val nRowBytes = dcacheParameters.nRowBytes
-    val nRowWords = dcacheParameters.nRowWords
-    val nSets = dcacheParameters.nSets
-    val nWays = dcacheParameters.nWays
-    val coreDataBits = dcacheParameters.coreDataBits
+    val nTagBits       = dcacheParameters.nTagBits
+    val nIdxBits       = dcacheParameters.nIdxBits
+    val nOffsetBits    = dcacheParameters.nOffsetBits
+    val nRowBits       = dcacheParameters.nRowBits
+    val nRowBytes      = dcacheParameters.nRowBytes
+    val nRowWords      = dcacheParameters.nRowWords
+    val nSets          = dcacheParameters.nSets
+    val nWays          = dcacheParameters.nWays
+    val coreDataBits   = dcacheParameters.coreDataBits
     val nBlockAddrBits = dcacheParameters.nBlockAddrBits
-    val nFirstMSHRs = dcacheParameters.nFirstMSHRs
-    val nSecondMSHRs = dcacheParameters.nSecondMSHRs
+    val nFirstMSHRs    = dcacheParameters.nFirstMSHRs
+    val nSecondMSHRs   = dcacheParameters.nSecondMSHRs
 
-    def getIdx(vaddr: UInt): UInt = dcacheParameters.getIdx(vaddr)
-    def getTag(vaddr: UInt): UInt = dcacheParameters.getTag(vaddr)
+    def getIdx(vaddr: UInt): UInt       = dcacheParameters.getIdx(vaddr)
+    def getTag(vaddr: UInt): UInt       = dcacheParameters.getTag(vaddr)
     def getBlockAddr(vaddr: UInt): UInt = dcacheParameters.getBlockAddr(vaddr)
-    def isStore(req : DCacheReq): Bool = dcacheParameters.isStore(req)
-
-    def isKilledByBranch(  brupdate : BrUpdateInfo,uop : MicroOp) : Bool = dcacheParameters.IsKilledByBranch(brupdate, uop)
-
+    def isStore(req : DCacheReq): Bool  = dcacheParameters.isStore(req)
 }
 
-class MetaLine extends CoreBundle with HasDcacheParameters{
+class MetaLine extends CoreBundle with HasDcacheParameters {
     val valid = Bool()
     val dirty = Bool()
-    val tag = UInt(nTagBits.W)
-    val age = UInt(10.W)
+    val tag   = UInt(nTagBits.W)
+    val age   = UInt(10.W)
 }
 
 
@@ -127,10 +123,6 @@ class DcacheMetaIO extends CoreBundle with HasDcacheParameters{
     val req = Input(Valid(new MetaReq))
     val resp = Output(Valid(new MetaResp))
 }
-
-
-
-
 
 class DcacheMeta extends Module with HasDcacheParameters{
     val io = IO(new CoreBundle{
@@ -314,8 +306,6 @@ class DataResp extends CoreBundle with HasDcacheParameters{
     val rdata = Vec(nRowWords,UInt(32.W))
 }
 
-
-
 class DcacheDataIO extends CoreBundle with HasDcacheParameters{
     val req = Input(Valid(new DataReq))
     val resp = Output(Valid(new DataResp))
@@ -405,13 +395,12 @@ class DcacheData extends Module with HasDcacheParameters{
 
 }
 
-
 class DCacheErrors  extends CoreBundle with HasDcacheParameters{
-
+    // TODO
 }
 
 class DCacheBundle  extends CoreBundle with HasDcacheParameters{
-//    val error = new DCacheErrors
+    // val error = new DCacheErrors
     val lsu = Flipped(new LSUDMemIO)
     val cbusReq = Output(new CBusReq)
     val cbusResp = Input(new CBusResp)
@@ -1243,4 +1232,3 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
 
 }
-
