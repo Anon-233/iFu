@@ -152,3 +152,37 @@ object immGen
 object ImplicitCast {
     implicit def uintToBitPat(x: UInt): BitPat = BitPat(x)
 }
+
+object FindMin {
+    def apply(in: Vec[UInt], valid: Vec[Bool]): UInt = {
+        val bits = in.head.getWidth
+        if (in.size == 1) {
+            return Mux(valid.head, in.head.asUInt, -1.S(bits.W).asUInt)
+        } else if (in.size == 2) {
+            return Mux(valid(0), Mux(valid(1), 
+                    Mux(in(0) < in(1), in(0), in(1)), in(0)),
+                    Mux(valid(1), in(1), -1.S(bits.W).asUInt
+            ))
+        } else {
+            val half = in.size / 2
+            val left = VecInit((0 until half).map(i => in(i)))
+            val right = VecInit((half until in.size).map(i => in(i)))
+            val leftValid = VecInit((0 until half).map(i => valid(i)))
+            val rightValid = VecInit((half until in.size).map(i => valid(i)))
+            return Mux(
+                FindMin(left, leftValid) < FindMin(right, rightValid),
+                    FindMin(left, leftValid),
+                    FindMin(right, rightValid)
+            )
+        }
+    }
+}
+
+object FindMinPos {
+    def apply(in: Vec[UInt], valid: Vec[Bool]): UInt = {
+        val size = in.size
+        val min = FindMin(in, valid)
+        val pos_oh = VecInit((0 until size).map(i => Mux(in(i) === min, true.B, false.B))).asUInt
+        return PriorityEncoder(pos_oh)
+    }
+}
