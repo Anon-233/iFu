@@ -4,6 +4,50 @@ import chisel3._
 import chisel3.util._
 import iFu.common.Consts._
 
+class CSRParameters{
+    val TLB_INDEX_LENGTH: Int = 5
+    val TLBIDX_r: Int = 16-TLB_INDEX_LENGTH
+    val TLBIDX_INDEX:Int = TLB_INDEX_LENGTH
+
+    val PALEN: Int = 32
+    val TLBELO_r: Int = 36-PALEN
+    val TLBELO_ppn: Int = PALEN-12
+
+    val TIMER_LENGTH: Int = 32
+    val TCFG_initval: Int = TIMER_LENGTH-2
+
+    val CSR_CRMD = 0.U(14.W)
+    val CSR_PRMD = 1.U(14.W)
+    val CSR_EUEN = 2.U(14.W)
+    val CSR_ECFG = 4.U(14.W)
+    val CSR_ESTAT = 5.U(14.W)
+    val CSR_ERA = 6.U(14.W)
+    val CSR_BADV = 7.U(14.W)
+    val CSR_EENTRY = 12.U(14.W)
+    val CSR_TLBIDX = 16.U(14.W)
+    val CSR_TLBEHI = 17.U(14.W)
+    val CSR_TLBELO0 = 18.U(14.W)
+    val CSR_TLBELO1 = 19.U(14.W)
+    val CSR_ASID = 24.U(14.W)
+    val CSR_PGDL = 25.U(14.W)
+    val CSR_PGDH = 26.U(14.W)
+    val CSR_PGD = 27.U(14.W)
+    val CSR_CPUID = 32.U(14.W)
+    val CSR_SAVE0 = 48.U(14.W)
+    val CSR_SAVE1 = 49.U(14.W)
+    val CSR_SAVE2 = 50.U(14.W)
+    val CSR_SAVE3 = 51.U(14.W)
+    val CSR_TID = 64.U(14.W)
+    val CSR_TCFG = 65.U(14.W)
+    val CSR_TVAL = 66.U(14.W)
+    val CSR_TICLR = 68.U(14.W)
+    val CSR_LLBCTL = 96.U(14.W)
+    val CSR_TLBRENTRY = 136.U(14.W)
+    val CSR_CTAG = 152.U(14.W)
+    val CSR_DMW0 = 384.U(14.W)
+    val CSR_DMW1 = 385.U(14.W)
+}
+
 class BPUParameters {
     val globalHistoryLength: Int = 8
     val numRasEntries: Int       = 16
@@ -115,4 +159,5 @@ trait HasCoreParameters {
         IssueParams(issueWidth = 2, numIssueSlots = 24, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
         IssueParams(issueWidth = 4, numIssueSlots = 40, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4))
     val enableSFBOpt: Boolean = true
+    val csrParameters: CSRParameters = new CSRParameters
 }
