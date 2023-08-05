@@ -136,7 +136,7 @@ class FetchBundle extends CoreBundle {
     val xcpt_ae_if      = Bool()    // Access exception
 
     val bpdMeta         = Vec(nBanks, Vec(bankWidth, new PredictionMeta))
-
+    val instr_misalign  = Bool()
     // val fsrc            = UInt(BSRC_SZ.W)
 }
 
@@ -480,7 +480,6 @@ class Frontend extends CoreModule {
 
             f3_fetch_bundle.instrs(i) := instr
             f3_mask(i) := f3.io.deq.valid && f3_fetchResp.mask(i) && !redirect_found
-
             f3_tgts(i) := Mux(
                 brsigs.cfiType === CFI_JALR,
                     f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits, // <- maybe wrong
@@ -544,6 +543,7 @@ class Frontend extends CoreModule {
     f3_fetch_bundle.ftqIdx       := 0.U    // TODO: DontCare?
     f3_fetch_bundle.xcpt_pf_if    := f3_fetchResp.xcpt.pf.inst
     f3_fetch_bundle.xcpt_ae_if    := f3_fetchResp.xcpt.ae.inst
+    f3_fetch_bundle.instr_misalign:= f3_fetchResp.pc(1,0) =/= 0.U(2.W)
     // f3_fetch_bundle.fsrc          := f3_fetchResp.fsrc
     // f3_fetch_bundle.tsrc          := f3_fetchResp.tsrc
     f3_fetch_bundle.shadowed_mask := f3_shadowed_mask
