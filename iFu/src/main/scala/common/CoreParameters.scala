@@ -2,6 +2,7 @@ package iFu.common
 
 import chisel3._
 import chisel3.util._
+
 import iFu.common.Consts._
 
 class BPUParameters {
@@ -115,4 +116,5 @@ trait HasCoreParameters {
         IssueParams(issueWidth = 2, numIssueSlots = 24, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
         IssueParams(issueWidth = 4, numIssueSlots = 40, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4))
     val enableSFBOpt: Boolean = true
+    val csrParameters: CSRParameters = new CSRParameters
 }

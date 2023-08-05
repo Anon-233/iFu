@@ -3,6 +3,61 @@ package iFu.common
 import chisel3._
 import chisel3.util._
 
+object CauseCode{
+    val ecodeBits = 6
+    val subcodeBits = 9
+
+    val causeCodeBits = ecodeBits + subcodeBits
+
+    //中断：接收到外部硬件中断，核间中断，内部软中断，定时器中断
+    val INT  =  0.U(ecodeBits.W) /* Cat(0x0.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    //Load操作页无效：load指令访问的页表项无效
+    val PIL  =  0x1.U(ecodeBits.W) /* Cat(0x1.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    //store操作页无效:store指令访问的页表项无效
+    val PIS  = 0x2.U(ecodeBits.W) /* Cat(0x2.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    //取指操作页无效:取指操作访问的页表项无效
+    val PIF  = 0x3.U(ecodeBits.W) /* Cat(0x3.U(ecodeBits.W),0x0.U(subcodeBits.W)) */
+
+    //页修改:store指令访问一个可写位和脏位不全为1的有效页表项
+    val PME  = 0x4.U(ecodeBits.W) /* Cat(0x4.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    //页特权等级不合规 :访问的有效页表项的PLV等级权限高于CPU当前的PLV等级
+    val PPI  =  0x7.U(ecodeBits.W) /* Cat(0x7.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    //取指地址错 :取指PC不对齐；映射地址模式下，CPU当前处于PLV3，PC第31位为1且不落在任何有效的直接映射窗口中
+    val ADEF =  0x8.U(ecodeBits.W) /* Cat(0x8.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    //访存指令地址错:映射地址模式下，CPU当前处于PLV3，访存指令虚地址的第31位为1,且不落在任何有效的直接映射窗口中
+    val ADEM =  0x8.U(ecodeBits.W) /* Cat(0x8.U(ecodeBits.W), 0x1.U(subcodeBits.W)) */
+
+    //地址非对齐 : 非字节访存指令的地址不是自然对齐的
+    val ALE  =  0x9.U(ecodeBits.W) /* Cat(0x9.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    //系统调用  : 执行syscall指令
+    val SYS  =  0xb.U(ecodeBits.W) /* Cat(0xb.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    //断点 :执行break指令
+    val BRK  =  0xc.U(ecodeBits.W) /* Cat(0xc.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    //指令不存在 : 当前指令是一条未定义（/未实现）指令
+    val INE  =  0xd.U(ecodeBits.W) /* Cat(0xd.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    // 指令特权等级错 :CPU当前处于PLV3，执行特权指令
+    val IPE  =  0xe.U(ecodeBits.W) /* Cat(0xe.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    //浮点指令未使能 :CPU实现了浮点指令前提下，当CSR.EUEN.FPE=0时执行浮点指令
+    val FPD  =  0xf.U(ecodeBits.W) /* Cat(0xf.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    //基础浮点运算异常:浮点运算过程中满足IEEE754规范中触发浮点运算异常的情况
+    val FPE  =  0x12.U(ecodeBits.W) /* Cat(0x12.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    //TLB重填 : 映射地址模式下，访存地址不落在任何有效的直接映射窗口中，且在TLB中找不到对应的TLB表项
+    val TLBR =  0x3f.U(ecodeBits.W) /* Cat(0x3f.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+}
+
 object Consts {
     val X = BitPat("b?")
     val Y = BitPat("b1")
@@ -209,6 +264,48 @@ object Consts {
         uop.ctrl := cs
         uop
     }
+
+    val TLB_INDEX_LENGTH: Int = 5
+    val TLBIDX_r: Int = 16 - TLB_INDEX_LENGTH
+    val TLBIDX_INDEX:Int = TLB_INDEX_LENGTH
+
+    val PALEN: Int = 32
+    val TLBELO_r: Int = 36-PALEN
+    val TLBELO_ppn: Int = PALEN-12
+
+    val TIMER_LENGTH: Int = 32
+    val TCFG_initval: Int = TIMER_LENGTH-2
+
+    val CSR_CRMD = 0.U(14.W)
+    val CSR_PRMD = 1.U(14.W)
+    val CSR_EUEN = 2.U(14.W)
+    val CSR_ECFG = 4.U(14.W)
+    val CSR_ESTAT = 5.U(14.W)
+    val CSR_ERA = 6.U(14.W)
+    val CSR_BADV = 7.U(14.W)
+    val CSR_EENTRY = 12.U(14.W)
+    val CSR_TLBIDX = 16.U(14.W)
+    val CSR_TLBEHI = 17.U(14.W)
+    val CSR_TLBELO0 = 18.U(14.W)
+    val CSR_TLBELO1 = 19.U(14.W)
+    val CSR_ASID = 24.U(14.W)
+    val CSR_PGDL = 25.U(14.W)
+    val CSR_PGDH = 26.U(14.W)
+    val CSR_PGD = 27.U(14.W)
+    val CSR_CPUID = 32.U(14.W)
+    val CSR_SAVE0 = 48.U(14.W)
+    val CSR_SAVE1 = 49.U(14.W)
+    val CSR_SAVE2 = 50.U(14.W)
+    val CSR_SAVE3 = 51.U(14.W)
+    val CSR_TID = 64.U(14.W)
+    val CSR_TCFG = 65.U(14.W)
+    val CSR_TVAL = 66.U(14.W)
+    val CSR_TICLR = 68.U(14.W)
+    val CSR_LLBCTL = 96.U(14.W)
+    val CSR_TLBRENTRY = 136.U(14.W)
+    val CSR_CTAG = 152.U(14.W)
+    val CSR_DMW0 = 384.U(14.W)
+    val CSR_DMW1 = 385.U(14.W)
 }
 
 object FlushTypes {

@@ -119,8 +119,10 @@ class Exception extends CoreBundle {
 class CommitExceptionSignals extends CoreBundle {
     val ftq_idx = UInt(log2Ceil(frontendParams.numFTQEntries).W)
     val pc_lob = UInt(log2Ceil(frontendParams.iCacheParams.lineBytes).W)
-    val cause = UInt(xLen.W)
+    val ecode = UInt(6.W)
+    val esubcode: UInt = UInt(9.W)
     val badvaddr = UInt(xLen.W)
+    val vaddrWriteEnable = Bool()
 
     val flush_typ = FlushTypes()
 }
