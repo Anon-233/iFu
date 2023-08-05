@@ -228,10 +228,15 @@ class MemAddrCalcUnit extends PipelinedFuncUnit(
     val addr = (io.req.bits.rs1Data.asSInt + imm).asUInt
 
     val store_data = io.req.bits.rs2Data
-
+    val mxcpt = WireInit(false.B)
+    when(uop.mem_size === 1.U(2.W) && addr(0) =/= 0.U){
+        mxcpt := true.B
+    }.elsewhen(uop.mem_size === 2.U(2.W) && addr(1,0) =/= 0.U){
+        mxcpt := true.B
+    }
+    io.resp.bits.mxcpt := mxcpt
     io.resp.bits.addr := addr
     io.resp.bits.data := store_data
-
     // TODO: CACOP?
     // val size = io.req.bits.uop.mem_size
     // val misaligned =

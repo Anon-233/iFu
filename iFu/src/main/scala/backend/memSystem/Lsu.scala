@@ -3,8 +3,7 @@ package iFu.backend
 import backend.memSystem.DTlb
 import chisel3._
 import chisel3.util._
-import iFu.backend.CSR
-import iFu.common.CauseCode
+import iFu.common.CauseCode._
 import iFu.common._
 import iFu.common.Consts._
 import iFu.frontend.TLB
@@ -459,8 +458,8 @@ class Lsu extends CoreModule {
     ))
     val mem_xcpt_uops = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, exe_tlb_uop(w))))
     val mem_xcpt_causes = RegNext(widthMap(w =>
-        Mux(ma_ld(w), ADEM
-        Mux(ma_st(w), Causes.misaligned_store.U,
+        Mux(ma_ld(w), ADEM,
+        Mux(ma_st(w), ADEM,
             0.U))
     ))
     val mem_xcpt_vaddrs = RegNext(exe_tlb_vaddr)
