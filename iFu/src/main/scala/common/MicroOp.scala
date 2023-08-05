@@ -64,8 +64,7 @@ class MicroOp extends CoreBundle {
     val ppred_busy: Bool = Bool()
 
     val exception: Bool = Bool()
-    val excCause: UInt =  UInt(6.W)
-    val esubcode: UInt = UInt(9.W)
+    val excCause: UInt =  UInt(15.W)
     val vaddrWriteEnable: Bool = Bool()
     val instr_misalign : Bool = Bool()
     val ctrl = new CtrlSignals
@@ -107,7 +106,7 @@ class CtrlSignals extends CoreBundle {
     val imm_sel: UInt     = UInt(immX.getWidth.W)
     val op_fcn: UInt      = UInt(AluFuncCode().SZ_ALU_FN.W)
     val fcn_dw: Bool      = Bool()
-    val csr_cmd: UInt     = UInt(CSR.SZ.W)
+    val csr_cmd: UInt     = UInt(CSR_SZ.W)
     val is_load: Bool     = Bool()
     val is_sta: Bool      = Bool()
     val is_std: Bool      = Bool()
