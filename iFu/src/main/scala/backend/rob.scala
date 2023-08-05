@@ -278,10 +278,9 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     }
 
     exceptionThrown := willThrowException
-    val isMiniException = io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING//TODO:关联到MINI_EXCEPTION_MEM_ORDERING，注意到其值为2.U，如果更改需要同步更改
+    val isMiniException = io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING
     io.com_xcpt.valid := exceptionThrown && !isMiniException
-    io.com_xcpt.bits.cause := rXcptUop.cause
-    io.com_xcpt.bits.esubcode := rXcptUop.esubcode
+    io.com_xcpt.bits.cause := rXcptUop.excCause
     io.com_xcpt.bits.vaddrWriteEnable := rXcptUop.vaddrWriteEnable
 
     io.com_xcpt.bits.badvaddr := Sext(rXcptBadvaddr, xLen)
@@ -331,7 +330,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
             when(!rXcptVal || IsOlder(newXcptUop.robIdx,rXcptUop.robIdx,robHeadIdx)){
                 rXcptVal := true.B
                 nextXcptUop := newXcptUop
-                nextXcptUop.cause := io.lxcpt.bits.cause
+                nextXcptUop.excCause := io.lxcpt.bits.cause
                 rXcptBadvaddr := io.lxcpt.bits.badvaddr
             }
         } .elsewhen (!rXcptVal && enqXcpts.reduce(_|_)){

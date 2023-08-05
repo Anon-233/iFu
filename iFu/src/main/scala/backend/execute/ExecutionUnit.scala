@@ -21,6 +21,7 @@ abstract class ExecutionUnit (
     val hasAlu           : Boolean       = false,
     val hasMul           : Boolean       = false,
     val hasDiv           : Boolean       = false,
+    val hasCnt           : Boolean       = false,
     val numStages        : Int
 ) extends CoreModule {
     val io = IO(new Bundle {
@@ -61,7 +62,7 @@ abstract class ExecutionUnit (
             mem    = hasMem,
             muldiv = hasMul || hasDiv,
             csr    = hasCSR
-            // val cnt: Boolean    = false
+            cnt    = hasCnt
             // val tlb: Boolean    = false
         )
     }

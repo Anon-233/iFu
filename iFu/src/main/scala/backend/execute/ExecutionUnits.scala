@@ -49,10 +49,10 @@ class ExecutionUnits extends HasCoreParameters {
         exe_units.filter(_.hasAlu)
     }
 
-    // lazy val csr_unit = {
-    //     require(exe_units.count(_.hasCSR) == 1)
-    //     exe_units.find(_.hasCSR).get
-    // }
+     lazy val csr_unit = {
+         require(exe_units.count(_.hasCSR) == 1)
+         exe_units.find(_.hasCSR).get
+     }
 
     lazy val jmp_unit_idx = {
         exe_units.indexWhere(_.hasJmpUnit)
@@ -74,7 +74,7 @@ class ExecutionUnits extends HasCoreParameters {
 
         val alu_exe_unit = Module(new ALUExeUnit(
             hasJmpUnit = is_nth(0),
-            // hasCSR = is_nth(1),
+            hasCSR = is_nth(1),
             hasMul = is_nth(2),
             hasDiv = is_nth(3),
         ))

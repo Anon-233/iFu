@@ -163,12 +163,12 @@ class CSRFile extends CoreModule {
         val exevalid = Input(Bool())
     })
 
-    val wen = io.cmd.csr_cmd === CSR.W || io.cmd.csr_cmd === CSR.M
+    val wen = io.cmd.csr_cmd === CSR_W || io.cmd.csr_cmd === CSR_M
     val write_data = 0.U(32.W)
-    when(io.cmd.csr_cmd === CSR.W){
+    when(io.cmd.csr_cmd === CSR_W){
         write_data := io.rd
     }.otherwise{
-        write_data := (io.rd & io.rj) | (read_data & ~io.rj)
+        write_data := (io.rd & io.rj) | (io.read_data & ~io.rj)
     }
 
 

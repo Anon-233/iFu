@@ -181,14 +181,14 @@ object XDecode extends DecodeTable  {
          CSRXCHG1-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR_M),
          CSRXCHG2-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR_M),
          CSRXCHG3-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR_M),
-         ERTN    -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR_I),
-         SYSCALL -> List(Y, uopSYSC        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR_I),
-         BREAK   -> List(Y, uopBREA        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR_I),
+         ERTN    -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR_R),//TODO 改成 CSR_I
+         SYSCALL -> List(Y, uopSYSC        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR_R),
+         BREAK   -> List(Y, uopBREA        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR_R),
      )
  }
 object ExceptionInstrDecode extends DecodeTable{
 
-    val table:  Array[(BitPat),List[BitPat]] = Array(
+    val table:  Array[(BitPat), List[BitPat]] = Array(
         SYSCALL  -> List(Y, SYS),
         BREAK    -> List(Y, BRK)
     )
@@ -265,7 +265,7 @@ class DecodeUnit extends CoreModule {
      val cs_legal = cs.legal
      val id_illegal_insn = !cs_legal
      val (xcpt_valid,xcpt_cause) = checkExceptions(List(
-         (io.interrupt && !io.enq.uop.isSFB,  io.interrupt_cause),
+         (io.interrupt && !io.enq.uop.isSFB,  INT),
          (uop.instr_misalign,                   ADEF),
          (in_cs.valid,                        in_cs.totalCode),
          (id_illegal_insn,                    INE)

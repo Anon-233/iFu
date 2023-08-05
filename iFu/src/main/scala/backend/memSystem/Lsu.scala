@@ -293,8 +293,7 @@ class Lsu extends CoreModule {
     val stq_commit_e = stq(stq_execute_head)
     //推测： s1选中，s2激活，以此改善时序
     val ldq_wakeup_idx = RegNext(
-        AgePriorityEncoder((0 until numLdqEntries).map(
-            i => {
+        AgePriorityEncoder((0 until numLdqEntries).map(i => {
                 val e = ldq(i).bits
                 val block = p0_block_load_mask(i) || p1_block_load_mask(i)
                 e.addr.valid && !e.executed && !e.succeeded && !e.addr_is_virtual && !block
@@ -857,21 +856,6 @@ class Lsu extends CoreModule {
         !io.core.exception && !RegNext(io.core.exception)
     ))
     mem_forward_stq_idx := forwarding_idx
-        when(RegNext(ldst_addr_matches(0).reduce(_ || _) && !mem_forward_valid(0))) {
-            block_load_wakeup := true.B
-        }
-
-        // If stores remain blocked for 15 cycles, block load wakeups to get a store through
-        val store_blocked_counter = Reg(UInt(4.W))
-        when(will_fire_store_commit(0) || !can_fire_store_commit(0)) {
-            store_blocked_counter := 0.U
-        }.elsewhen(can_fire_store_commit(0) && !will_fire_store_commit(0)) {
-            store_blocked_counter := Mux(store_blocked_counter === 15.U, 15.U, store_blocked_counter + 1.U)
-        }
-        when(store_blocked_counter === 15.U) {
-            block_load_wakeup := true.B
-        }
-    }
 
     val temp_bits = (VecInit(VecInit.tabulate(numLdqEntries)(i =>
         failed_loads(i) && i.U >= ldq_head) ++ failed_loads)).asUInt
@@ -883,6 +867,7 @@ class Lsu extends CoreModule {
 
     val ld_xcpt_valid = failed_loads.reduce(_|_)
     val ld_xcpt_uop = ldq(Mux(l_idx >= numLdqEntries.U, l_idx - numLdqEntries.U, l_idx)).bits.uop
+    ld_xcpt_uop.vaddrWriteEnable := false.B
 
     val use_mem_xcpt = (mem_xcpt_valid && IsOlder(mem_xcpt_uop.robIdx, ld_xcpt_uop.robIdx, io.core.rob_head_idx)) || !ld_xcpt_valid
 

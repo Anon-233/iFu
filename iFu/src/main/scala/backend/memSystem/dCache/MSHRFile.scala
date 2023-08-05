@@ -22,7 +22,7 @@ class IOMSHR(id: Int) extends CoreModule {
     val req = Reg(new BoomDCacheReq)
     val grant_word = Reg(UInt(wordBits.W))    // 下一级存储器响应req
 
-    val s_idle :: /*一个新的中间状态*/ :: s_resp :: Nil = Enum(4)
+    val s_idle /*:: 一个新的中间状态*/ :: s_resp :: Nil = Enum(4)
 
     val state = RegInit(s_idle)
     io.req.ready := state === s_idle

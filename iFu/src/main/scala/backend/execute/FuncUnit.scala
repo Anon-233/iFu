@@ -235,6 +235,7 @@ class MemAddrCalcUnit extends PipelinedFuncUnit(
         mxcpt := true.B
     }
     io.resp.bits.mxcpt := mxcpt
+    io.resp.bits.uop.vaddrWriteEnable := mxcpt
     io.resp.bits.addr := addr
     io.resp.bits.data := store_data
     // TODO: CACOP?
