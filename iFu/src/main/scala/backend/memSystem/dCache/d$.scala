@@ -6,200 +6,17 @@ import chisel3.util._
 import iFu.common._
 import iFu.common.Consts._
 
-class WritebackReq extends CoreBundle {
-    val tag = Bits(tagBits.W)
-    val idx = Bits(idxBits.W)
-    val wayMux = Bits(nWays.W)
-}
-
-class WritebackUnit extends CoreModule {
-    val io = IO(new Bundle {
-        val req = Flipped(Decoupled(new WritebackReq))
-        val resp = Output(Bool())
-
-        val meta_read = Decoupled(new MetaReadReq)    // 为什么要同时发请求呢
-        
-        val idx  = Output(Valid(UInt()))
-        val data_req  = Decoupled(new DataReadReq)
-        val data_resp = Input(UInt(xLen.W))
-
-        val cbusReq  = Output(new CBusReq)
-        val cbusResp = Input(new CBusResp)
-    })
-
-    val s_idle :: s_writeBack :: Nil = Enum(2)
-    val state = RegInit(s_idle)
-
-    val req = Reg(new WritebackReq)
-    val wb_buffer = Reg(Vec(refillCycles, UInt(xLen.W)))
-    val enq_ptr = RegInit(0.U(log2Up(refillCycles + 1).W))
-    val deq_ptr = RegInit(0.U(log2Up(refillCycles + 1).W))
-
-    val data_req_cnt = RegInit(0.U(log2Up(refillCycles + 1).W))
-
-    // cbus default
-    io.cbusReq.valid        := false.B
-    io.cbusReq.isStore      := false.B
-    io.cbusReq.mask         := 0x0.U
-    io.cbusReq.axiLen       := MLEN16
-    io.cbusReq.axiBurstType := AXI_BURST_INCR
-    io.cbusReq.size         := MSIZE4
-    io.cbusReq.addr         := 0xbad.U
-    io.cbusReq.data         := 0xbad.U
-
-    // ----------------------------------------------
-    io.idx.valid       := state =/= s_idle
-    io.idx.bits        := req.idx
-    // ---------------------------------------------- 
-    io.req.ready       := state === s_idle
-    io.resp            := false.B
-    // ----------------------------------------------
-    io.meta_read.valid := false.B
-    io.meta_read.bits  := DontCare
-    io.data_req.valid  := false.B
-    io.data_req.bits   := DontCare
-    // ----------------------------------------------
-    when (state === s_idle && io.req.fire) {  // io.req.fire 表示接受到写回请求
-        state   := s_writeBack
-        req     := io.req.bits
-        enq_ptr := 0.U
-        deq_ptr := 0.U
-    } .elsewhen (state === s_writeBack) {
-        io.meta_read.valid      := enq_ptr < refillCycles.U
-        io.meta_read.bits.idx   := req.idx
-        io.meta_read.bits.tag   := req.tag
-
-        io.data_req.valid       := enq_ptr < refillCycles.U
-        io.data_req.bits.wayMux := req.wayMux
-        io.data_req.bits.addr   := Cat(req.idx, enq_ptr) << 2
-
-        when (io.meta_read.fire && io.data_req.fire) {
-            enq_ptr := enq_ptr + 1.U
-        }
-
-        io.cbusReq.valid   := deq_ptr < enq_ptr
-        io.cbusReq.isStore := true.B
-        io.cbusReq.mask    := 0xff.U
-        io.cbusReq.addr    := req.pc >> untagBits << untagBits
-        io.cbusReq.data    := wb_buffer(deq_ptr)
-        when (io.cbusResp.ready) {
-            deq_ptr := deq_ptr + 1.U
-        }
-        when (deq_ptr === (refillCycles - 1).U && io.cbusResp.isLast) {
-            state := s_idle
-            io.resp := true.B
-        }
-    }
-}
-
-class MetaData extends CoreBundle {
-    val valid = Bool()
-    val dirty = Bool()
-    val tag = UInt(tagBits.W)
-    val age = UInt(dCacheAgeBits.W)
-}
-
-class MetaReadReq extends CoreBundle {
-    val idx   = UInt(idxBits.W)
-    val tag   = UInt(tagBits.W)
-    val wayMux = UInt(nWays.W)
-}
-
-class MeatWriteReq extends MetaReadReq {
-    val data = new MetaData
-}
-
-class DualMetaReadReq extends CoreBundle {
-    val req    = Vec(memWidth, new MetaReadReq)
-}
-
-class MetaArray extends CoreModule {
-    val io = IO(new Bundle {
-        val read  = Vec(memWidth, Flipped(Decoupled(new MetaReadReq)))
-        val write = Flipped(Decoupled(new MeatWriteReq))
-        val resp  = Output(Vec(memWidth, Vec(nWays, new MetaData)))
-    })
-
-    val array = SyncReadMem(nSets, Vec(nWays, new MetaData))
-
-    val rstEn = RegInit(true.B)
-    val rstCnt = RegInit(0.U(log2Ceil(nSets).W))
-    when (rstCnt === (nSets - 1).U) { rstEn := false.B }
-    rstCnt := WrapInc(rstCnt, nSets)
-
-    val wEn   = rstEn || io.write.fire
-    val waddr = Mux(rstEn, rstCnt, io.write.bits.idx)
-    val wdata = Mux(rstEn, 0.U.asTypeOf(new MetaData), io.write.bits.data)
-    val wmask = Mux(rstEn, -1.S, io.write.bits.wayMux).asBools
-
-    when (wEn) {
-        array.write(waddr, VecInit.fill(nWays)(wdata), wmask)
-    }
-    for (i <- 0 until memWidth) {
-        io.read(i).ready := !rstEn || !wEn
-        io.resp(i) := array.read(io.read(i).bits.idx, io.read(i).valid)
-    }
-
-    io.write.ready := !rstEn
-}
-
-class DataReadReq extends CoreBundle {
-    val wayMUx = UInt(nWays.W)
-    val addr   = UInt(untagBits.W)
-}
-
-class DataWriteReq extends DataReadReq {
-    val wmask  = Vec(rowWords, Bool())
-    val data   = UInt(128.W)
-}
-
-class DualDataReadReq extends CoreBundle {
-    val valid = Vec(memWidth, Bool())
-    val req   = Vec(memWidth, new DataReadReq)
-}
-
-class DataArray extends CoreModule {
-    val io = IO(new CoreBundle {
-        val read  = Vec(memWidth, Flipped(Valid(new DataReadReq)))
-        val write = Flipped(Valid(new DataWriteReq))
-        val nacks = Output(Vec(memWidth, Bool()))
-        val resp  = Output(Vec(memWidth, Vec(nWays, UInt(xLen.W))))
-    })
-
-    val waddr  = io.write.bits.addr >> 2 // 4 bytes per word
-    val raddr1 = io.read(0).bits.addr >> 2
-    val raddr2 = io.read(1).bits.addr >> 2
-
-    for (w <- 0 until nWays) {
-        val depth = nSets * rowWords
-        val array = SyncReadMem(depth, Vec(4, UInt(8.W)))
-
-        when (io.write.valid && io.write.bits.wayMux(w)) {
-            array.write(waddr, io.write.data, io.write.bits.wmask)
-        }
-        io.resp(0)(w) := RegNext(
-            array.read(raddr1, io.read(0).wayMux(w) && io.read(0).valid).asUInt
-        )
-        io.resp(1)(w) := RegNext(
-            array.read(raddr2, io.read(1).wayMux(w) && io.read(1).valid).asUInt
-        )
-        io.nacks(0) := false.B
-        io.nacks(1) := false.B
-    }
-}
-
 class DCacheIO extends CoreBundle {
     val lsu      = Flipped(new LSUDMemIO)
-    // val error    = new DCacheErrors
     val cbusReq  = Output(new CBusReq)
     val cbusResp = Input(new CBusResp)
 }
 
 class NonBlockingDCache extends CoreModules {
-    val io = IO(new DCacheIO)
-
     def widthMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
     def wayMap[T <: Data](f: Int => T) = VecInit((0 until nWays).map(f))
+    
+    val io = IO(new DCacheIO)
 
     // 不太懂mshr的读请求是干嘛的
     val t_replay :: t_wb :: t_mshr_meta_read :: t_lsu :: t_prefetch :: Nil = Enum(5)
@@ -266,7 +83,7 @@ class NonBlockingDCache extends CoreModules {
 
     // ------------
     // MSHR Replays
-    val replay_req = Wire(Vec(memWidth, new BoomDCacheReq))   // 重发，之前已经重填完了
+    val replay_req = Wire(Vec(memWidth, new DCacheReq))   // 重发，之前已经重填完了
     replay_req               := DontCare
     replay_req(0).uop        := mshrs.io.replay.bits.uop
     replay_req(0).addr       := mshrs.io.replay.bits.addr
@@ -420,7 +237,7 @@ class NonBlockingDCache extends CoreModules {
     val s2_tag_match     = s2_tag_match_way.map(_.orR)
 
     val s2_hit = widthMap(w => 
-        (s2_tag_match(w) && !mshrs.io.block_hit(w)) || s2_type.isOneOf(t_replay, t_wb)
+        s2_tag_match(w) || s2_type.isOneOf(t_replay, t_wb)
     )
     assert(!(s2_type === t_replay && !s2_hit(0)), "Replays should always hit")
     assert(!(s2_type === t_wb && !s2_hit(0)), "Writeback should always see data hit")
@@ -534,20 +351,19 @@ class NonBlockingDCache extends CoreModules {
             !s2_hit(w) &&
             !s2_nack_wb(w) &&   // nack wb 不进 mshr，mshr那边逻辑简单
             s2_type.isOneOf(t_lsu, t_prefetch) &&
-            !IsKilledByBranch(io.lsu.brupdate, s2_req(w).uop) &&
+            !IsKilledByBranch(io.lsu.brupdate, s2_req(w).uop) /* && */
             // !(io.lsu.exception && s2_req(w).uop.uses_ldq) &&
-            (isPrefetch(s2_req(w).uop.mem_cmd) ||
-             isRead(s2_req(w).uop.mem_cmd)     ||
-             isWrite(s2_req(w).uop.mem_cmd))
+            // (isPrefetch(s2_req(w).uop.mem_cmd) ||
+            //  isRead(s2_req(w).uop.mem_cmd)     ||
+            //  isWrite(s2_req(w).uop.mem_cmd))
         )
         assert(!(mshrs.io.req(w).valid && s2_type === t_replay), "Replays should not need to go back into MSHRs")
         mshrs.io.req(w).bits             := DontCare
         mshrs.io.req(w).bits.uop         := s2_req(w).uop
         mshrs.io.req(w).bits.uop.br_mask := GetNewBrMask(io.lsu.brupdate, s2_req(w).uop)
         mshrs.io.req(w).bits.addr        := s2_req(w).addr
-        mshrs.io.req(w).bits.tag_match   := s2_tag_match(w)
-        mshrs.io.req(w).bits.old_meta    := Mux(s2_tag_match(w), Metadata(s2_repl_meta(w).tag), s2_repl_meta(w))    // meta 其他的dont care
-        mshrs.io.req(w).bits.wayMux      := Mux(s2_tag_match(w), s2_tag_match_way(w), s2_replaced_wayMux)
+        mshrs.io.req(w).bits.old_meta    := s2_repl_meta(w)
+        mshrs.io.req(w).bits.wayMux      := s2_replaced_wayMux
         mshrs.io.req(w).bits.data        := s2_req(w).data
     }
 
@@ -583,7 +399,7 @@ class NonBlockingDCache extends CoreModules {
         cache_resp(w).bits.uop      := s2_req(w).uop
         cache_resp(w).bits.data     := loadgen(w).data /* | s2_sc_fail */
     }
-    val uncache_resp = Wire(Valid(new BoomDCacheResp))
+    val uncache_resp = Wire(Valid(new DCacheResp))
     uncache_resp.bits   := mshrs.io.resp.bits
     uncache_resp.valid  := mshrs.io.resp.valid
     mshrs.io.resp.ready := !(cache_resp.map(_.valid).reduce(_&&_)) // We can backpressure the MSHRs, but not cache hits

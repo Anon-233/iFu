@@ -6,15 +6,6 @@ import chisel3.util._
 import iFu.common._
 import iFu.common.Consts._
 
-class DCacheReqInternal extends DCacheReq {
-  // miss info
-  val tag_match = Bool()
-  val old_meta  = new L1Metadata
-  val way_en    = UInt(nWays.W)
-  // Used in the MSHRs
-  val sdq_id    = UInt(log2Ceil(nSDQ).W)
-}
-
 class IOMSHR(id: Int) extends CoreModule {
     val io = IO(new Bundle {
         val req  = Flipped(Decoupled(new DCacheReq))
@@ -65,7 +56,6 @@ class LineBufferReadReq extends CoreBundle {
 
 class LineBufferWriteReq extends LineBufferReadReq {
     val data   = UInt(encRowBits.W)   // 要写入的data
-    // line buffer是干什么的，要向里面写入什么东西？？？
 }
 
 class LineBufferMetaWriteReq extends CoreBundle {
@@ -75,13 +65,15 @@ class LineBufferMetaWriteReq extends CoreBundle {
 }
 
 class LineBufferMeta extends CoreBundle {
-  val coh  = new ClientMetadata // meta 信息
-  val addr = UInt(coreMaxAddrBits.W)    // 什么的地址呢？
+    val meta = new MetaData
+    val addr = UInt(paddrBits.W)
 }
 
 class MSHRFile extends CoreModule {
-  val io = IO(new Bundle {
-        val req  = Flipped(Vec(memWidth, Decoupled(new DCacheReqInternal)))
+    def widthMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
+
+    val io = IO(new Bundle {
+        val req  = Flipped(Vec(memWidth, Decoupled(new MSHRReq)))
         val resp = Decoupled(new DCacheResp)
         val secondary_miss = Output(Vec(memWidth, Bool()))
         val block_hit = Output(Vec(memWidth, Bool()))
@@ -93,7 +85,7 @@ class MSHRFile extends CoreModule {
         val meta_write = Decoupled(new L1MetaWriteReq)
         val meta_read  = Decoupled(new L1MetaReadReq)
         val meta_resp  = Input(Valid(new L1Metadata))
-        val replay     = Decoupled(new DCacheReqInternal)
+        val replay     = Decoupled(new MSHRReq)
         val prefetch   = Decoupled(new DCacheReq)
         val wb_req     = Decoupled(new WritebackReq)
 
@@ -163,7 +155,6 @@ class MSHRFile extends CoreModule {
             lb_read_data := lb.read(lb_read_arb.io.out.bits.lb_addr)
         }
     }
-    def widthMap[T <: Data](f: Int => T) = VecInit((0 until memWidth).map(f))
 
     // 两条流水线是否匹配到了已有的mshr（不太确定）
     val idx_matches = Wire(Vec(memWidth, Vec(nMSHRs, Bool())))
@@ -179,7 +170,7 @@ class MSHRFile extends CoreModule {
     val meta_write_arb = Module(new Arbiter(new L1MetaWriteReq           , nMSHRs))
     val meta_read_arb  = Module(new Arbiter(new L1MetaReadReq            , nMSHRs))
     val wb_req_arb     = Module(new Arbiter(new WritebackReq(edge.bundle), nMSHRs))
-    val replay_arb     = Module(new Arbiter(new DCacheReqInternal        , nMSHRs))
+    val replay_arb     = Module(new Arbiter(new MSHRReq                  , nMSHRs))
     val resp_arb       = Module(new Arbiter(new DCacheResp               , nMSHRs + nIOMSHRs))
     val refill_arb     = Module(new Arbiter(new L1DataWriteReq           , nMSHRs))
 
@@ -264,9 +255,11 @@ class MSHRFile extends CoreModule {
     // Try to round-robin the MSHRs
     val mshr_head = RegInit(0.U(log2Ceil(nMSHRs).W))
     mshr_alloc_idx := RegNext(  // 选出 head 之后的第一个 pri_rdy 的 mshr
-        AgePriorityEncoder(mshrs.map(m=>m.io.req_pri_rdy), mshr_head)
+        AgePriorityEncoder(mshrs.map(m => m.io.req_pri_rdy), mshr_head)
     )
-    when (pri_rdy && pri_val) { mshr_head := WrapInc(mshr_head, nMSHRs) }
+    when (pri_rdy && pri_val) {
+        mshr_head := WrapInc(mshr_head, nMSHRs)
+    }
 
     io.meta_write <> meta_write_arb.io.out
     io.meta_read  <> meta_read_arb.io.out
