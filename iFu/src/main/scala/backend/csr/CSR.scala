@@ -295,11 +295,11 @@ class CSRFile extends CoreModule {
         io.csr_pc := csrReg.era
     }
 
-    when (csrReg.tcfg.en) {
+    when (csrReg.tcfg.en.asBool) {
         when(csrReg.tval.timeval =/= 0.U) {
             csrRegNxt.tval.timeval := csrReg.tval.timeval - 1.U
         } .otherwise {
-            when (csrReg.tcfg.periodic) {
+            when (csrReg.tcfg.periodic.asBool) {
                 csrRegNxt.tval.timeval := Cat(csrReg.tcfg.initval,0.U(2.W))
             } .otherwise {
                 csrRegNxt.tcfg.en := -1.S(TIMER_LENGTH.W).asUInt  //TODO:is '1==11111111?
