@@ -127,9 +127,9 @@ class MSHR extends CoreModule {
             rpq.io.deq.ready := true.B
         }
         when (rpq.io.empty && !rpq.io.enq.valid) {
-            state := s_drain_rpq
-        } .otherwise {
             state := s_idle
+        } .elsewhen (rpq.io.empty && rpq.io.enq.valid) {
+            state := s_drain_rpq
         }
     }
 }
