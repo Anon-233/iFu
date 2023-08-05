@@ -222,8 +222,8 @@ class iFuCore extends CoreModule {
         when (FlushTypes.useCsrEvec(flush_type)) {
             ifu.io.exe.redirect_pc := Mux(
                 flush_type === FlushTypes.eret,
-                RegNext(RegNext(csr.io.csr_pc)),
-                csr.io.csr_pc
+                RegNext(RegNext(csr.io.evec)),
+                csr.io.evec
             )
         } .otherwise {
             val flush_pc = (
@@ -235,7 +235,7 @@ class iFuCore extends CoreModule {
                 FlushTypes.useSamePC(flush_type),
                 flush_pc, flush_pc_next
             )
-        /*}*/
+        }
         ifu.io.exe.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
     } .elsewhen(brUpdate.b2.mispredict) {
         val block_pc = AlignPCToBoundary(ifu.io.exe.getFtqPc(1).pc, iCacheLineBytes)
