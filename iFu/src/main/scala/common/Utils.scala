@@ -143,7 +143,8 @@ object immGen
             immS16  -> Cat(Fill(14,immPacked(25)),immPacked(25,10),Fill(2,0.U)),
             immU20  -> Cat(immPacked(24,5),Fill(12,0.U)),
             immS20  -> Cat(Fill(10,immPacked(24)),immPacked(24,5),Fill(2,0.U)),
-            immS26  -> Cat(Fill(4,immPacked(9)),immPacked(9,0),immPacked(25,10),Fill(2,0.U))
+            immS26  -> Cat(Fill(4,immPacked(9)),immPacked(9,0),immPacked(25,10),Fill(2,0.U)),
+            immCSR  -> Cat(Fill(18,0.U),immPacked(23,10))
         ))
         imm.asSInt
     }
