@@ -10,16 +10,16 @@ object CauseCode{
     val causeCodeBits = ecodeBits + subcodeBits
 
     //中断：接收到外部硬件中断，核间中断，内部软中断，定时器中断
-    val INT  =  Cat(0x0.U(ecodeBits.W), 0x0.U(subcodeBits.W)).U
+    val INT  =  Cat(0x0.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
     //Load操作页无效：load指令访问的页表项无效
-    val PIL  =  Cat(0x1.U(ecodeBits.W), 0x0.U(subcodeBits.W)).U
+    val PIL  =  Cat(0x1.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
     //store操作页无效:store指令访问的页表项无效
-    val PIS  = Cat(0x2.U(ecodeBits.W), 0x0.U(subcodeBits.W)).U
+    val PIS  = Cat(0x2.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
     //取指操作页无效:取指操作访问的页表项无效
-    val PIF  = Cat(0x3.U(ecodeBits.W),0x0.U(subcodeBits.W)).U
+    val PIF  = Cat(0x3.U(ecodeBits.W),0x0.U(subcodeBits.W))
 
     //页修改:store指令访问一个可写位和脏位不全为1的有效页表项
     val PME  = Cat(0x4.U(ecodeBits.W), 0x0.U(subcodeBits.W))
@@ -67,7 +67,7 @@ object Consts {
     val N = BitPat("b0")
 
     val CSR_SZ = 2
-    val CSR_X  = 0.U(CSR_SZ.W)
+    val CSR_N  = 0.U(CSR_SZ.W)
     val CSR_R  = 1.U(CSR_SZ.W)
     val CSR_W  = 2.U(CSR_SZ.W)
     val CSR_M  = 3.U(CSR_SZ.W)
