@@ -354,8 +354,6 @@ class Lsu extends CoreModule {
         stq_commit_e.bits.addr.valid && // 地址准备好了
         !stq_commit_e.bits.addr_is_virtual &&   // TLB 没有miss
         stq_commit_e.bits.data.valid))    // 数据准备好了
-
-
     ))
     //---------------------------------------------------------
     // Controller logic. Arbitrate which request actually fires
@@ -449,23 +447,22 @@ class Lsu extends CoreModule {
     }
     // exceptions
     //TODO ma_ld和ma_st的条件判断需要更改
-    val ma_ld = widthMap(w => will_fire_load_incoming(w) && /*exe_req(w).bits.mxcpt.valid*/false.B) // We get ma_ld in memaddrcalc
-    val ma_st = widthMap(w => (will_fire_sta_incoming(w) || will_fire_stad_incoming(w)) && /*exe_req(w).bits.mxcpt.valid*/false.B) // We get ma_ld in memaddrcalc
+    val ma_ld = widthMap(w => will_fire_load_incoming(w) && exe_req(w).bits.mxcpt.valid) // We get ma_ld in memaddrcalc
+    val ma_st = widthMap(w => (will_fire_sta_incoming(w) || will_fire_stad_incoming(w)) && exe_req(w).bits.mxcpt.valid) // We get ma_ld in memaddrcalc
     val pf_ld = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).pf.ld && exe_tlb_uop(w).use_ldq)
     val pf_st = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).pf.st && exe_tlb_uop(w).use_stq)
     val ae_ld = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).ae.ld && exe_tlb_uop(w).use_ldq)
     val ae_st = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).ae.st && exe_tlb_uop(w).use_stq)
 
-    // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
     val mem_xcpt_valids = RegNext(widthMap(w =>
         (ma_ld(w) || ma_st(w)) && !io.core.exception && !IsKilledByBranch(io.core.brupdate, exe_tlb_uop(w))
     ))
     val mem_xcpt_uops = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, exe_tlb_uop(w))))
     val mem_xcpt_causes = RegNext(widthMap(w =>
-        Mux(ma_ld(w), 1.U,
-        Mux(ma_st(w), 2.U,
-            3.U))
-    ))          //TODO causes需要改变
+        Mux(ma_ld(w), Causes.misaligned_load.U,
+        Mux(ma_st(w), Causes.misaligned_store.U,
+            0.U))
+    ))
     val mem_xcpt_vaddrs = RegNext(exe_tlb_vaddr)
 
     // for (w <- 0 until memWidth) {

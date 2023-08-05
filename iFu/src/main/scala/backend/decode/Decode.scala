@@ -16,6 +16,18 @@ import iFu.backend.DecodeLogic
 //TODO B和BL的uop均为uopJAL，BL的目的寄存器恒为1 Done
 //TODO Wired Decode和TLB Decode
 
+class CSRDecodeIO extends CoreBundle {
+    val inst = Input(UInt(coreInstrBits.W))
+
+    def csr_addr = inst(23,10)
+
+    val vector_illegal = Output(Bool())
+    val write_illegal = Output(Bool())
+    val write_flush = Output(Bool())
+    val system_illegal = Output(Bool())
+    val virtual_access_illegal = Output(Bool())
+    val virtual_system_illegal = Output(Bool())
+}
 object CSR {
     // commands
     val SZ = 3
@@ -227,9 +239,9 @@ object XDecode extends DecodeTable  {
      val table:  Array[(BitPat, List[BitPat])] = Array( //      |       |       |      |    |  |  |  |  |    |     |   |  |  |  |  |  |
          CSRRD   -> List(Y, uopCSRRD       , IQT_INT, FU_CSR, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.R),
          CSRWR   -> List(Y, uopCSRWR       , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.W),
-         CSRXCHG1-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.W),
-         CSRXCHG2-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.W),
-         CSRXCHG3-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.W),
+         CSRXCHG1-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.M),
+         CSRXCHG2-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.M),
+         CSRXCHG3-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.M),
          ERTN    -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.I),
          SYSCALL -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR.I),
          BREAK   -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR.I),
@@ -259,15 +271,18 @@ object XDecode extends DecodeTable  {
 
 //TODO 修改CSRFile
 
+//class XcptCode extends CoreBundle{
+//    val E
+//}
 class DecodeUnitIO() extends CoreBundle {
     val enq = new Bundle { val uop = Input(new MicroOp()) }
     val deq = new Bundle { val uop = Output(new MicroOp()) }
 
     // from CSRFile
     // val status = Input(new freechips.rocketchip.rocket.MStatus())
-    // val csr_decode = Flipped(new freechips.rocketchip.rocket.CSRDecodeIO)
-    // val interrupt = Input(Bool())
-    // val interrupt_cause = Input(UInt(xLen.W))
+     val csr_decode = Flipped(new CSRDecodeIO)
+     val interrupt = Input(Bool())
+     val interrupt_cause = Input(UInt(xLen.W))
 }
 
 //TODO 添加对CSR环境下异常指令的检测
@@ -287,20 +302,21 @@ class DecodeUnit extends CoreModule {
     val cs = Wire(new CtrlSigs).decode(inst, decode_table)
 
     // TODO: 异常检测
-    // def checkExceptions(x: Seq[(Bool, UInt)]) =
-    //     (x.map(_._1).reduce(_||_), PriorityMux(x))
-    // val cs_legal = cs.legal
-    // val id_illegal_insn = !cs_legal
-    // val (xcpt_valid,xcpt_cause) = checkExceptions(List(
-    //     (io.interrupt && !io.enq.uop.isSFB, io.interrupt_cause),
-    //     (uop.bp_xcpt_if,                    (Causes.breakpoint).U),
-    //     (uop.xcpt_pf_if,                    (Causes.fetch_page_fault).U),
-    //     (uop.xcpt_ae_if,                    (Causes.fetch_access).U),
-    //     (id_illegal_insn,                   (Causes.illegal_instruction).U)
-    // ))
+     def checkExceptions(x: Seq[(Bool, UInt)]) =
+         (x.map(_._1).reduce(_||_), PriorityMux(x))
+     val cs_legal = cs.legal
+     val id_illegal_insn = !cs_legal
 
-    uop.exception := /*xcpt_valid*/ false.B
-    uop.excCause  := /*xcpt_cause*/ DontCare
+     val (xcpt_valid,xcpt_cause) = checkExceptions(List(
+         (io.interrupt && !io.enq.uop.isSFB,  io.interrupt_cause),
+         (uop.instr_misalign,                (Causes.inst_misalign).U),
+         (id_illegal_insn,                   (Causes.illegal_instruction).U)
+     ))
+
+
+    uop.exception := xcpt_valid
+    uop.excCause  := xcpt_cause
+
 
     //-------------------------------------------------------------
     uop.uopc        := cs.uopc

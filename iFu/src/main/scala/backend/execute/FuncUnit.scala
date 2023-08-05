@@ -43,7 +43,8 @@ abstract class PipelinedFuncUnit (
     isAluUnit = isAluUnit,
     isMemAddrCalcUnit = isMemAddrCalcUnit
 ) {
-
+    io.resp.bits.rd  := io.req.bits.rs1Data
+    io.resp.bits.rj  := io.req.bits.rs2Data
     io.req.ready := true.B
     var rValids: Vec[Bool]  = null
     var rUops: Vec[MicroOp] = null

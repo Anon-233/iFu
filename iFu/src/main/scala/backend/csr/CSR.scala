@@ -134,7 +134,7 @@ class CSRReg extends CoreBundle{
     val dmw1 = new DMW
 }
 
-class CSR extends CoreModule {
+class CSRFile extends CoreModule {
     val io = IO(new Bundle{
         val ext_int = Input(UInt(8.W))
 

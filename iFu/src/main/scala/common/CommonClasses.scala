@@ -39,6 +39,8 @@ class FuncUnitResp extends CoreBundle {
     val predicated = Bool()
     val data = UInt(xLen.W)
     val addr = UInt(xLen.W)
+    val rj   = UInt(xLen.W)
+    val rd   = UInt(xLen.W)
     // val mxcpt = // TODO
     // val sfence = // TODO
 }
@@ -46,6 +48,8 @@ class FuncUnitResp extends CoreBundle {
 class ExeUnitResp(val len: Int = 32) extends CoreBundle {
     val uop = new MicroOp
     val data = Bits(len.W)
+    val rj   = Bits(len.W)
+    val rd   = Bits(len.W)
     val predicated = Bool() // Was this predicated off?
 }
 

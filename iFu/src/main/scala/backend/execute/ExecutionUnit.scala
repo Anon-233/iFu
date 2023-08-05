@@ -16,7 +16,7 @@ abstract class ExecutionUnit (
     val bypassable       : Boolean       = false,
     val alwaysBypassable : Boolean       = false,
     val hasMem           : Boolean       = false,
-    // val hasCSR           : Boolean       = false,
+    val hasCSR           : Boolean       = false,
     val hasJmpUnit       : Boolean       = false,
     val hasAlu           : Boolean       = false,
     val hasMul           : Boolean       = false,
@@ -60,7 +60,7 @@ abstract class ExecutionUnit (
             jmp    = hasJmpUnit,
             mem    = hasMem,
             muldiv = hasMul || hasDiv,
-            // csr    = hasCSR
+            csr    = hasCSR
             // val cnt: Boolean    = false
             // val tlb: Boolean    = false
         )
@@ -69,7 +69,7 @@ abstract class ExecutionUnit (
 
 class ALUExeUnit(
     hasJmpUnit : Boolean = false,
-    // hasCSR     : Boolean = false,
+    hasCSR     : Boolean = false,
     hasAlu     : Boolean = true,
     hasMul     : Boolean = false,
     hasDiv     : Boolean = false,
@@ -81,9 +81,9 @@ class ALUExeUnit(
     writesIrf        = hasAlu || hasMul || hasDiv,
     writesMemIrf     = hasMem,
     bypassable       = hasAlu,
-    alwaysBypassable = hasAlu && !(hasMem || hasJmpUnit || hasMul || hasDiv /*|| hasCSR*/),
+    alwaysBypassable = hasAlu && !(hasMem || hasJmpUnit || hasMul || hasDiv || hasCSR),
     hasMem           = hasMem,
-    // hasCSR           = hasCSR,
+    hasCSR           = hasCSR,
     hasJmpUnit       = hasJmpUnit,
     hasAlu           = hasAlu,
     hasMul           = hasMul,
@@ -98,7 +98,7 @@ class ALUExeUnit(
     io.fu_types := Mux(hasAlu.B, FU_ALU, 0.U)              |
                    Mux(hasMul.B, FU_MUL, 0.U)              |
                    Mux(!div_busy && hasDiv.B, FU_DIV, 0.U) |
-                //    Mux(hasCSR.B, FU_CSR, 0.U)              |
+                   Mux(hasCSR.B, FU_CSR, 0.U)              |
                    Mux(hasJmpUnit.B, FU_JMP, 0.U)          |
                    Mux(hasMem.B, FU_MEM, 0.U)
 
@@ -197,10 +197,12 @@ class ALUExeUnit(
             (f.io.resp.valid, f.io.resp.bits.predicated)).toSeq
         )
 
-        // if (hasAlu) {
-        //     io.iresp.bits.uop.csrAddr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).asUInt
-        //     io.iresp.bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
-        // }
+         if (hasAlu) {
+             io.iresp.bits.uop.csrAddr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).asUInt
+             io.iresp.bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
+             io.iresp.bits.rj := alu.io.resp.bits.rj
+             io.iresp.bits.rd := alu.io.resp.bits.rd
+         }
     }
     assert ((PopCount(iresp_fu_units.map(_.io.resp.valid)) <= 1.U && !div_resp_val) ||
             (PopCount(iresp_fu_units.map(_.io.resp.valid)) <= 2.U && (div_resp_val)),
