@@ -19,7 +19,7 @@ class RRdCtrlSigs extends CoreBundle {
     val op2_sel        = UInt(OP2_X.getWidth.W)
     val imm_sel        = UInt(immX.getWidth.W)
     val rf_wen         = Bool()
-    val csr_cmd        = Bits(CSR.SZ.W)
+    val csr_cmd        = Bits(CSR_SZ.W)
 
     def decode(uopc: UInt, table: Iterable[(BitPat, List[BitPat])]) = {
         val decoder = DecodeLogic(uopc, AluRRdDecode.default, table)
