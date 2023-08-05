@@ -222,8 +222,8 @@ class iFuCore extends CoreModule {
         when (FlushTypes.useCsrEvec(flush_type)) {
             ifu.io.exe.redirect_pc := Mux(
                 flush_type === FlushTypes.eret,
-                RegNext(RegNext(csr.io.evec)),
-                csr.io.evec
+                RegNext(RegNext(csr.io.csr_pc)),
+                csr.io.csr_pc
             )
         } .otherwise {
             val flush_pc = (
@@ -355,8 +355,8 @@ class iFuCore extends CoreModule {
             ifu.io.exe.fetchPacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
         decode_units(w).io.enq.uop := dec_fbundle.uops(w).bits
         // decode_units(w).io.status := csr.io.status
-        // decode_units(w).io.csr_decode <> csr.io.decode(w)
-        // decode_units(w).io.interrupt := csr.io.interrupt
+        decode_units(w).io.csr_decode <> csr.io.decode(w)
+        decode_units(w).io.interrupt := csr.io.interrupt
         // decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
 
         dec_uops(w) := decode_units(w).io.deq.uop
@@ -701,11 +701,17 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     //--------------------------CSR--------------------------------
     //-------------------------------------------------------------
+    val csr_exe_unit = exe_units.csr_unit
+    val csr_rw_cmd = csr_exe_unit.io.iresp.bits.uop.ctrl.csr_cmd
+
     csr.io.ext_int := io.ext_int
-    csr.io.wen := DontCare //all DontCare is wait to do
-    csr.io.read_addr := DontCare //all DontCare is wait to do
-    csr.io.write_addr := DontCare //all DontCare is wait to do
-    csr.io.write_data := DontCare //all DontCare is wait to do
+    csr.io.read_addr := csr_exe_unit.io.iresp.bits.uop.csr_addr 
+    csr.io.write_addr := csr_exe_unit.io.iresp.bits.uop.csr_addr
+    csr.io.rd := csr_exe_unit.io.iresp.bits.rd
+    csr.io.rj := csr_exe_unit.io.iresp.bits.rj
+
+    csr.io.cmd := csr_rw_cmd
+    csr.io.exevalid := csr_exe_unit.io.iresp.valid
 
     csr.io.is_ertn := DontCare //all DontCare is wait to do
     
@@ -718,46 +724,6 @@ class iFuCore extends CoreModule {
     )
        
 
-    // val csr_exe_unit = exe_units.csr_unit
-
-    // for critical path reasons, we aren't zero'ing this out if resp is not valid
-    // val csr_rw_cmd = csr_exe_unit.io.iresp.bits.uop.ctrl.csr_cmd
-
-    // csr.io.rw.addr := csr_exe_unit.io.iresp.bits.uop.csr_addr  //TODO
-    // csr.io.rw.cmd := CSR.maskCmd(csr_exe_unit.io.iresp.valid, csr_rw_cmd)
-    // csr.io.rw.wdata := csr_exe_unit.io.iresp.bits.data
-
-    // Extra I/O
-    // Delay retire/exception 1 cycle
-    // csr.io.retire := RegNext(PopCount(rob.io.commit.arch_valids.asUInt))
-    // csr.io.exception := RegNext(rob.io.com_xcpt.valid)
-
-    // csr.io.pc used for setting EPC during exception or CSR.io.trace.
-    // csr.io.pc := (
-    //     AlignPCToBoundary(ifu.io.exe.getFtqPc(0).compc, iCacheLineBytes) +
-    //     RegNext(rob.io.com_xcpt.bits.pc_lob)
-    // )
-
-    // Cause not valid for for CALL or BREAKPOINTs (CSRFile will override it).
-    // csr.io.cause := RegNext(rob.io.com_xcpt.bits.cause)
-    // csr.io.ungated_clock := clock
-
-    // val tval_valid = csr.io.exception &&
-    //     csr.io.cause.isOneOf(
-    //         //Causes.illegal_instruction.U, we currently only write 0x0 for illegal instructions
-    //         Causes.breakpoint.U,
-    //         Causes.misaligned_load.U,
-    //         Causes.misaligned_store.U,
-    //         Causes.load_access.U,
-    //         Causes.store_access.U,
-    //         Causes.fetch_access.U,
-    //         Causes.load_page_fault.U,
-    //         Causes.store_page_fault.U,
-    //         Causes.fetch_page_fault.U)
-
-    // csr.io.tval := Mux(tval_valid, RegNext(rob.io.com_xcpt.bits.badvaddr), 0.U)
-
-    // csr.io.ext_int := io.ext_int
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
@@ -827,16 +793,16 @@ class iFuCore extends CoreModule {
             def wbIsValid(rtype: UInt) =
                 wbresp.valid && wbresp.bits.uop.rf_wen && wbresp.bits.uop.dst_rtype === rtype
 
-            // val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= freechips.rocketchip.rocket.CSR.N
+            val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= CSR.R
 
             iregfile.io.write_ports(w_cnt).valid := wbIsValid(RT_FIX)
             iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
             wbresp.ready := true.B
-            // if (exe_units(i).hasCSR) {
-                // iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.rw.rdata, wbdata)
-            // } else {
+            if (exe_units(i).hasCSR) {
+                iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.read_data, wbdata)
+            } else {
                 iregfile.io.write_ports(w_cnt).bits.data := wbdata
-            // }
+            }
 
             assert(!(wbresp.valid && !wbresp.bits.uop.rf_wen && wbresp.bits.uop.dst_rtype === RT_FIX),
                 "[fppipeline] An Int writeback is being attempted with rf_wen disabled.")
@@ -885,17 +851,17 @@ class iFuCore extends CoreModule {
             rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.use_stq && !wb_uop.is_amo)
             rob.io.wb_resps(cnt).bits  := resp.bits
             rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
-            // if (eu.hasCSR) {
-            //     rob.io.debug_wb_wdata(cnt) := Mux(
-            //         wb_uop.ctrl.csr_cmd =/= CSR.N,
-            //         csr.io.rw.rdata,
-            //         data
-            //     )
-            // } else {
+             if (eu.hasCSR) {
+                 rob.io.debug_wb_wdata(cnt) := Mux(
+                     wb_uop.ctrl.csr_cmd =/= CSR.NR,
+                     csr.io.read_data,
+                     data
+                 )
+             } else {
                 rob.io.debug_wb_wdata(cnt) := data
                 rob.io.debug_wb_ldst(cnt)  := wb_uop.ldst
                 rob.io.debug_wb_pc(cnt)     := wb_uop.debug_pc
-            // }
+             }
             cnt += 1
 
             dontTouch(wb_uop.debug_pc)

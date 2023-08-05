@@ -138,11 +138,12 @@ class CSRFile extends CoreModule {
     val io = IO(new Bundle{
         val ext_int = Input(UInt(8.W))
 
-        val wen        = Input(Bool())
         val read_addr  = Input(UInt(14.W))
         val read_data  = Output(UInt(xLen.W))
         val write_addr = Input(UInt(14.W))
-        val write_data = Input(UInt(xLen.W))
+
+        val rd = Input(UInt(xLen.W))
+        val rj = Input(UInt(xLen.W))
 
         val exception = Input(Bool())   // from rob -> valid
         val com_xcpt  = Input(new CommitExceptionSignals) // from rob -> bits
@@ -155,10 +156,22 @@ class CSRFile extends CoreModule {
         val in_pc  = Input(UInt(32.W))
         val csr_pc = Output(UInt(32.W))
 
-        val decode_interrupt = Output(Bool())
+        val interrupt = Output(Bool())
 
         val translate_mode_change = Output(Bool())
+
+        val cmd = Input(new CtrlSignals)
+        val exevalid = Input(Bool())
     })
+
+    val wen = io.cmd.csr_cmd === CSR.W || io.cmd.csr_cmd === CSR.M
+    val write_data = 0.U(32.W)
+    when(io.cmd.csr_cmd === CSR.W){
+        write_data := io.rd
+    }.otherwise{
+        write_data := (io.rd & io.rj) | (read_data & ~io.rj)
+    }
+
 
     val csrRst = WireInit(0.U.asTypeOf(new CSRReg))
     csrRst.crmd.da := 1.U(1.W);
@@ -183,7 +196,7 @@ class CSRFile extends CoreModule {
     val exint = (csrReg.estat.is9_2 & csrReg.ecfg(9,2)).asUInt.orR
     val swint = (csrReg.estat.is1_0 & csrReg.ecfg(1,0)).asUInt.orR
 
-    io.decode_interrupt := (trint | exint | swint) & csrReg.crmd.ie
+    io.interrupt := (trint | exint | swint) & csrReg.crmd.ie
 
     when(io.read_addr === CSR_CRMD) {io.read_data := csrReg.crmd.asUInt}
     .elsewhen(io.read_addr === CSR_PRMD) {io.read_data := csrReg.prmd.asUInt}
@@ -296,48 +309,48 @@ class CSRFile extends CoreModule {
         }
     }
 
-    when(io.wen){
-        when(io.write_addr === CSR_CRMD) {csrRegNxt.crmd.asUInt := Cat(0.U(23.W),io.write_data(8,0))}
-        .elsewhen(io.write_addr === CSR_PRMD) {csrRegNxt.prmd.asUInt := Cat(0.U(29.W),io.write_data(2,0))}
-        .elsewhen(io.write_addr === CSR_EUEN) {csrRegNxt.euen.asUInt := Cat(0.U(31.W),io.write_data(0))}
-        .elsewhen(io.write_addr === CSR_ECFG) {csrRegNxt.ecfg.asUInt := Cat(0.U(19.W),io.write_data(12,11),0.U(1.W),io.write_data(9,0))}
-        .elsewhen(io.write_addr === CSR_ESTAT) {csrRegNxt.estat.asUInt := Cat(0.U(1.W),csrReg.estat.asUInt(30,16),0.U(3.W),csrReg.estat.asUInt(12,11),0.U(1.W),csrReg.estat.asUInt(9,2),io.write_data(1,0))}
-        .elsewhen(io.write_addr === CSR_ERA) {csrRegNxt.era.asUInt := io.write_data}
-        .elsewhen(io.write_addr === CSR_BADV) {csrRegNxt.badv.asUInt := io.write_data}
-        .elsewhen(io.write_addr === CSR_EENTRY) {csrRegNxt.eentry.asUInt := Cat(io.write_data(31,6),csrReg.eentry(5,0))}
-        .elsewhen(io.write_addr === CSR_TLBIDX) {csrRegNxt.tlbidx.asUInt := Cat(io.write_data(31),0.U(1.W),io.write_data(29,24),0.U(8.W),0.U(16-TLB_INDEX_LENGTH),io.write_data(TLB_INDEX_LENGTH-1,0))}
-        .elsewhen(io.write_addr === CSR_TLBEHI) {csrRegNxt.tlbehi.asUInt := Cat(io.write_data(31,13),csrReg.tlbehi.asUInt(12,0))}
-        .elsewhen(io.write_addr === CSR_TLBELO0) {csrRegNxt.tlbelo0.asUInt := Cat(csrReg.tlbelo0.asUInt(31,PALEN-4),io.write_data(PALEN-5,8),csrReg.tlbelo0.asUInt(7),io.write_data(6,0))}
-        .elsewhen(io.write_addr === CSR_TLBELO1) {csrRegNxt.tlbelo1.asUInt := Cat(csrReg.tlbelo1.asUInt(31,PALEN-4),io.write_data(PALEN-5,8),csrReg.tlbelo1.asUInt(7),io.write_data(6,0))}
-        .elsewhen(io.write_addr === CSR_ASID) {csrRegNxt.asid.asUInt := Cat(0.U(8.W),csrReg.asid.asUInt(23,10),io.write_data(9,0))}
-        .elsewhen(io.write_addr === CSR_PGDL) {csrRegNxt.pgdl.asUInt := Cat(io.write_data(31,12),csrReg.pgdl(11,0))}
-        .elsewhen(io.write_addr === CSR_PGDH) {csrRegNxt.pgdh.asUInt := Cat(io.write_data(31,12),csrReg.pgdh(11,0))}
+    when(wen && exevalid && !io.exception && !io.is_ertn){
+        when(io.write_addr === CSR_CRMD) {csrRegNxt.crmd.asUInt := Cat(0.U(23.W),write_data(8,0))}
+        .elsewhen(io.write_addr === CSR_PRMD) {csrRegNxt.prmd.asUInt := Cat(0.U(29.W),write_data(2,0))}
+        .elsewhen(io.write_addr === CSR_EUEN) {csrRegNxt.euen.asUInt := Cat(0.U(31.W),write_data(0))}
+        .elsewhen(io.write_addr === CSR_ECFG) {csrRegNxt.ecfg.asUInt := Cat(0.U(19.W),write_data(12,11),0.U(1.W),write_data(9,0))}
+        .elsewhen(io.write_addr === CSR_ESTAT) {csrRegNxt.estat.asUInt := Cat(0.U(1.W),csrReg.estat.asUInt(30,16),0.U(3.W),csrReg.estat.asUInt(12,11),0.U(1.W),csrReg.estat.asUInt(9,2),write_data(1,0))}
+        .elsewhen(io.write_addr === CSR_ERA) {csrRegNxt.era.asUInt := write_data}
+        .elsewhen(io.write_addr === CSR_BADV) {csrRegNxt.badv.asUInt := write_data}
+        .elsewhen(io.write_addr === CSR_EENTRY) {csrRegNxt.eentry.asUInt := Cat(write_data(31,6),csrReg.eentry(5,0))}
+        .elsewhen(io.write_addr === CSR_TLBIDX) {csrRegNxt.tlbidx.asUInt := Cat(write_data(31),0.U(1.W),write_data(29,24),0.U(8.W),0.U(16-TLB_INDEX_LENGTH),write_data(TLB_INDEX_LENGTH-1,0))}
+        .elsewhen(io.write_addr === CSR_TLBEHI) {csrRegNxt.tlbehi.asUInt := Cat(write_data(31,13),csrReg.tlbehi.asUInt(12,0))}
+        .elsewhen(io.write_addr === CSR_TLBELO0) {csrRegNxt.tlbelo0.asUInt := Cat(csrReg.tlbelo0.asUInt(31,PALEN-4),write_data(PALEN-5,8),csrReg.tlbelo0.asUInt(7),write_data(6,0))}
+        .elsewhen(io.write_addr === CSR_TLBELO1) {csrRegNxt.tlbelo1.asUInt := Cat(csrReg.tlbelo1.asUInt(31,PALEN-4),write_data(PALEN-5,8),csrReg.tlbelo1.asUInt(7),write_data(6,0))}
+        .elsewhen(io.write_addr === CSR_ASID) {csrRegNxt.asid.asUInt := Cat(0.U(8.W),csrReg.asid.asUInt(23,10),write_data(9,0))}
+        .elsewhen(io.write_addr === CSR_PGDL) {csrRegNxt.pgdl.asUInt := Cat(write_data(31,12),csrReg.pgdl(11,0))}
+        .elsewhen(io.write_addr === CSR_PGDH) {csrRegNxt.pgdh.asUInt := Cat(write_data(31,12),csrReg.pgdh(11,0))}
         .elsewhen(io.write_addr === CSR_PGD){csrRegNxt.pgd := csrReg.pgd}
-        .elsewhen(io.write_addr === CSR_CPUID) {csrRegNxt.cpuid.asUInt := io.write_data}
-        .elsewhen(io.write_addr === CSR_SAVE0) {csrRegNxt.save0.asUInt := io.write_data}
-        .elsewhen(io.write_addr === CSR_SAVE1) {csrRegNxt.save1.asUInt := io.write_data}
-        .elsewhen(io.write_addr === CSR_SAVE2) {csrRegNxt.save2.asUInt := io.write_data}
-        .elsewhen(io.write_addr === CSR_SAVE3) {csrRegNxt.save3.asUInt := io.write_data}
-        .elsewhen(io.write_addr === CSR_TID) {csrRegNxt.tid.asUInt := io.write_data}
+        .elsewhen(io.write_addr === CSR_CPUID) {csrRegNxt.cpuid.asUInt := write_data}
+        .elsewhen(io.write_addr === CSR_SAVE0) {csrRegNxt.save0.asUInt := write_data}
+        .elsewhen(io.write_addr === CSR_SAVE1) {csrRegNxt.save1.asUInt := write_data}
+        .elsewhen(io.write_addr === CSR_SAVE2) {csrRegNxt.save2.asUInt := write_data}
+        .elsewhen(io.write_addr === CSR_SAVE3) {csrRegNxt.save3.asUInt := write_data}
+        .elsewhen(io.write_addr === CSR_TID) {csrRegNxt.tid.asUInt := write_data}
         .elsewhen(io.write_addr === CSR_TCFG){
-            csrRegNxt.tcfg.asUInt := Cat(0.U(32-TIMER_LENGTH),io.write_data(TIMER_LENGTH-1,0))
-            csrRegNxt.tval.timeval.asUInt := Cat(io.write_data(TIMER_LENGTH-1,2),0.U(2.W))
+            csrRegNxt.tcfg.asUInt := Cat(0.U(32-TIMER_LENGTH),write_data(TIMER_LENGTH-1,0))
+            csrRegNxt.tval.timeval.asUInt := Cat(write_data(TIMER_LENGTH-1,2),0.U(2.W))
         }
         .elsewhen(io.write_addr === CSR_TVAL) {csrRegNxt.tval.asUInt := csrReg.tval}
         .elsewhen(io.write_addr === CSR_TICLR) {
-            csrRegNxt.ticlr.asUInt := 1.U & io.write_data(0) | csrReg.ticlr(0)
-            when(io.write_data(0)){
+            csrRegNxt.ticlr.asUInt := 1.U & write_data(0) | csrReg.ticlr(0)
+            when(write_data(0)){
                 csrRegNxt.estat.is_11.asUInt := 0.U
             }
         }
         .elsewhen(io.write_addr === CSR_LLBCTL){
             csrRegNxt.llbctl.asUInt := Cat(
-                0.U(29.W), io.write_data(2) & (~io.write_data(1)), 0.U(1.W), csrReg.llbctl(0) & (~io.write_data(1))
+                0.U(29.W), write_data(2) & (~write_data(1)), 0.U(1.W), csrReg.llbctl(0) & (~write_data(1))
             )
         }
-        .elsewhen(io.write_addr === CSR_TLBRENTRY) {csrRegNxt.tlbrentry.asUInt := Cat(io.write_data(31,6),csrReg.tlbrentry(5,0))}
-        .elsewhen(io.write_addr === CSR_CTAG) {csrRegNxt.ctag.asUInt := io.write_data}
-        .elsewhen(io.write_addr === CSR_DMW0) {csrRegNxt.dmw0.asUInt := Cat(io.write_data(31,19),0.U(1.W),io.write_data(27,25),0.U(19.W),io.write_data(5,3),0.U(2.W),io.write_data(0))}
-        .elsewhen(io.write_addr === CSR_DMW1) {csrRegNxt.dmw1.asUInt := Cat(io.write_data(31,19),0.U(1.W),io.write_data(27,25),0.U(19.W),io.write_data(5,3),0.U(2.W),io.write_data(0))}
+        .elsewhen(io.write_addr === CSR_TLBRENTRY) {csrRegNxt.tlbrentry.asUInt := Cat(write_data(31,6),csrReg.tlbrentry(5,0))}
+        .elsewhen(io.write_addr === CSR_CTAG) {csrRegNxt.ctag.asUInt := write_data}
+        .elsewhen(io.write_addr === CSR_DMW0) {csrRegNxt.dmw0.asUInt := Cat(write_data(31,19),0.U(1.W),write_data(27,25),0.U(19.W),write_data(5,3),0.U(2.W),write_data(0))}
+        .elsewhen(io.write_addr === CSR_DMW1) {csrRegNxt.dmw1.asUInt := Cat(write_data(31,19),0.U(1.W),write_data(27,25),0.U(19.W),write_data(5,3),0.U(2.W),write_data(0))}
     }
 }

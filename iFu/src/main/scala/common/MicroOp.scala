@@ -107,7 +107,7 @@ class CtrlSignals extends CoreBundle {
     val imm_sel: UInt     = UInt(immX.getWidth.W)
     val op_fcn: UInt      = UInt(AluFuncCode().SZ_ALU_FN.W)
     val fcn_dw: Bool      = Bool()
-    //    val csr_cmd: UInt     = UInt(CSR.SZ.W)
+    val csr_cmd: UInt     = UInt(CSR.SZ.W)
     val is_load: Bool     = Bool()
     val is_sta: Bool      = Bool()
     val is_std: Bool      = Bool()
