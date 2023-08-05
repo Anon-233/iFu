@@ -420,7 +420,7 @@ class NonBlockingDCache extends CoreModules {
     val s2_tag_match     = s2_tag_match_way.map(_.orR)
 
     val s2_hit = widthMap(w => 
-        (s2_tag_match(w)  && !mshrs.io.block_hit(w)) || s2_type.isOneOf(t_replay, t_wb)
+        (s2_tag_match(w) && !mshrs.io.block_hit(w)) || s2_type.isOneOf(t_replay, t_wb)
     )
     assert(!(s2_type === t_replay && !s2_hit(0)), "Replays should always hit")
     assert(!(s2_type === t_wb && !s2_hit(0)), "Writeback should always see data hit")
@@ -496,11 +496,18 @@ class NonBlockingDCache extends CoreModules {
     ))
 
     val s2_nack = Wire(Vec(memWidth, Bool()))
+    // Nack when we hit something currently being evicted
+    // 要写的目标行正在被驱逐
+    val s2_nack_victim = widthMap(
+        w => s2_valid(w) && s2_hit(w) && mshrs.io.secondary_miss(w)
+    )
     // MSHRs not ready for request
+    // mshr 没有空间
     val s2_nack_miss   = widthMap(
         w => s2_valid(w) && !s2_hit(w) && !mshrs.io.req(w).ready
     )
     // Can't allocate MSHR for same set currently being written back
+    // 一个mshr一段时间内只能处理一个set
     val s2_nack_wb = widthMap(
         w => s2_valid(w) && !s2_hit(w) && s2_wb_idx_matches(w)
     )
@@ -521,11 +528,11 @@ class NonBlockingDCache extends CoreModules {
     s2_store_failed := s2_valid(0) && s2_nack(0) && s2_send_nack(0) && s2_req(0).uop.uses_stq
 
     // Miss handling
-    for (w <- 0 until memWidth) {
+    for (w <- 0 until memWidth) {   // 这边好像可以发两条miss
         mshrs.io.req(w).valid := (
             s2_valid(w) &&
             !s2_hit(w) &&
-            !s2_nack_wb(w) &&   // nack 不进 mshr，mshr那边逻辑简单
+            !s2_nack_wb(w) &&   // nack wb 不进 mshr，mshr那边逻辑简单
             s2_type.isOneOf(t_lsu, t_prefetch) &&
             !IsKilledByBranch(io.lsu.brupdate, s2_req(w).uop) &&
             // !(io.lsu.exception && s2_req(w).uop.uses_ldq) &&
@@ -653,14 +660,14 @@ class NonBlockingDCache extends CoreModules {
     // amoalu.io.lhs  := s2_data_word(0)
     // amoalu.io.rhs  := s2_req(0).data
     // s3_req.data := amoalu.io.out // amo 在s3做？？？
-    
+
     // store 也在 s3 做
     val s3_way   = RegNext(s2_tag_match_way(0))
     dataWriteArb.io.in(0).valid       := s3_valid
     dataWriteArb.io.in(0).bits.addr   := s3_req.addr
-    dataWriteArb.io.in(0).bits.wmask  := UIntToOH(s3_req.addr.extract(rowOffBits - 1, offsetlsb))
+    dataWriteArb.io.in(0).bits.wmask  := UIntToOH(s3_req.addr(rowOffBits - 1, offsetlsb))
     dataWriteArb.io.in(0).bits.data   := Fill(rowWords, s3_req.data)
-    dataWriteArb.io.in(0).bits.way_en := s3_way
+    dataWriteArb.io.in(0).bits.wayMux := s3_way
 
     io.lsu.ordered := mshrs.io.fence_rdy && !s1_valid.reduce(_||_) && !s2_valid.reduce(_||_)
 }
