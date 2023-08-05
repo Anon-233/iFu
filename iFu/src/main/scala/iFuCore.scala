@@ -219,13 +219,13 @@ class iFuCore extends CoreModule {
         new_ghist.currentSawBranchNotTaken := true.B
         new_ghist.rasIdx := ifu.io.exe.getFtqPc(0).entry.rasIdx
         ifu.io.exe.redirect_ghist := new_ghist
-        /*when (FlushTypes.useCsrEvec(flush_type)) {
+        when (FlushTypes.useCsrEvec(flush_type)) {
             ifu.io.exe.redirect_pc := Mux(
                 flush_type === FlushTypes.eret,
-                RegNext(RegNext(csr.io.evec)),
-                csr.io.evec
+                RegNext(RegNext(csr.io.csr_pc)),
+                csr.io.csr_pc
             )
-        } .otherwise {*/
+        } .otherwise {
             val flush_pc = (
                 AlignPCToBoundary(ifu.io.exe.getFtqPc(0).pc, iCacheLineBytes) +
                 RegNext(rob.io.flush.bits.pc_lob)
@@ -699,13 +699,31 @@ class iFuCore extends CoreModule {
     iregister_read.io.pred_bypass := pred_bypasses
 
     //-------------------------------------------------------------
+    //--------------------------CSR--------------------------------
+    //-------------------------------------------------------------
+    csr.io.ext_int := io.ext_int
+    csr.io.wen := DontCare //all DontCare is wait to do
+    csr.io.read_addr := DontCare //all DontCare is wait to do
+    csr.io.write_addr := DontCare //all DontCare is wait to do
+    csr.io.write_data := DontCare //all DontCare is wait to do
+
+    csr.io.is_ertn := DontCare //all DontCare is wait to do
+    
+    csr.io.exception := RegNext(rob.io.com_xcpt.valid)
+    csr.io.com_xcpt := RegNext(rob.io.com_xcpt)
+
+    csr.io.in_pc := (
+        AlignPCToBoundary(ifu.io.exe.getFtqPc(0).compc, iCacheLineBytes) +
+        RegNext(rob.io.com_xcpt.bits.pc_lob)
+    )
+       
 
     // val csr_exe_unit = exe_units.csr_unit
 
     // for critical path reasons, we aren't zero'ing this out if resp is not valid
     // val csr_rw_cmd = csr_exe_unit.io.iresp.bits.uop.ctrl.csr_cmd
 
-    // csr.io.rw.addr := csr_exe_unit.io.iresp.bits.uop.csr_addr
+    // csr.io.rw.addr := csr_exe_unit.io.iresp.bits.uop.csr_addr  //TODO
     // csr.io.rw.cmd := CSR.maskCmd(csr_exe_unit.io.iresp.valid, csr_rw_cmd)
     // csr.io.rw.wdata := csr_exe_unit.io.iresp.bits.data
 
