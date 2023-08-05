@@ -132,7 +132,7 @@ class MSHR extends CoreModule with HasDcacheParameters {
     when (IsKilledByBranch(io.brupdate, mshr.req.uop)) {
         mshr.valid := false.B
     }
-    mshr.req.uop.br_mask := GetNewBrMask(io.brupdate, mshr.req.uop)
+    mshr.req.uop.brMask := GetNewBrMask(io.brupdate, mshr.req.uop)
 
     val mshrBlockAddr = Mux(mshr.valid, getBlockAddr(mshr.req.addr), 0.U)
     dontTouch(mshrBlockAddr)

@@ -185,6 +185,8 @@ object XDecode extends DecodeTable  {
          SYSCALL -> List(Y, uopSYSC        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR_R),
          BREAK   -> List(Y, uopBREA        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR_R),
      )
+     val default_table : List[BitPat] = List(N, BitPat("b??????"), BitPat("?????????"))
+
  }
 object ExceptionInstrDecode extends DecodeTable{
 
@@ -192,7 +194,6 @@ object ExceptionInstrDecode extends DecodeTable{
         SYSCALL  -> List(Y, SYS),
         BREAK    -> List(Y, BRK)
     )
-    val default_table : List[BitPat] = List(N, BitPat("b??????"), BitPat("?????????"))
 
 
 }
@@ -219,17 +220,16 @@ object ExceptionInstrDecode extends DecodeTable{
 
 //TODO 修改CSRFile
 
-//class XcptCode extends CoreBundle{
-//    val E
-//}
 class CSRExcept extends Bundle{
     val valid   = Bool()
     val totalCode = UInt(causeCodeBits.W)
 
     def csrdecode(instr: UInt, table: Iterable[(BitPat, List[BitPat])]): Unit = {
-        val decoder = DecodeLogic(instr, ExceptionInstrDecode.default, table)
-        val sigs = Seq(valid,totalCode)
-        sigs zip decoder map { case (s, d) => s := d }
+        val decoder = DecodeLogic(instr, CSRDecode.decode_default, table) //返回一个List[BitPat] 若匹配不到，则返回默认值
+        val sigs = Seq(
+           valid, totalCode
+        )
+        sigs zip decoder map { case (s, d) => s := d } //将对应位相匹配
         this
     }
 }
@@ -258,18 +258,28 @@ class DecodeUnit extends CoreModule {
     
     val inst = uop.instr
     val cs = Wire(new CtrlSigs).decode(inst, decode_table)
-    val in_cs = Wire(new CSRExcept).csrdecode(inst,ExceptionInstrDecode.table)
+    val ins = Wire(new CSRExcept).csrdecode(inst,ExceptionInstrDecode.table)
     // TODO: 异常检测
      def checkExceptions(x: Seq[(Bool, UInt)]) =
          (x.map(_._1).reduce(_||_), PriorityMux(x))
      val cs_legal = cs.legal
      val id_illegal_insn = !cs_legal
-     val (xcpt_valid,xcpt_cause) = checkExceptions(List(
-         (io.interrupt && !io.enq.uop.isSFB,  INT),
-         (uop.instr_misalign,                   ADEF),
-         (in_cs.valid,                        in_cs.totalCode),
-         (id_illegal_insn,                    INE)
-     ))
+     val xcpt_valid = WireInit(false.B)
+    val xcpt_cause  = 0.U(15.W)
+    when(io.interrupt && !io.enq.uop.isSFB){
+        xcpt_cause := INT
+    } .elsewhen(uop.instr_misalign){
+        xcpt_cause := ADEF
+    } .elsewhen(cs.uopc === SYSCALL || cs.uopc === BREAK){
+        when(cs.uopc === SYSCALL) {
+            xcpt_cause := SYS
+        } .otherwise{
+            xcpt_cause := BRK
+        }
+    } . elsewhen(id_illegal_insn){
+            xcpt_cause := INE
+    }
+
     uop.vaddrWriteEnable := false.B
     when(xcpt_valid && (xcpt_cause === ADEF || xcpt_cause === ALE)){
         uop.vaddrWriteEnable := true.B
