@@ -10,60 +10,67 @@ object CauseCode{
     val causeCodeBits = ecodeBits + subcodeBits
 
     //中断：接收到外部硬件中断，核间中断，内部软中断，定时器中断
-    val INT  =  0.U(ecodeBits.W) /* Cat(0x0.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val INT  =  Cat(0x0.U(ecodeBits.W), 0x0.U(subcodeBits.W)).U
 
     //Load操作页无效：load指令访问的页表项无效
-    val PIL  =  0x1.U(ecodeBits.W) /* Cat(0x1.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val PIL  =  Cat(0x1.U(ecodeBits.W), 0x0.U(subcodeBits.W)).U
 
     //store操作页无效:store指令访问的页表项无效
-    val PIS  = 0x2.U(ecodeBits.W) /* Cat(0x2.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val PIS  = Cat(0x2.U(ecodeBits.W), 0x0.U(subcodeBits.W)).U
 
     //取指操作页无效:取指操作访问的页表项无效
-    val PIF  = 0x3.U(ecodeBits.W) /* Cat(0x3.U(ecodeBits.W),0x0.U(subcodeBits.W)) */
+    val PIF  = Cat(0x3.U(ecodeBits.W),0x0.U(subcodeBits.W)).U
 
     //页修改:store指令访问一个可写位和脏位不全为1的有效页表项
-    val PME  = 0x4.U(ecodeBits.W) /* Cat(0x4.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val PME  = Cat(0x4.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
     //页特权等级不合规 :访问的有效页表项的PLV等级权限高于CPU当前的PLV等级
-    val PPI  =  0x7.U(ecodeBits.W) /* Cat(0x7.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val PPI  =  Cat(0x7.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
     //取指地址错 :取指PC不对齐；映射地址模式下，CPU当前处于PLV3，PC第31位为1且不落在任何有效的直接映射窗口中
-    val ADEF =  0x8.U(ecodeBits.W) /* Cat(0x8.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val ADEF =  Cat(0x8.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
     //访存指令地址错:映射地址模式下，CPU当前处于PLV3，访存指令虚地址的第31位为1,且不落在任何有效的直接映射窗口中
-    val ADEM =  0x8.U(ecodeBits.W) /* Cat(0x8.U(ecodeBits.W), 0x1.U(subcodeBits.W)) */
+    val ADEM =  Cat(0x8.U(ecodeBits.W), 0x1.U(subcodeBits.W))
 
     //地址非对齐 : 非字节访存指令的地址不是自然对齐的
-    val ALE  =  0x9.U(ecodeBits.W) /* Cat(0x9.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val ALE  =  Cat(0x9.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
     //系统调用  : 执行syscall指令
-    val SYS  =  0xb.U(ecodeBits.W) /* Cat(0xb.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val SYS  =  Cat(0xb.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
     //断点 :执行break指令
-    val BRK  =  0xc.U(ecodeBits.W) /* Cat(0xc.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val BRK  =  Cat(0xc.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
     //指令不存在 : 当前指令是一条未定义（/未实现）指令
-    val INE  =  0xd.U(ecodeBits.W) /* Cat(0xd.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val INE  =  Cat(0xd.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
     // 指令特权等级错 :CPU当前处于PLV3，执行特权指令
-    val IPE  =  0xe.U(ecodeBits.W) /* Cat(0xe.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val IPE  =  Cat(0xe.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
     //浮点指令未使能 :CPU实现了浮点指令前提下，当CSR.EUEN.FPE=0时执行浮点指令
-    val FPD  =  0xf.U(ecodeBits.W) /* Cat(0xf.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val FPD  =  Cat(0xf.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
     //基础浮点运算异常:浮点运算过程中满足IEEE754规范中触发浮点运算异常的情况
-    val FPE  =  0x12.U(ecodeBits.W) /* Cat(0x12.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val FPE  =  Cat(0x12.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
     //TLB重填 : 映射地址模式下，访存地址不落在任何有效的直接映射窗口中，且在TLB中找不到对应的TLB表项
-    val TLBR =  0x3f.U(ecodeBits.W) /* Cat(0x3f.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+    val TLBR =  Cat(0x3f.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
-    val MINI_EXCEPTION_MEM_ORDERING = 0x5.U(ecodeBits.W)
+    val MINI_EXCEPTION_MEM_ORDERING = Cat(0x13.U(ecodeBits.W),0x0.U(subcodeBits.W))
+
 }
 
 object Consts {
     val X = BitPat("b?")
     val Y = BitPat("b1")
     val N = BitPat("b0")
+
+    val CSR_SZ = 2
+    val CSR_X  = 0.U(CSR_SZ.W)
+    val CSR_R  = 1.U(CSR_SZ.W)
+    val CSR_W  = 2.U(CSR_SZ.W)
+    val CSR_M  = 3.U(CSR_SZ.W)
 
     val BSRC_SZ = 2
     val BSRC_1  = 0.U(BSRC_SZ.W) // 1-cycle branch pred

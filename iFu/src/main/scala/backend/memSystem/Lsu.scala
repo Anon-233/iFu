@@ -447,8 +447,8 @@ class Lsu extends CoreModule {
     }
     // exceptions
     //TODO ma_ld和ma_st的条件判断需要更改
-    val ma_ld = widthMap(w => will_fire_load_incoming(w) && exe_req(w).bits.mxcpt.valid) // We get ma_ld in memaddrcalc
-    val ma_st = widthMap(w => (will_fire_sta_incoming(w) || will_fire_stad_incoming(w)) && exe_req(w).bits.mxcpt.valid) // We get ma_ld in memaddrcalc
+    val ma_ld = widthMap(w => will_fire_load_incoming(w) && exe_req(w).bits.mxcpt) // We get ma_ld in memaddrcalc
+    val ma_st = widthMap(w => (will_fire_sta_incoming(w) || will_fire_stad_incoming(w)) && exe_req(w).bits.mxcpt) // We get ma_ld in memaddrcalc
     val pf_ld = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).pf.ld && exe_tlb_uop(w).use_ldq)
     val pf_st = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).pf.st && exe_tlb_uop(w).use_stq)
     val ae_ld = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).ae.ld && exe_tlb_uop(w).use_ldq)
@@ -459,7 +459,7 @@ class Lsu extends CoreModule {
     ))
     val mem_xcpt_uops = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, exe_tlb_uop(w))))
     val mem_xcpt_causes = RegNext(widthMap(w =>
-        Mux(ma_ld(w), Causes.misaligned_load.U,
+        Mux(ma_ld(w), ADEM
         Mux(ma_st(w), Causes.misaligned_store.U,
             0.U))
     ))
@@ -858,14 +858,6 @@ class Lsu extends CoreModule {
         !io.core.exception && !RegNext(io.core.exception)
     ))
     mem_forward_stq_idx := forwarding_idx
-    //********?
-    // Avoid deadlock with a 1-w LSU prioritizing load wakeups > store commits
-    // On a 2W machine, load wakeups and store commits occupy separate pipelines,
-    // so only add this logic for 1-w LSU
-    if (memWidth == 1) {
-        // Wakeups may repeatedly find a st->ld addr conflict and fail to forward,
-        // repeated wakeups may block the store from ever committing
-        // Disallow load wakeups 1 cycle after this happens to allow the stores to drain
         when(RegNext(ldst_addr_matches(0).reduce(_ || _) && !mem_forward_valid(0))) {
             block_load_wakeup := true.B
         }
@@ -882,26 +874,11 @@ class Lsu extends CoreModule {
         }
     }
 
-
-    // Task 3: Clr unsafe bit in ROB for succesful translations
-    //         Delay this a cycle to avoid going ahead of the exception broadcast
-    //         The unsafe bit is cleared on the first translation, so no need to fire for load wakeups
-//    for (w <- 0 until memWidth) {
-//        io.core.clr_unsafe(w).valid := RegNext((do_st_search(w) || do_ld_search(w)) && !fired_load_wakeup(w)) && false.B
-//        io.core.clr_unsafe(w).bits := RegNext(lcam_uop(w).robIdx)
-//    }
-
-    // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
-    // TODO encapsulate this in an age-based  priority-encoder
-    //   val l_idx = AgePriorityEncoder((Vec(Vec.tabulate(numLdqEntries)(i => failed_loads(i) && i.U >= laq_head)
-    //   ++ failed_loads)).asUInt)
     val temp_bits = (VecInit(VecInit.tabulate(numLdqEntries)(i =>
         failed_loads(i) && i.U >= ldq_head) ++ failed_loads)).asUInt
     val l_idx = PriorityEncoder(temp_bits)
 
-    // one exception port, but multiple causes!
-    // - 1) the incoming store-address finds a faulting load (it is by definition younger)
-    // - 2) the incoming load or store address is excepting. It must be older and thus takes precedent.
+// ----------------------------------------------异常处理---------------------------------------------------
     val r_xcpt_valid = RegInit(false.B)
     val r_xcpt = Reg(new Exception)
 
