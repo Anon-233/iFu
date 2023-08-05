@@ -56,6 +56,8 @@ object CauseCode{
 
     //TLB重填 : 映射地址模式下，访存地址不落在任何有效的直接映射窗口中，且在TLB中找不到对应的TLB表项
     val TLBR =  0x3f.U(ecodeBits.W) /* Cat(0x3f.U(ecodeBits.W), 0x0.U(subcodeBits.W)) */
+
+    val MINI_EXCEPTION_MEM_ORDERING = 0x5.U(ecodeBits.W)
 }
 
 object Consts {
@@ -317,7 +319,7 @@ object FlushTypes {
     def refetch = 2.U
     def next = 4.U
 
-    def useCsrEvec(typ: UInt): Bool = typ(0)
+    def useCsrEvec(typ: UInt): Bool = typ === eret || typ === xcpt
     def useSamePC(typ: UInt): Bool  = typ === refetch
     def usePCplus4(typ: UInt): Bool = typ === next
 

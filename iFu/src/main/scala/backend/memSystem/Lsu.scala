@@ -4,6 +4,7 @@ import backend.memSystem.DTlb
 import chisel3._
 import chisel3.util._
 import iFu.backend.CSR
+import iFu.common.CauseCode
 import iFu.common._
 import iFu.common.Consts._
 import iFu.frontend.TLB
@@ -131,7 +132,6 @@ class Lsu extends CoreModule {
     val numLdqEntries   = lsuParameters.numLDQEntries
     val stqAddrSz       = lsuParameters.stqAddrSz
     val ldqAddrSz       = lsuParameters.ldqAddrSz
-    val MINI_EXCEPTION_MEM_ORDERING = 2.U
     /** ************************************ */
     val dcache  = Module(new NonBlockingDcache)
     /** *********************************** */
