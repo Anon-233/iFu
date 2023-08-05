@@ -9,6 +9,7 @@ import iFu.frontend._
 import iFu.frontend.FrontendUtils.bankAlign
 import iFu.backend._
 import iFu.util._
+import iFu.common.CauseCode
 
 class debugCommit extends CoreBundle{
     val debug_insts = Vec(robParameters.retireWidth, UInt(32.W))
@@ -705,7 +706,7 @@ class iFuCore extends CoreModule {
     val csr_rw_cmd = csr_exe_unit.io.iresp.bits.uop.ctrl.csr_cmd
 
     csr.io.ext_int := io.ext_int
-    csr.io.addr := csr_exe_unit.io.iresp.bits.uop.csr_addr
+    csr.io.addr := csr_exe_unit.io.iresp.bits.csr_addr
     csr.io.rd := csr_exe_unit.io.iresp.bits.rd
     csr.io.rj := csr_exe_unit.io.iresp.bits.rj
 

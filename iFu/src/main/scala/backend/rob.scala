@@ -6,6 +6,7 @@ import chisel3.util._
 import iFu.common._
 import iFu.util._
 import iFu.common.Consts._
+import iFu.common.CauseCode
 
 
 class RobIO(val numWritePorts: Int) extends CoreBundle {

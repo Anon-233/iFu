@@ -213,7 +213,7 @@ class CSRFile extends CoreModule {
     .elsewhen(io.addr === CSR_PGDL) {io.read_data := csrReg.pgdl}
     .elsewhen(io.addr === CSR_PGDH) {io.read_data := csrReg.pgdh}
     .elsewhen(io.addr === CSR_PGD) {
-        when(csrReg.badv[31]){
+        when(csrReg.badv(31)){
             io.read_data := Cat(csrReg.pgdh(31,12),0.U(12.W))
         }.otherwise{
             io.read_data := Cat(csrReg.pgdl(31,12),0.U(12.W))
@@ -274,7 +274,7 @@ class CSRFile extends CoreModule {
     }.elsewhen(io.is_ertn){
         csrRegNxt.crmd.ie := csrReg.prmd.pie
         csrRegNxt.crmd.plv := csrReg.prmd.pplv
-        when(csrReg.estat.cause === TLBR){
+        when(csrReg.estat.ecode === 0x3f.U(ecodeBits.W)){
             csrRegNxt.crmd.da := 0.U(1.W)
             csrRegNxt.crmd.pg := 1.U(1.W)
         }
@@ -308,7 +308,7 @@ class CSRFile extends CoreModule {
         }
     }
 
-    when(wen && exevalid && !io.exception && !io.is_ertn){
+    when(wen && io.exevalid && !io.exception && !io.is_ertn){
         when(io.addr === CSR_CRMD) {csrRegNxt.crmd.asUInt := Cat(0.U(23.W),write_data(8,0))}
         .elsewhen(io.addr === CSR_PRMD) {csrRegNxt.prmd.asUInt := Cat(0.U(29.W),write_data(2,0))}
         .elsewhen(io.addr === CSR_EUEN) {csrRegNxt.euen.asUInt := Cat(0.U(31.W),write_data(0))}

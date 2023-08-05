@@ -32,7 +32,7 @@ abstract trait DecodeTable {
     //     |     |  |         |        |        regtype |       |       |  |     |  |  |  |  |  cmd    |    |  |  |  |  flush on commit
     //     |     |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |    |  |  |  |  |  csr cmd
     //     |     |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |    |  |  |  |  |  |
-        List(N, uopX, IQT_X, FU_X, RT_X, DC1, DC1, immX, X, X, X, X, N, /*M_X,*/ DC2, X, X, N, N, X, CSR_X)
+        List(N, uopX, IQT_X, FU_X, RT_X, DC1, DC1, immX, X, X, X, X, N, /*M_X,*/ DC2, X, X, N, N, X, CSR_N) 
 
     val table: Array[(BitPat, List[BitPat])]
 }
@@ -188,7 +188,7 @@ object XDecode extends DecodeTable  {
  }
 object ExceptionInstrDecode extends DecodeTable{
 
-    val table:  Array[(BitPat), List[BitPat]] = Array(
+    val table:  Array[(BitPat, List[BitPat])] = Array(
         SYSCALL  -> List(Y, SYS),
         BREAK    -> List(Y, BRK)
     )
@@ -207,13 +207,13 @@ object ExceptionInstrDecode extends DecodeTable{
                  //      |     |              |        |       |       |              |    |  |  |  |  |          |   |  |  |  |  |  |
                  //      |     |              |        |       |       |    rs2_type  |    |  |  |  |  |          |   |  |  |  |  |  |
                  //      |     |              |        |       |       |       |      |    |  |  |  |  |  mem_cmd |   |  |  |  |  |  |
-     val table: Array[(BitPat, List[BitPat])] = Array( //      |       |       |      |    |  |  |  |  |    |     |   |  |  |  |  |  |
-//         IDLE    -> List(Y, uopIDLE),
-//         CACOP   -> List(Y, uopCACOP     , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N, M_X, 0.U, N, N, N, N, N, CSR_N),
-         RDCNTIDW-> List(Y, uopRDCNTIDW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, 0.U, Y, N, N, N, N, CSR_N),
-         RDCNTVLW-> List(Y, uopRDCNTVLW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, 0.U, Y, N, N, N, N, CSR_N),
-         RDCNTVHW-> List(Y, uopRDCNTVHW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, 0.U, Y, N, N, N, N, CSR_N)
-     )
+//      val table: Array[(BitPat, List[BitPat])] = Array( //      |       |       |      |    |  |  |  |  |    |     |   |  |  |  |  |  |
+// //         IDLE    -> List(Y, uopIDLE),
+// //         CACOP   -> List(Y, uopCACOP     , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N, M_X, 0.U, N, N, N, N, N, CSR_N),
+//          RDCNTIDW-> List(Y, uopRDCNTIDW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, 0.U, Y, N, N, N, N, CSR_N),
+//          RDCNTVLW-> List(Y, uopRDCNTVLW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, 0.U, Y, N, N, N, N, CSR_N),
+//          RDCNTVHW-> List(Y, uopRDCNTVHW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, 0.U, Y, N, N, N, N, CSR_N)
+//      )
  }
 
 
