@@ -99,7 +99,7 @@ class iFuCore extends CoreModule {
     val lsu = Module(new Lsu)
 
     val rob = Module(new Rob(numWritePorts))
-    /*val csr = Module(new CSRFile)*/
+    val csr = Module(new CSRFile)
 
 /*-----------------------------*/
 
@@ -705,15 +705,14 @@ class iFuCore extends CoreModule {
     val csr_rw_cmd = csr_exe_unit.io.iresp.bits.uop.ctrl.csr_cmd
 
     csr.io.ext_int := io.ext_int
-    csr.io.read_addr := csr_exe_unit.io.iresp.bits.uop.csr_addr 
-    csr.io.write_addr := csr_exe_unit.io.iresp.bits.uop.csr_addr
+    csr.io.addr := csr_exe_unit.io.iresp.bits.uop.csr_addr
     csr.io.rd := csr_exe_unit.io.iresp.bits.rd
     csr.io.rj := csr_exe_unit.io.iresp.bits.rj
 
     csr.io.cmd := csr_rw_cmd
     csr.io.exevalid := csr_exe_unit.io.iresp.valid
 
-    csr.io.is_ertn := DontCare //all DontCare is wait to do
+    csr.io.is_ertn := csr_exe_unit.io.iresp.bits.uop.uopc === uopERET && csr_exe_unit.io.iresp.valid
     
     csr.io.exception := RegNext(rob.io.com_xcpt.valid)
     csr.io.com_xcpt := RegNext(rob.io.com_xcpt)
