@@ -5,6 +5,7 @@ import chisel3.util._
 
 import iFu.isa.Instructions._
 import iFu.common.Consts._
+import iFu.common.CauseCode._
 import iFu.common._
 import iFu.util._
 import iFu.util.ImplicitCast.uintToBitPat
@@ -134,6 +135,7 @@ class CtrlSigs extends Bundle {
         sigs zip decoder map { case (s, d) => s := d } //将对应位相匹配
         this
     }
+
 }
 
 object XDecode extends DecodeTable  {
@@ -243,11 +245,20 @@ object XDecode extends DecodeTable  {
          CSRXCHG2-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.M),
          CSRXCHG3-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.M),
          ERTN    -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR.I),
-         SYSCALL -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR.I),
-         BREAK   -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR.I),
+         SYSCALL -> List(Y, uopSYSC        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR.I),
+         BREAK   -> List(Y, uopBREA        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR.I),
      )
  }
+object ExceptionInstrDecode extends DecodeTable{
 
+    val table:  Array[(BitPat),List[BitPat]] = Array(
+        SYSCALL  -> List(Y, SYS, 0.U(subcodeBits.W))
+        BREAK    -> List(Y, BRK, 0.U(subcodeBits.W))
+    )
+    val default_table : List[BitPat] = List(N, BitPat("b??????"), BitPat("?????????"))
+
+
+}
 // object WeirdDecode extends DecodeTable {
 //                     //                                                                                          wakeup_delay
 //                 //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
@@ -274,6 +285,18 @@ object XDecode extends DecodeTable  {
 //class XcptCode extends CoreBundle{
 //    val E
 //}
+class CSRExcept extends Bundle{
+    val valid   = Bool()
+    val ecode   = UInt(ecodeBits.W)
+    val subcode = UInt(subcodeBits.W)
+
+    def csrdecode(instr: UInt, table: Iterable[(BitPat, List[BitPat])]): Unit = {
+        val decoder = DecodeLogic(instr, ExceptionInstrDecode.default, table)
+        val sigs = Seq(valid,ecode,subcode)
+        sigs zip decoder map { case (s, d) => s := d }
+        this
+    }
+}
 class DecodeUnitIO() extends CoreBundle {
     val enq = new Bundle { val uop = Input(new MicroOp()) }
     val deq = new Bundle { val uop = Output(new MicroOp()) }
@@ -284,7 +307,6 @@ class DecodeUnitIO() extends CoreBundle {
      val interrupt = Input(Bool())
      val interrupt_cause = Input(UInt(xLen.W))
 }
-
 //TODO 添加对CSR环境下异常指令的检测
 class DecodeUnit extends CoreModule {
     val io = IO(new DecodeUnitIO)
@@ -294,26 +316,29 @@ class DecodeUnit extends CoreModule {
     uop := io.enq.uop
 
     var decode_table = XDecode.table
+    val interrupt_table = ExceptionInstrDecode.table
     // if(usingCSR) decode_table ++= CSRDecode.table
     // if(usingTLB) decode_table ++= TLBDeocde.table
     // if(usingWired)decode_table ++= WeirdDecode.table
     
     val inst = uop.instr
     val cs = Wire(new CtrlSigs).decode(inst, decode_table)
-
+    val in_cs = Wire(new CSRExcept).csrdecode(inst,ExceptionInstrDecode.table)
     // TODO: 异常检测
      def checkExceptions(x: Seq[(Bool, UInt)]) =
          (x.map(_._1).reduce(_||_), PriorityMux(x))
      val cs_legal = cs.legal
      val id_illegal_insn = !cs_legal
-
      val (xcpt_valid,xcpt_cause) = checkExceptions(List(
          (io.interrupt && !io.enq.uop.isSFB,  io.interrupt_cause),
-         (uop.instr_misalign,                (Causes.inst_misalign).U),
-         (id_illegal_insn,                   (Causes.illegal_instruction).U)
+         (uop.instr_misalign,                   ADEF),
+         (in_cs.valid,                        in_cs.ecode),
+         (id_illegal_insn,                    INE)
      ))
-
-
+    uop.vaddrWriteEnable := false.B
+    when(xcpt_valid && (xcpt_cause === ADEF || xcpt_cause === ALE)){
+        uop.vaddrWriteEnable := true.B
+    }
     uop.exception := xcpt_valid
     uop.excCause  := xcpt_cause
 
