@@ -245,8 +245,8 @@ class CSRFile extends CoreModule {
         csrRegNxt.crmd.plv       := 0.U(2.W)
         csrRegNxt.crmd.ie        := 0.U(1.W)
         csrRegNxt.era            := io.in_pc
-        csrRegNxt.estat.ecode    := io.com_xcpt.ecode
-        csrRegNxt.estat.esubcode := io.com_xcpt.esubcode
+        csrRegNxt.estat.ecode    := io.com_xcpt.ecode(15,9)
+        csrRegNxt.estat.esubcode := io.com_xcpt.ecode(8,0)
         when (
             io.com_xcpt.ecode === TLBR ||
             io.com_xcpt.ecode === PIL  ||
