@@ -19,11 +19,10 @@ class debugDiff extends CoreModule {
     when (io.commit.valids(w)) { //TODO:是否要换成arch_valids?
       val lreg = io.commit.uops(w).ldst //这个接目的寄存器
       val wdata = io.commit.debug_wdata(w) //这个接写入数据
-      val valid = io.commit.debug_insts(w) =/= BUBBLE //判断指令是否有效
 
       val wen = io.commit.uops(w).ldst_val
 
-      when(valid && wen && lreg =/= 0.U) {
+      when(wen && lreg =/= 0.U) {
         debug_reg(lreg) := wdata
       }
     } .otherwise {
