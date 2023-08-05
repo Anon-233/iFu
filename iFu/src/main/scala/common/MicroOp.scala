@@ -69,6 +69,8 @@ class MicroOp extends CoreBundle {
     val instr_misalign : Bool = Bool()
     val ctrl = new CtrlSignals
 
+    val csrAddr: UInt = UInt(14.W)
+
     val use_ldq: Bool = Bool()
     val use_stq: Bool = Bool()
 
@@ -87,6 +89,7 @@ class MicroOp extends CoreBundle {
     val is_sys_pc2epc: Bool = Bool()
     val is_unique: Bool = Bool()
     val flush_on_commit: Bool = Bool()
+
 
     val debug_inst: UInt = UInt(coreInstrBits.W)
     val debug_pc : UInt = UInt(32.W)

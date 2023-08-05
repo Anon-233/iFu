@@ -6,6 +6,7 @@ import chisel3.util._
 import iFu.common._
 import iFu.common.Consts._
 import iFu.frontend.GetPCFromFtqIO
+import iFu.utils._
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -199,7 +200,7 @@ class ALUExeUnit(
         )
 
          if (hasAlu) {
-             io.iresp.bits.uop.csrAddr := ImmGen(alu.io.resp.bits.uop.imm_packed, IS_I).asUInt
+             io.iresp.bits.uop.csrAddr := ImmGen(alu.io.resp.bits.uop.immPacked, IS_I).asUInt
              io.iresp.bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
              io.iresp.bits.rj := alu.io.resp.bits.rj
              io.iresp.bits.rd := alu.io.resp.bits.rd
