@@ -166,7 +166,7 @@ object Consts {
 
     val BUBBLE = 0.U(32.W)
 
-    val UOPC_SZ = 6
+    val UOPC_SZ = 7
     val uopX = BitPat.dontCare(UOPC_SZ)
 
     val uopNOP = 0.U(UOPC_SZ.W)
@@ -206,7 +206,7 @@ object Consts {
     val uopJIRL = 33.U(UOPC_SZ.W)
     val uopJAL = 34.U(UOPC_SZ.W)
     // val uopBL           = 35.U(UOPC_SZ.W)
-
+    val uopSYSC = 35.U(UOPC_SZ.W)
     val uopBEQ = 36.U(UOPC_SZ.W)
     val uopBNE = 37.U(UOPC_SZ.W)
     val uopBLT = 38.U(UOPC_SZ.W)
@@ -244,7 +244,7 @@ object Consts {
     val uopRDCNTVHW = 62.U(UOPC_SZ.W)
 
     val uopMOV = 63.U(UOPC_SZ.W)
-
+    val uopBREA = 64.U(UOPC_SZ.W)
     def NullMicroOp: MicroOp = {
         val uop = Wire(new MicroOp)
         uop := DontCare // Overridden in the following lines
