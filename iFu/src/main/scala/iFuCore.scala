@@ -355,7 +355,7 @@ class iFuCore extends CoreModule {
             ifu.io.exe.fetchPacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
         decode_units(w).io.enq.uop := dec_fbundle.uops(w).bits
         // decode_units(w).io.status := csr.io.status
-        decode_units(w).io.csr_decode <> csr.io.decode(w)
+        //decode_units(w).io.csr_decode <> csr.io.decode(w)
         decode_units(w).io.interrupt := csr.io.interrupt
         // decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
 

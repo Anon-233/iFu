@@ -278,9 +278,9 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     }
 
     exceptionThrown := willThrowException
-    val isMiniException = io.com_xcpt.bits.ecode === MINI_EXCEPTION_MEM_ORDERING//TODO:关联到MINI_EXCEPTION_MEM_ORDERING，注意到其值为2.U，如果更改需要同步更改
+    val isMiniException = io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING//TODO:关联到MINI_EXCEPTION_MEM_ORDERING，注意到其值为2.U，如果更改需要同步更改
     io.com_xcpt.valid := exceptionThrown && !isMiniException
-    io.com_xcpt.bits.ecode := rXcptUop.excCause
+    io.com_xcpt.bits.cause := rXcptUop.excCause
     io.com_xcpt.bits.esubcode := rXcptUop.esubcode
     io.com_xcpt.bits.vaddrWriteEnable := rXcptUop.vaddrWriteEnable
 
@@ -313,7 +313,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
                                                 exceptionThrown && !isMiniException,
                                                 flushCommit && flushUop.uopc === uopERET,
                                                 refetchInst)
-    io.flush.bits.ecode :=DontCare
+    io.flush.bits.cause :=DontCare
     io.flush.bits.badvaddr := DontCare
 
     //------------------exception-------------------

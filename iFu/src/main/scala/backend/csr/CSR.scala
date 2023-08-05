@@ -245,20 +245,20 @@ class CSRFile extends CoreModule {
         csrRegNxt.crmd.plv       := 0.U(2.W)
         csrRegNxt.crmd.ie        := 0.U(1.W)
         csrRegNxt.era            := io.in_pc
-        csrRegNxt.estat.ecode    := io.com_xcpt.ecode(15,9)
-        csrRegNxt.estat.esubcode := io.com_xcpt.ecode(8,0)
+        csrRegNxt.estat.ecode    := io.com_xcpt.cause(15,9)
+        csrRegNxt.estat.esubcode := io.com_xcpt.cause(8,0)
         when (
-            io.com_xcpt.ecode === TLBR ||
-            io.com_xcpt.ecode === PIL  ||
-            io.com_xcpt.ecode === PIS  ||
-            io.com_xcpt.ecode === PIF  ||
-            io.com_xcpt.ecode === PME  ||
-            io.com_xcpt.ecode === PPI
+            io.com_xcpt.cause === TLBR ||
+            io.com_xcpt.cause === PIL  ||
+            io.com_xcpt.cause === PIS  ||
+            io.com_xcpt.cause === PIF  ||
+            io.com_xcpt.cause === PME  ||
+            io.com_xcpt.cause === PPI
         ) {
             csrRegNxt.tlbehi.vppn := io.com_xcpt.badvaddr(31, 13)
         }
 
-        when(io.com_xcpt.ecode === TLBR){
+        when(io.com_xcpt.cause === TLBR){
             csrRegNxt.crmd.da := 1.U(1.W)
             csrRegNxt.crmd.pg := 0.U(1.W)
             io.csr_pc := csrReg.tlbrentry
@@ -274,7 +274,7 @@ class CSRFile extends CoreModule {
     }.elsewhen(io.is_ertn){
         csrRegNxt.crmd.ie := csrReg.prmd.pie
         csrRegNxt.crmd.plv := csrReg.prmd.pplv
-        when(csrReg.estat.ecode === TLBR){
+        when(csrReg.estat.cause === TLBR){
             csrRegNxt.crmd.da := 0.U(1.W)
             csrRegNxt.crmd.pg := 1.U(1.W)
         }
