@@ -114,7 +114,7 @@ class MSHR extends CoreModule {
         when (io.ref_resp) {
             state := s_drain
         }
-    } .elsewhen (state === s_drain_rpq) {
+    } .elsewhen (state === s_drain) {
         io.replay := DontCare
         io.replay.valid      := rpq.io.deq.valid
         io.replay.bits.uop   := rpq.io.deq.bits.uop
@@ -127,7 +127,7 @@ class MSHR extends CoreModule {
         when (rpq.io.empty && !rpq.io.enq.valid) {
             state := s_idle
         } .elsewhen (rpq.io.empty && rpq.io.enq.valid) {
-            state := s_drain_rpq
+            state := s_drain    // TODO:有新的请求进来，继续drain，可能有错误
         }
     }
 }
