@@ -104,7 +104,7 @@ object Consts {
     val RT_FIX = 1.U(1.W)
 
     val immSz  = 4
-    val immX   = BitPat("b???")
+    val immX   = BitPat("b????")
     val immU5  = 0.U(immSz.W)  // Cat(Fill(27,0.U),inst(14,10))
     val immU12 = 1.U(immSz.W) // Cat(Fill(20,0.U),inst(21,10))
     val immS12 = 2.U(immSz.W) //Cat(Fill(20,inst(21)),inst(21,10))

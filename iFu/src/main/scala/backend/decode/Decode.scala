@@ -222,14 +222,14 @@ class CSRExcept extends Bundle{
     val valid   = Bool()
     val totalCode = UInt(causeCodeBits.W)
 
-    def csrdecode(instr: UInt, table: Iterable[(BitPat, List[BitPat])]): Unit = {
-        val decoder = DecodeLogic(instr, CSRDecode.decode_default, table) //返回一个List[BitPat] 若匹配不到，则返回默认值
-        val sigs = Seq(
-           valid, totalCode
-        )
-        sigs zip decoder map { case (s, d) => s := d } //将对应位相匹配
-        this
-    }
+//    def csrdecode(instr: UInt, table: Iterable[(BitPat, List[BitPat])]): Unit = {
+//        val decoder = DecodeLogic(instr, CSRDecode.decode_default, table) //返回一个List[BitPat] 若匹配不到，则返回默认值
+//        val sigs = Seq(
+//           valid, totalCode
+//        )
+//        sigs zip decoder map { case (s, d) => s := d } //将对应位相匹配
+//        this
+//    }
 }
 class DecodeUnitIO() extends CoreBundle {
     val enq = new Bundle { val uop = Input(new MicroOp()) }
@@ -258,12 +258,12 @@ class DecodeUnit extends CoreModule {
     val cs = Wire(new CtrlSigs).decode(inst, decode_table)
 //    val ins = Wire(new CSRExcept).csrdecode(inst,ExceptionInstrDecode.table)
     // TODO: 异常检测
-     def checkExceptions(x: Seq[(Bool, UInt)]) =
+    def checkExceptions(x: Seq[(Bool, UInt)]) =
          (x.map(_._1).reduce(_||_), PriorityMux(x))
-     val cs_legal = cs.legal
-     val id_illegal_insn = !cs_legal
-     val xcpt_valid = WireInit(false.B)
-    val xcpt_cause  = 0.U(15.W)
+    val cs_legal = cs.legal
+    val id_illegal_insn = !cs_legal
+    val xcpt_valid = WireInit(false.B)
+    val xcpt_cause = WireInit(0.U(15.W))
     when(io.interrupt){    //TODO: isSFB是否应该删掉
         xcpt_cause := INT
     } .elsewhen(uop.instr_misalign){
@@ -274,7 +274,7 @@ class DecodeUnit extends CoreModule {
         } .otherwise{
             xcpt_cause := BRK
         }
-    } . elsewhen(id_illegal_insn){
+    } .elsewhen(id_illegal_insn){
             xcpt_cause := INE
     }
 

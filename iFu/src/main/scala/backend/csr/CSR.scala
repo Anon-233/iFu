@@ -332,7 +332,7 @@ class CSRFile extends CoreModule {
         .elsewhen(io.addr === CSR_SAVE3) {csrRegNxt.save3.asUInt := write_data}
         .elsewhen(io.addr === CSR_TID) {csrRegNxt.tid.asUInt := write_data}
         .elsewhen(io.addr === CSR_TCFG){
-            csrRegNxt.tcfg.asUInt := Cat(0.U(32-TIMER_LENGTH),write_data(TIMER_LENGTH-1,0))
+            csrRegNxt.tcfg.asUInt := Cat(0.U((32-TIMER_LENGTH).W),write_data(TIMER_LENGTH-1,0))
             csrRegNxt.tval.timeval.asUInt := Cat(write_data(TIMER_LENGTH-1,2),0.U(2.W))
         }
         .elsewhen(io.addr === CSR_TVAL) {csrRegNxt.tval.asUInt := csrReg.tval}
