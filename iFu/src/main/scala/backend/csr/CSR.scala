@@ -164,7 +164,7 @@ class CSRFile extends CoreModule {
     })
 
     val wen = io.cmd.csr_cmd === CSR_W || io.cmd.csr_cmd === CSR_M
-    val write_data = 0.U(32.W)
+    val write_data = WireInit(0.U(32.W))
     when(io.cmd.csr_cmd === CSR_W){
         write_data := io.rd
     }.otherwise{
@@ -279,7 +279,7 @@ class CSRFile extends CoreModule {
             csrRegNxt.crmd.pg := 1.U(1.W)
         }
         when(~csrReg.llbctl(2)){
-            csrRegNxt.llbctl(0) := 0.U(1.W)
+            csrRegNxt.llbctl := csrRegNxt.llbctl & -2.S(32.W).asUInt
         }
         csrRegNxt.llbctl(2) := 1.U(1.W)
         io.csr_pc := csrReg.era
@@ -317,7 +317,7 @@ class CSRFile extends CoreModule {
         .elsewhen(io.addr === CSR_ERA) {csrRegNxt.era.asUInt := write_data}
         .elsewhen(io.addr === CSR_BADV) {csrRegNxt.badv.asUInt := write_data}
         .elsewhen(io.addr === CSR_EENTRY) {csrRegNxt.eentry.asUInt := Cat(write_data(31,6),csrReg.eentry(5,0))}
-        .elsewhen(io.addr === CSR_TLBIDX) {csrRegNxt.tlbidx.asUInt := Cat(write_data(31),0.U(1.W),write_data(29,24),0.U(8.W),0.U(16-TLB_INDEX_LENGTH),write_data(TLB_INDEX_LENGTH-1,0))}
+        .elsewhen(io.addr === CSR_TLBIDX) {csrRegNxt.tlbidx.asUInt := Cat(write_data(31),0.U(1.W),write_data(29,24),0.U(8.W),0.U((16-TLB_INDEX_LENGTH).W),write_data(TLB_INDEX_LENGTH-1,0))}
         .elsewhen(io.addr === CSR_TLBEHI) {csrRegNxt.tlbehi.asUInt := Cat(write_data(31,13),csrReg.tlbehi.asUInt(12,0))}
         .elsewhen(io.addr === CSR_TLBELO0) {csrRegNxt.tlbelo0.asUInt := Cat(csrReg.tlbelo0.asUInt(31,PALEN-4),write_data(PALEN-5,8),csrReg.tlbelo0.asUInt(7),write_data(6,0))}
         .elsewhen(io.addr === CSR_TLBELO1) {csrRegNxt.tlbelo1.asUInt := Cat(csrReg.tlbelo1.asUInt(31,PALEN-4),write_data(PALEN-5,8),csrReg.tlbelo1.asUInt(7),write_data(6,0))}
