@@ -2,7 +2,7 @@ default: compile
 
 base_dir = $(abspath .)
 src_dir = $(base_dir)/src/main
-gen_dir = $(base_dir)/generated_src
+gen_dir = $(base_dir)/nscscc-la/vsrc/pipeline
 out_dir = $(base_dir)/outputs
 
 SPLIT = true
@@ -21,6 +21,6 @@ log:
 	make split > ./log
 
 clean:
-	rm -rf $(gen_dir) $(out_dir) test_run_dir
+	rm -rf $(gen_dir)/iFuCore.sv $(out_dir) test_run_dir
 
 .PHONY: clean log split
