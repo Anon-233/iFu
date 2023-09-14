@@ -220,13 +220,11 @@ class Lsu extends CoreModule {
         }
 
         ld_enq_idx = Mux(dis_ld_val, WrapInc(ld_enq_idx, numLdqEntries), ld_enq_idx)
-        st_enq_idx = Mux(dis_st_val, WrapInc(st_enq_idx, numStqEntries), st_enq_idx)
-
         next_live_store_mask = Mux(dis_st_val,      // 新增store指令
             next_live_store_mask | (1.U << st_enq_idx).asUInt,
             next_live_store_mask
         )
-
+        st_enq_idx = Mux(dis_st_val, WrapInc(st_enq_idx, numStqEntries), st_enq_idx)
         assert(!(dis_ld_val && dis_st_val), "A UOP is trying to go into both the LDQ and the STQ")
     }
 
@@ -293,7 +291,8 @@ class Lsu extends CoreModule {
     val stq_commit_e = stq(stq_execute_head)
     //推测： s1选中，s2激活，以此改善时序
     val ldq_wakeup_idx = RegNext(
-        AgePriorityEncoder((0 until numLdqEntries).map(i => {
+        AgePriorityEncoder((0 until numLdqEntries).map(
+            i => {
                 val e = ldq(i).bits
                 val block = p0_block_load_mask(i) || p1_block_load_mask(i)
                 e.addr.valid && !e.executed && !e.succeeded && !e.addr_is_virtual && !block
@@ -302,7 +301,7 @@ class Lsu extends CoreModule {
     val ldq_wakeup_e = ldq(ldq_wakeup_idx)
     // Can we wakeup a load that was nack'd
     val block_load_wakeup = WireInit(false.B)
-    val can_fire_load_wakeup = widthMap(w => (      //TODO 增加uncacheable逻辑
+    val can_fire_load_wakeup = widthMap(w => (
         (w == memWidth - 1).B && // load wakeup只会发射到第1条流水线
         ldq_wakeup_e.valid &&
         ldq_wakeup_e.bits.addr.valid &&
@@ -352,6 +351,8 @@ class Lsu extends CoreModule {
         stq_commit_e.bits.addr.valid && // 地址准备好了
         !stq_commit_e.bits.addr_is_virtual &&   // TLB 没有miss
         stq_commit_e.bits.data.valid))    // 数据准备好了
+
+
     ))
     //---------------------------------------------------------
     // Controller logic. Arbitrate which request actually fires
@@ -445,8 +446,8 @@ class Lsu extends CoreModule {
     }
     // exceptions
     //TODO ma_ld和ma_st的条件判断需要更改
-    val ma_ld = widthMap(w => will_fire_load_incoming(w) && exe_req(w).bits.mxcpt) // We get ma_ld in memaddrcalc
-    val ma_st = widthMap(w => (will_fire_sta_incoming(w) || will_fire_stad_incoming(w)) && exe_req(w).bits.mxcpt) // We get ma_ld in memaddrcalc
+    val ma_ld = widthMap(w => will_fire_load_incoming(w) && /*exe_req(w).bits.mxcpt.valid*/false.B) // We get ma_ld in memaddrcalc
+    val ma_st = widthMap(w => (will_fire_sta_incoming(w) || will_fire_stad_incoming(w)) && /*exe_req(w).bits.mxcpt.valid*/false.B) // We get ma_ld in memaddrcalc
     val pf_ld = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).pf.ld && exe_tlb_uop(w).use_ldq)
     val pf_st = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).pf.st && exe_tlb_uop(w).use_stq)
     val ae_ld = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).ae.ld && exe_tlb_uop(w).use_ldq)
@@ -861,7 +862,7 @@ class Lsu extends CoreModule {
         failed_loads(i) && i.U >= ldq_head) ++ failed_loads)).asUInt
     val l_idx = PriorityEncoder(temp_bits)
 
-// ----------------------------------------------异常处理---------------------------------------------------
+    // ----------------------------------------------异常处理---------------------------------------------------
     val r_xcpt_valid = RegInit(false.B)
     val r_xcpt = Reg(new Exception)
 
@@ -917,7 +918,7 @@ class Lsu extends CoreModule {
             } .otherwise {
                 assert(dcache.io.lsu.nack(w).bits.uop.use_stq)
 
-                when(IsOlder(dcache.io.lsu.nack(w).bits.uop.stqIdx, stq_execute_head, stq_head)) {
+                when(IsOlder(dcache.io.lsu.nack(w).bits.uop.stqIdx, stq_execute_head, stq_head)|| dcache.io.lsu.nack(w).bits.uop.stqIdx === stq_execute_head) {
                     stq_execute_head := dcache.io.lsu.nack(w).bits.uop.stqIdx
                 }
             }
@@ -1150,6 +1151,11 @@ class Lsu extends CoreModule {
 
     // TODO is this the most efficient way to compute the live store mask?
     live_store_mask := next_live_store_mask & ~(st_brkilled_mask.asUInt) & ~(st_exc_killed_mask.asUInt)
+    val debug_signal = WireInit(0.U(1.W))
+    dontTouch(debug_signal)
+    when(next_live_store_mask(stq_tail)){
+        debug_signal := 1.U
+    }
 }
 
 // -------------------------------------Utils----------------------------------------
@@ -1230,77 +1236,79 @@ object storeMaskGen{
 }
 
 object loadDataGen{
-    def apply(addr: UInt, data:UInt, memSize:UInt, memSigned: Bool): UInt = {
+    def apply(addr: UInt, data:UInt, memSize:UInt,memSigned: Bool): UInt = {
         val loadData = WireInit(0.U(32.W))
-        when(memSize === 0.U) {
-            when(addr === 0.U) {
-                when (memSigned) {
-                    loadData := Cat(Fill(24,data(7)),data(7,0))
-                } .otherwise{
-                    loadData := data(7,0)
-                }
-            } .elsewhen(addr === 1.U) {
-                when(memSigned) {
-                    loadData := Cat(Fill(24, data(15)), data(15, 8))
-                } .otherwise {
-                    loadData := data(15, 8)
-                }
-            } .elsewhen(addr === 2.U) {
-                when(memSigned) {
-                    loadData := Cat(Fill(24, data(23)), data(23, 16))
-                } .otherwise {
-                    loadData := data(23, 16)
-                }
-            } .elsewhen(addr === 3.U){
-                when(memSigned) {
-                    loadData := Cat(Fill(24, data(15)), data(31, 24))
-                } .otherwise {
-                    loadData := data(31, 24)
-                }
-            }
-        } .elsewhen(memSize === 1.U) {
-            when (addr(1) === 0.U) {
+        when(memSize === 0.U){
+            when(addr === 0.U){
+                when(memSigned){
+                    loadData := Cat(Fill(24,data(7)),data(7,0))}
+                        .otherwise{
+                            loadData := data(7,0)
+                        }}
+                    .elsewhen(addr === 1.U) {
+                        when(memSigned) {
+                            loadData := Cat(Fill(24, data(15)), data(15, 8))
+                        }
+                                .otherwise {
+                                    loadData := data(15, 8)
+                                }
+                    }
+                    .elsewhen(addr === 2.U){
+                        when(memSigned) {
+                            loadData := Cat(Fill(24, data(23)), data(23, 16))
+                        }
+                                .otherwise {
+                                    loadData := data(23, 16)
+                                }
+                    }
+                    .elsewhen(addr === 3.U){
+                        when(memSigned) {
+                            loadData := Cat(Fill(24, data(31)), data(31, 24))
+                        }
+                                .otherwise {
+                                    loadData := data(31, 24)
+                                }
+                    }
+        }.elsewhen(memSize === 1.U){
+            when(addr(1) === 0.U){
                 when(memSigned){
                     loadData := Cat(Fill(16,data(15)),data(15,0))
                 }.otherwise{
                     loadData := data(15,0)
                 }
-            } .elsewhen(addr(1) === 1.U) {
-                when (memSigned) {
-                    loadData := Cat(Fill(16, data(31)), data(31, 16))
-                } .otherwise {
-                    loadData := data(31, 16)
-                }
-            }
-        } .elsewhen(memSize === 2.U) {
+            }.elsewhen(addr(1) === 1.U){
+                        when(memSigned) {
+                            loadData := Cat(Fill(16, data(31)), data(31, 16))
+                        }.otherwise {
+                            loadData := data(31, 16)
+                        }
+                    }
+        }.elsewhen(memSize === 2.U){
             loadData := data(31,0)
         }
         loadData
     }
 }
-
 object storeDataGen{
     def apply(addr: UInt, data:UInt, memSize:UInt): UInt = {
-        val storeData = WireInit(0.U.asTypeOf(Vec(4, UInt(8.W))))
-        when(memSize === 0.U) {
-            when (addr === 0.U) { 
+        val storeData = WireInit(0.U.asTypeOf(Vec(4,UInt(8.W))))
+        when(memSize === 0.U){
+            when(addr === 0.U){ 
+                storeData(0) := data(7,0)}
+                    .elsewhen(addr === 1.U){storeData(1) := data(15,8)}
+                    .elsewhen(addr === 2.U){storeData(2) := data(23,16)}
+                    .elsewhen(addr === 3.U){storeData(3) := data(31,24)}
+        }.elsewhen(memSize === 1.U){
+        
+            when(addr(1) === 0.U){
                 storeData(0) := data(7,0)
-            } .elsewhen(addr === 1.U) {
-                storeData(1) := data(15,8)
-            } .elsewhen(addr === 2.U) {
+                storeData(1) := data(15,8)}
+            .elsewhen(addr(1) === 1.U){
                 storeData(2) := data(23,16)
-            } .elsewhen(addr === 3.U) {
-                storeData(3) := data(31,24)
-            }
-        } .elsewhen(memSize === 1.U) {
-            when(addr(1) === 0.U) {
-                storeData(0) := data(7,0)
-                storeData(1) := data(15,8)
-            } .elsewhen(addr(1) === 1.U) {
-                storeData(2) := data(23,16)
-                storeData(3) := data(31,24)
-            }
-        } .elsewhen(memSize === 2.U) {
+                storeData(3) := data(31,24)}
+
+        
+        }.elsewhen(memSize === 2.U){
             storeData(0) := data(7,0)
             storeData(1) := data(15,8)
             storeData(2) := data(23,16)

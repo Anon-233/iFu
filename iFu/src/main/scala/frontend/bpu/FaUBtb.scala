@@ -119,9 +119,7 @@ class FaUBtbPredictior  extends Module with HasUbtbParameters {
     // 更新
     for (w <- 0 until bankWidth){
         when(wenable){
-            when(s1updateMeta(w).hit){
                 btb(s1updateWay(w))(s1updateCfiIdx).offset := newOffsetValue
-            } 
         } 
     }
 
@@ -130,7 +128,6 @@ class FaUBtbPredictior  extends Module with HasUbtbParameters {
             (s1update.bits.brMask(w)||(s1update.bits.cfiIdx.bits === w.U && s1update.bits.cfiTaken && s1update.bits.cfiIdx.valid))
 
         when (successbranchtaken){
-            when (s1updateMeta(w).hit){
                 val wastaken = successbranchtaken || s1update.bits.cfiIsJal
                 val s1updateIdx = fetchIdx(s1update.bits.pc)
 
@@ -140,7 +137,6 @@ class FaUBtbPredictior  extends Module with HasUbtbParameters {
                 Mux(wastaken, 3.U, 0.U),
                 bimWrite(meta(s1updateWay(w))(w).ctr, wastaken)
                 )
-            }
             
         }
     }

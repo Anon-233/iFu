@@ -42,7 +42,7 @@ class MicroOp extends CoreBundle {
     val pdst: UInt       = UInt(pregSz.W)
     val prs1: UInt       = UInt(pregSz.W)
     val prs2: UInt       = UInt(pregSz.W)
-    val ppred: UInt      = UInt(log2Ceil(maxBrCount).W)
+    val ppred: UInt      = UInt(log2Ceil(numFTQEntries).W)
     val stale_pdst: UInt = UInt(pregSz.W)
 
     val bypassable: Bool = Bool()

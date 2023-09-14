@@ -194,10 +194,8 @@ object ExceptionInstrDecode extends DecodeTable{
         SYSCALL  -> List(Y, SYS),
         BREAK    -> List(Y, BRK)
     )
-
-
 }
- object WeirdDecode extends DecodeTable {
+// object WeirdDecode extends DecodeTable {
                      //                                                                                          wakeup_delay
                  //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
                  //      |  micro-code                                                |    uses_ldg               |   |  is_br
@@ -215,7 +213,7 @@ object ExceptionInstrDecode extends DecodeTable{
 //          RDCNTVLW-> List(Y, uopRDCNTVLW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, 0.U, Y, N, N, N, N, CSR_N),
 //          RDCNTVHW-> List(Y, uopRDCNTVHW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, 0.U, Y, N, N, N, N, CSR_N)
 //      )
- }
+// }
 
 
 //TODO 修改CSRFile
@@ -266,7 +264,7 @@ class DecodeUnit extends CoreModule {
      val id_illegal_insn = !cs_legal
      val xcpt_valid = WireInit(false.B)
     val xcpt_cause  = 0.U(15.W)
-    when(io.interrupt && !io.enq.uop.isSFB){
+    when(io.interrupt){    //TODO: isSFB是否应该删掉
         xcpt_cause := INT
     } .elsewhen(uop.instr_misalign){
         xcpt_cause := ADEF

@@ -13,7 +13,7 @@ import iFu.util._
  * 
  * s0传入的lsu请求信息会进行查找，
  * 
- * s1阶段，如果命中，反馈hit，hitPos，如果miss，传出miss后可以
+ * s1阶段，如果命中，反馈hidet，hitPos，如果miss，传出miss后可以
  * 进行置换的replacePos，(特别的如果发生了store命中readonly，这也算miss)
  * 
  * s2阶段如果是命中的store指令，就将对应的metaline的dirty置为true后写回
@@ -90,6 +90,7 @@ trait HasDcacheParameters extends HasCoreParameters{
 
 class MetaLine extends CoreBundle with HasDcacheParameters {
     val valid = Bool()
+    val dirty = Bool()
     val tag   = UInt(nTagBits.W)
     val age   = UInt(10.W)
 }
@@ -125,14 +126,14 @@ class DcacheMetaIO extends CoreBundle with HasDcacheParameters{
 
 class DcacheMeta extends Module with HasDcacheParameters{
     val io = IO(new CoreBundle{
+        val replayRead  = new DcacheMetaIO
         val lsuRead     = Vec( memWidth ,new DcacheMetaIO)
         val lsuWrite    = Vec( memWidth ,new DcacheMetaIO)
         val mshrRead    = new DcacheMetaIO
         val rpuWrite    = new DcacheMetaIO
-        val replayRead  = new DcacheMetaIO
         val replayWrite = new DcacheMetaIO
 
-        val reset = Input(Bool())
+        // val reset = Input(Bool())
 
         val hasDirty  = Output(Bool())
         val dirtyMeta = Output(new MetaLine)
@@ -143,6 +144,16 @@ class DcacheMeta extends Module with HasDcacheParameters{
 
         val readOnlyBlockAddr = Input(Valid(UInt(32.W)))
     })
+
+    for(w <- 0 until memWidth){
+        io.lsuRead(w).resp := 0.U.asTypeOf(Valid(new MetaResp))
+        io.lsuWrite(w).resp := 0.U.asTypeOf(Valid(new MetaResp))
+    }
+
+    io.mshrRead.resp := 0.U.asTypeOf(Valid(new MetaResp))
+    io.rpuWrite.resp := 0.U.asTypeOf(Valid(new MetaResp))
+    io.replayRead.resp := 0.U.asTypeOf(Valid(new MetaResp))
+    io.replayWrite.resp := 0.U.asTypeOf(Valid(new MetaResp))
     io <> DontCare
 
     // 数据结构
@@ -150,10 +161,16 @@ class DcacheMeta extends Module with HasDcacheParameters{
     // 同步记录meta里面有效的的dirty行
     val dirtyTable = RegInit(VecInit(Seq.fill(nSets)(0.U(nWays.W))))
 
+    val debug_clock = RegInit(0.U(32.W))
+    dontTouch(debug_clock)
+    dontTouch(io)
+    debug_clock := debug_clock + 1.U
+
     // reset
     val reseting = RegInit(true.B)
     val resetIdx = RegInit(0.U(nIdxBits.W))
     resetIdx := WrapInc(resetIdx, nSets)
+
     when(resetIdx === (nSets - 1).U) {
         reseting := false.B
     }
@@ -179,6 +196,11 @@ class DcacheMeta extends Module with HasDcacheParameters{
     // cleanedMeta.valid := true.B
     // cleanedMeta.tag := dirtyMeta.tag
     // cleanedMeta.age := dirtyMeta.age
+    // val cleanedMeta = WireInit(0.U.asTypeOf(new MetaLine))
+    // cleanedMeta.dirty := false.B
+    // cleanedMeta.valid := true.B
+    // cleanedMeta.tag := dirtyMeta.tag
+    // cleanedMeta.age := dirtyMeta.age
 
     when (io.fenceTakeDirtyMeta) {
         // 将这个脏行的dirty位置为0写回
@@ -189,6 +211,7 @@ class DcacheMeta extends Module with HasDcacheParameters{
 
     // lsuRead
     for(w <- 0 until memWidth){
+
         val rmetaSet = meta.read(io.lsuRead(w).req.bits.idx, io.lsuRead(w).req.valid)
         // 特别注意，在lsuRead里面的waymask如果有1，是用来传入通知这个指令是store类型（不会实际写什么）
         val wantWrite = io.lsuRead(w).req.bits.wayMask.orR
@@ -201,17 +224,38 @@ class DcacheMeta extends Module with HasDcacheParameters{
         val isfull = rmetaSet.map(_.valid).reduce(_ && _)
         val invalidPos = PriorityEncoder(VecInit(rmetaSet.map((x: MetaLine) => !(x.valid))).asUInt)
 
-        val youngestPos = FindMin(VecInit(rmetaSet.map(_.age)), VecInit(rmetaSet.map(_.valid)))
+        val youngestPos = RegInit(0.U)//FindMin(VecInit(rmetaSet.map(_.age)), VecInit(rmetaSet.map(_.valid)))
+        youngestPos := youngestPos +1.U
 
         io.lsuRead(w).resp.valid := RegNext(io.lsuRead(w).req.valid)
         io.lsuRead(w).resp.bits.hit := hitoh.orR
         io.lsuRead(w).resp.bits.hitPos := PriorityEncoder(hitoh)
         io.lsuRead(w).resp.bits.rmeta := rmetaSet(PriorityEncoder(hitoh))
-        io.lsuRead(w).resp.bits.replacePos := Mux(isfull, youngestPos, invalidPos)
+        io.lsuRead(w).resp.bits.replacePos := Mux(isfull, youngestPos , invalidPos)
+
+        // when(io.lsuRead(w).req.valid && debug_clock < 150.U){
+        //     printf(p"clock:${debug_clock}\n")
+        //     printf(p"lsuRead($w).req.bits.idx:${io.lsuRead(w).req.bits.idx}\n")
+        //     printf(p"lsuRead($w).req.bits.tag:${io.lsuRead(w).req.bits.tag}\n")
+        //     printf(p"hitoh:${hitoh}\n")
+        // }
+
+
+        
     }
 
     // lsuWrite
     for(w <- 0 until memWidth){
+        
+        // when(io.lsuWrite(w).req.valid && debug_clock < 150.U){
+        //     printf(p"clock:${debug_clock}\n")
+        //     printf(p"lsuWrite($w).req.bits.idx:${io.lsuWrite(w).req.bits.idx}\n")
+        //     printf(p"lsuWrite($w).req.bits.wayMask:${io.lsuWrite(w).req.bits.wayMask}\n")
+        //     printf(p"lsuWrite($w).req.bits.wmeta:\n${io.lsuWrite(w).req.bits.wmeta}\n")
+        // }
+
+
+
         when(!reseting && io.lsuWrite(w).req.valid){
             meta.write(io.lsuWrite(w).req.bits.idx, VecInit(Seq.fill(nWays)(io.lsuWrite(w).req.bits.wmeta)), io.lsuWrite(w).req.bits.wayMask.asBools)
             // 维护dirtyTable
@@ -219,7 +263,8 @@ class DcacheMeta extends Module with HasDcacheParameters{
         }
 
         io.lsuWrite(w).resp.valid := RegNext(io.lsuWrite(w).req.valid)
-        io.lsuWrite(w).resp.bits := DontCare
+        io.lsuWrite(w).resp.bits := 0.U.asTypeOf(new MetaResp)
+
     }
 
     // mshrRead
@@ -242,6 +287,16 @@ class DcacheMeta extends Module with HasDcacheParameters{
 
     // rpuWrite
     when(!reseting && io.rpuWrite.req.valid){
+
+
+        // when(io.rpuWrite.req.bits.wmeta.valid && debug_clock < 150.U){
+        //     printf(p"clock:${debug_clock}\n")
+        //     printf(p"rpuWrite.req.bits.idx:${ io.rpuWrite.req.bits.idx}\n")
+        //     printf(p"rpuWrite.req.bits.wayMask:${io.rpuWrite.req.bits.wayMask}\n")
+        //     printf(p"rpuWrite.req.bits.wmeta:\n${io.rpuWrite.req.bits.wmeta}\n")
+        // }
+
+
         meta.write(io.rpuWrite.req.bits.idx, VecInit(Seq.fill(nWays)(io.rpuWrite.req.bits.wmeta)), io.rpuWrite.req.bits.wayMask.asBools)
         // 维护dirtyTable
         dirtyTable(io.rpuWrite.req.bits.idx) := dirtyTable(io.rpuWrite.req.bits.idx) | ( io.rpuWrite.req.bits.wayMask & Fill(nWays,io.rpuWrite.req.bits.wmeta.dirty)).asUInt
@@ -251,10 +306,19 @@ class DcacheMeta extends Module with HasDcacheParameters{
 
     //replayWrite
     when(!reseting && io.replayWrite.req.valid) {
+        // when(io.replayWrite.req.bits.wmeta.valid && debug_clock < 150.U){
+        //     printf(p"clock:${debug_clock}\n")
+        //     printf(p"replayWrite.req.bits.idx:${io.replayWrite.req.bits.idx}\n")
+        //     printf(p"replayWrite.req.bits.wayMask:${io.replayWrite.req.bits.wayMask}\n")
+        //     printf(p"replayWrite.req.bits.wmeta:\n${io.replayWrite.req.bits.wmeta}\n")
+        // }
         meta.write(io.replayWrite.req.bits.idx, VecInit(Seq.fill(nWays)(io.replayWrite.req.bits.wmeta)), io.replayWrite.req.bits.wayMask.asBools)
     }
     io.rpuWrite.resp.valid := RegNext(io.rpuWrite.req.valid)
     io.rpuWrite.resp.bits := DontCare
+    io.replayWrite.resp.valid := RegNext(io.rpuWrite.req.valid)
+    io.replayWrite.resp.bits := DontCare
+
 }
 
 class DataReq extends CoreBundle with HasDcacheParameters{
@@ -287,15 +351,27 @@ class DcacheData extends Module with HasDcacheParameters{
         val rpuWrite = new DcacheDataIO
         val replayRead = new DcacheDataIO
         val replayWrite = new DcacheDataIO
-        val reset = Input(Bool())
+//        val reset = Input(Bool())
     })
-    io <> DontCare
+
+
+    for (w <- 0 until memWidth) {
+        io.lsuRead(w).resp := 0.U.asTypeOf(Valid(new DataResp))
+        io.lsuWrite(w).resp := 0.U.asTypeOf(Valid(new DataResp))
+    }
+
+    io.mshrRead.resp := 0.U.asTypeOf(Valid(new DataResp))
+    io.rpuWrite.resp := 0.U.asTypeOf(Valid(new DataResp))
+    io.replayRead.resp := 0.U.asTypeOf(Valid(new DataResp))
+    io.replayWrite.resp := 0.U.asTypeOf(Valid(new DataResp))
+
+
+
     // 数据结构
     val data = SyncReadMem(nSets, Vec(nWays,Vec(nRowWords, UInt(32.W))))
 
     // reset
     val reseting = RegInit(true.B)
-    reseting := io.reset
     val resetIdx =  RegInit(0.U(nIdxBits.W))
 
     when(reseting){
@@ -360,6 +436,8 @@ class DcacheData extends Module with HasDcacheParameters{
 
 
 
+
+
 }
 
 class DCacheErrors  extends CoreBundle with HasDcacheParameters{
@@ -389,12 +467,12 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
         // 被替换的行所属的路号，会保存起来，这也是fetch之后要写回的路号
         val replaceWay = Input(UInt(log2Ceil(nWays).W))
 
-        // 新的行的信息，用于传给外界
+        // 11新的行的信息，用于传给外界
         val newMetaLine = Output(new MetaLine)
         val newDataLine = Output(Vec(nRowWords,UInt(32.W)))
-        // 新的行的地址，用于找对应的idx写回，以及通知mshr
+        // 11新的行的地址，用于找对应的idx写回，以及通知mshr
         val newAddr = Output(UInt(32.W))
-        // 之前的路号
+        // 11之前的路号
         val newWay = Output(UInt(log2Ceil(nWays).W))
 
         val isFence = Input(Bool())
@@ -406,6 +484,10 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
         val cbusReq = Output(new CBusReq)
 
     })
+
+
+
+
     val ready :: fetch :: wb :: Nil = Enum(3)
     val state = RegInit(ready)
     val offsetIdx = RegInit(0.U(log2Ceil(nRowBits/32).W))
@@ -490,7 +572,7 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
 
 class NonBlockingDcache extends Module with HasDcacheParameters{
     val io = IO(new DCacheBundle)
-    io <> DontCare
+
     // 解释:
     // replay : mshr的replay请求
     // wb : rpu的写回请求
@@ -500,7 +582,20 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // mshrwrite : 一条lsu指令在 s1 如果未命中，状态将变成mshrwrite，最终就会尝试写入到mshr中(现将其和lsu合并)
     // nil : 什么都不做
     // fence : 清空所有的dirty行
+
+    io.lsu.req.ready := false.B
+    for(w <- 0 until memWidth){
+        io.lsu.resp(w) := 0.U.asTypeOf(new Valid(new DCacheResp))
+    }
+
+    for (w <- 0 until memWidth) {
+        io.lsu.nack(w) := 0.U.asTypeOf(new Valid(new DCacheReq))
+    }
+
+
     val replay :: wb ::  mshrread :: lsu  :: prefetch :: nil :: fence :: Nil = Enum(7)
+
+
 
     // 替换单元
     val RPU = Module(new ReplaceUnit)
@@ -517,37 +612,55 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     // 存储meta信息
     val meta = Module(new DcacheMeta)
-    meta.io <> DontCare 
 
     // 端口设置
     val lsuMetaRead = meta.io.lsuRead
-    lsuMetaRead(0).req.bits.wayMask := 0.U
-    lsuMetaRead(1).req.bits.wayMask := 0.U
+    lsuMetaRead(0).req := 0.U.asTypeOf(Valid(new MetaReq))
+    lsuMetaRead(1).req := 0.U.asTypeOf(Valid(new MetaReq))
 
 
     val lsuMetaWrite = meta.io.lsuWrite
+    lsuMetaWrite(0).req := 0.U.asTypeOf(Valid(new MetaReq))
+    lsuMetaWrite(1).req := 0.U.asTypeOf(Valid(new MetaReq))
 
 
     val mshrMetaRead = meta.io.mshrRead
+    mshrMetaRead.req := 0.U.asTypeOf(Valid(new MetaReq))
     val rpuMetaWrite = meta.io.rpuWrite
+    rpuMetaWrite.req := 0.U.asTypeOf(Valid(new MetaReq))
+
     val replayMetaRead = meta.io.replayRead
+    replayMetaRead.req := 0.U.asTypeOf(Valid(new MetaReq))
     val replayMetaWrite = meta.io.replayWrite
+    replayMetaWrite.req := 0.U.asTypeOf(Valid(new MetaReq))
 
     //只读设置
     meta.io.readOnlyBlockAddr.valid := !RPU.io.ready
     meta.io.readOnlyBlockAddr.bits  := RPU.io.fetchingAddr
 
+    meta.io.fenceTakeDirtyMeta := false.B
+
     // 存储data信息
     val data = Module(new DcacheData)
-    data.io <> DontCare
 
     // 端口设置
     val lsuDataRead = data.io.lsuRead
+    lsuDataRead(0).req := 0.U.asTypeOf(Valid(new DataReq))
+    lsuDataRead(1).req := 0.U.asTypeOf(Valid(new DataReq))
+
     val lsuDataWrite = data.io.lsuWrite
+    lsuDataWrite(0).req := 0.U.asTypeOf(Valid(new DataReq))
+    lsuDataWrite(1).req := 0.U.asTypeOf(Valid(new DataReq))
+
     val mshrDataRead = data.io.mshrRead
+    mshrDataRead.req := 0.U.asTypeOf(Valid(new DataReq))
     val rpuDataWrite = data.io.rpuWrite
+    rpuDataWrite.req := 0.U.asTypeOf(Valid(new DataReq))
+
     val replayDataRead = data.io.replayRead
+    replayDataRead.req := 0.U.asTypeOf(Valid(new DataReq))
     val replayDataWrite = data.io.replayWrite
+    replayDataWrite.req := 0.U.asTypeOf(Valid(new DataReq))
 
 
     val rpuJustDone = Wire(Bool())
@@ -591,6 +704,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     // 检查全局，如果此时流水线的s0和s1阶段状态为lsu并且有store，就将其kill掉变成nil
     val s2StoreFailed = WireInit(false.B)
+//    val s2StoreReplay = WireInit(false.B)
+//    val s2StoreDone   = WireInit(false.B)
 
     // 当mshrread的开始的时候，就将其valid为1并且给地址，当wb开始的时候，就将其valid置为0
     val readOnly1BlockAddr = Reg(Valid(UInt(nBlockAddrBits.W)))
@@ -636,7 +751,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s0kill = Wire(Vec( memWidth , Bool()))
     
     for(w <- 0 until memWidth){
-        s0kill(w) := !(io.lsu.req.bits(w).valid) || io.lsu.s1_kill(w)
+        s0kill(w) := !(io.lsu.req.bits(w).valid)
     }
 
 
@@ -763,8 +878,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s1replayIdx = RegNext(s0replayIdx)
 
     val s1kill = Wire(Vec(memWidth, Bool()))
-    for(w <- 0 until memWidth){
-        s1kill(w) := RegNext(s0kill(w) ||(s2StoreFailed && isStore(s0req(w))))
+
+    for(w <- 0 until memWidth){    //lsu的s1kill指的就是s1
+        s1kill(w) := io.lsu.s1_kill(w) ||   //store失败，发回nack返回当前流水线， //store replay成功，告诉lsu一个nack去找下一个位置 //mshr里面有store，就不要让下一条进来
+                    RegNext(s0kill(w)  || ((s2StoreFailed /*|| s2StoreReplay || s2StoreDone*/) && isStore(s0req(w))) )
     }
     // 如果miss，记录下将要去替换的Pos
     val s1missAllocPos = WireInit(0.U.asTypeOf(Vec(memWidth , UInt(log2Ceil(nWays).W))))
@@ -788,6 +905,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                     //在resp之前，meta内部判断是否是store,如果是store,就要判断是否是readOnly,如果是readOnly,就回传来miss
                     when(lsuMetaRead(w).resp.bits.hit){
                         s1hit(w) := true.B
+                        when(isStore(s1req(0)) && mshrs.io.hasStore){s1hit(0) := false.B}
+                        
 
                         s1hitPos(w) := lsuMetaRead(w).resp.bits.hitPos
                         // 接下来要去读data
@@ -850,7 +969,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             s1replacedMetaLine := meta.io.dirtyMeta
             s1replaceAddr := Cat(meta.io.dirtyMeta.tag, s1replaceIdx, 0.U(nOffsetBits.W))
             // 接下来要去读data(走的是metaread这个IO通路)
-            mshrDataRead.req.valid := s1valid
+            mshrDataRead.req.valid := s1valid 
             mshrDataRead.req.bits.idx := meta.io.dirtyIdx
             mshrDataRead.req.bits.replacePos := meta.io.dirtyPos
 
@@ -860,43 +979,64 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     }
 
 
-    val s2req = RegNext(s1req)
-    val s2replayPipeNumber = RegNext(s1replayPipeNumber)
-    val s2replayIdx = RegNext(s1replayIdx)
-    val s2replayHitPos = RegNext(s1replayHitPos)
+
 
     val s2state = RegNext(s1state)
     val s2valid = RegNext(s1valid                                      &&
       !(io.lsu.exception && s1req(0).uop.use_ldq),
         init=false.B)
 
-    val s2newBlockAddr = RegNext(s1newBlockAddr)
-
     val s2kill = Wire(Vec(memWidth , Bool()))
     for(w <- 0 until memWidth){
-        s2kill(w) := RegNext(s1kill(w) ||(s2StoreFailed && isStore(s1req(w))))
+        s2kill(w) := RegNext(s1kill(w) ||( isStore(s1req(w)) && (s2StoreFailed /*|| s2StoreReplay || s2StoreDone*/))
+                            )
     }
     val s2hit = RegNext(s1hit)
+
+
+    val s2req = RegNext(s1req)
+    val s2replayPipeNumber = RegNext(s1replayPipeNumber)
+    val s2replayHitPos = RegNext(s1replayHitPos)
+
     val s2hitPos = RegNext(s1hitPos)
 
+    val writebackPos = WireInit(0.U.asTypeOf(Vec(memWidth , UInt(log2Ceil(nWays).W))))
+    for(w <- 0 until memWidth){
+        writebackPos(w) :=  Mux(s2state === lsu, s2hitPos(w),
+                            Mux(s2state === replay, s2replayHitPos(w),
+                                        0.U(log2Ceil(nWays).W)))
+    }
 
-
-    var s2handleMetaLine = RegNext(s1handleMetaLine)
-    val s2replacedMetaLine = RegNext(s1replacedMetaLine)
+    val s2handleMetaLine = RegNext(s1handleMetaLine)
 
     // 用于repaly或者lsu的一组handledataline，以及metaread或者fence的一个replacedataline
     val s2handleDataLine = WireInit(0.U.asTypeOf(Vec(memWidth ,Vec(nRowWords,UInt(32.W)))))
-    val s2finalwbDataLine = WireInit(0.U.asTypeOf(Vec(memWidth ,Vec(nRowWords,UInt(32.W)))))
-    val s2finalwbMetaLine = WireInit(0.U.asTypeOf(Vec(memWidth ,new MetaLine)))
-    s2finalwbDataLine := s2handleDataLine
-    s2finalwbMetaLine := s2handleMetaLine
-    for(w <- 0 until memWidth){
-        s2handleDataLine(w) := lsuDataRead(w).resp.bits.rdata
+    for (w <- 0 until memWidth) {
+        // lsu用lsuDataRead通道读出的data，replay用replayDataRead通道读出的data，其他情况用不到，置零
+        s2handleDataLine(w) := Mux(s2state === lsu, lsuDataRead(w).resp.bits.rdata,
+            Mux(s2state === replay, replayDataRead.resp.bits.rdata,
+                0.U.asTypeOf(Vec(nRowWords, UInt(32.W)))))
     }
+
+    val storeInfoGenerator = Module(new StoreInfogen)
+    storeInfoGenerator.io.req := s2req
+    storeInfoGenerator.io.writebackPos := writebackPos
+    storeInfoGenerator.io.handleMetaLine := s2handleMetaLine
+    storeInfoGenerator.io.handleDataLine := s2handleDataLine
+
+    // lsu阶段，如果发生了miss，将由missArbiter来决定写入mshr行为
+    val s2missAllocPos = RegNext(s1missAllocPos)
+    val missArbiter = Module(new Missarbiter)
+    missArbiter.io.req := s2req
+    missArbiter.io.miss := s2hit.map(x => ~x)
+    missArbiter.io.alive := s2kill.map(x => ~x)
+    missArbiter.io.mshrisFull := mshrs.io.full
+    missArbiter.io.missAllocPos := s2missAllocPos
+
+    val s2replacedMetaLine = RegNext(s1replacedMetaLine)
     val s2replacedDataLine = mshrDataRead.resp.bits.rdata
 
-    // 写回mshr所需的miss路号
-    val s2missAllocPos = RegNext(s1missAllocPos)
+
 
     // fetchAddr成功送给RPU之后,就可以将告诉mshr去fetching状态转换
     val s2fetchAddr = RegNext(s1fetchAddr)
@@ -910,8 +1050,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // bypass (这里做一个s3向s2转就行)
     val s3state = RegNext(s2state)
     val s3req = RegNext(s2req)
-    val s3valid = RegNext(s2valid && s2state === lsu && isStore(s2req(0)) &&
-      !s2StoreFailed)
+    val s3valid = RegNext(s2valid)
     val s3hit = RegNext(s2hit)
 
     val s3bypass = WireInit(0.U.asTypeOf(Vec(memWidth , Bool())))
@@ -919,23 +1058,32 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s2rdata = WireInit(0.U.asTypeOf(Vec(memWidth , UInt(32.W))))
     // store load bypassing
 
+    val s3kill = RegNext(s2kill)
+
     for(w <- 0 until memWidth){
         // 只有0号流水线Store执行成功才可能发生bypass
-        s3bypass(w) :=  s3valid &&
-          s3state === lsu &&
-          s3hit(w) &&
+        s3bypass(w) :=  s3valid && !s3kill(0) &&
+          ((s3state === lsu && s3hit(0)) || (s3state === replay)) &&
           isStore(s3req(0)) &&
-          ((s2req(w).addr >> nOffsetBits).asUInt === (s3req(0).addr >> nOffsetBits).asUInt)
+          ((s2req(w).addr >> 2.U ).asUInt === (s3req(0).addr >> 2.U).asUInt)
     }
-
-
-    
 
 
 
     // 下面是s2执行的内容
     when(s2state === lsu && s2valid){
-        // lsu的请求，根据hit,kill来分类讨论
+        // 先处理miss，传给mshr有关信息
+        mshrs.io.req.valid := missArbiter.io.mshrReq.valid
+        mshrs.io.req.bits := missArbiter.io.mshrReq.bits
+        mshrs.io.replacePos := missArbiter.io.replacePos
+        mshrs.io.pipeNumberIn := missArbiter.io.pipeNumber
+
+        // 生成初处理过的send，nack信号，用于返回给lsu，同时生成StoreFailed,用来清空后面可能有的store
+        s2StoreFailed := missArbiter.io.storeFailed
+        sendNack := missArbiter.io.sendNack
+        sendResp := missArbiter.io.sendResp
+
+        // 再讨论命中的问题，根据hit,kill来分类讨论
         for(w <- 0 until memWidth){
             when(s2kill(w)){
                 // kill掉的指令，不返回
@@ -947,32 +1095,15 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 sendNack(w) := false.B
 
                         when(isStore(s2req(w))){
-                            // store
-                            s2handleMetaLine(w).dirty := true.B
-                            // data写操作
-                            val memSize = s2req(w).uop.mem_size
-                            val wordOffset = s2req(w).addr(log2Ceil(nRowWords) + 1, 2)
-                            val wdata = Wire(Vec(4, UInt(8.W)))
-                            for(i <- 0 until 4){
-                                wdata(i) := Mux(s2req(w).mask(i), s2req(w).data(i*8+7,i*8), s2handleDataLine(w)(wordOffset)(i*8+7,i*8))
-                            }
-                            s2finalwbDataLine(w)(wordOffset) := wdata.asUInt
-                            s2finalwbMetaLine(w).dirty := true.B
+                            // meta,data写操作
 
-                            lsuMetaWrite(w).req.valid := true.B
-                            lsuMetaWrite(w).req.bits.idx := getIdx(s2req(w).addr)
-                            lsuMetaWrite(w).req.bits.wmeta := s2finalwbMetaLine(w)
-                            lsuMetaWrite(w).req.bits.wayMask := 1.U << s2replayHitPos(w).asUInt
-
-
-                            lsuDataWrite(w).req.valid := true.B
-                            lsuDataWrite(w).req.bits.wayMask := 1.U << s2hitPos(w).asUInt
-                            lsuDataWrite(w).req.bits.idx   := getIdx(s2req(w).addr)
-                            lsuDataWrite(w).req.bits.wdata := s2finalwbDataLine(w)
-
+                            lsuMetaWrite(w).req := storeInfoGenerator.io.metaWriteReq(w)
+                            lsuDataWrite(w).req := storeInfoGenerator.io.dataWriteReq(w)
 
                             io.lsu.resp(w).bits.data := DontCare
                             io.lsu.resp(w).bits.uop := s2req(w).uop
+
+                            /*s2StoreDone := true.B*/
 
                         }.otherwise{
                             // load，注意这里可能有一个旁路转发的判断，需不需要使用s3的数据
@@ -988,72 +1119,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             }
         }
 
-        // 对于miss要单独处理,根据hit信息讨论
-        // 
-        when((!s2hit(0) && !s2kill(0)) && (s2hit(1) || s2kill(1))){
-            // 只有1号流水线是hit的时候，才会去写0号的miss
 
 
-            when(!mshrs.io.full){
-
-                mshrs.io.req.valid := s2valid
-                mshrs.io.req.bits.addr := s2req(0).addr
-                mshrs.io.req.bits.uop := s2req(0).uop
-                mshrs.io.req.bits.data := s2req(0).data
-                mshrs.io.replacePos := s2missAllocPos(0)
-                mshrs.io.pipeNumberIn := 0.U
-
-            }
-
-            // 判定0号的返回情况
-            sendResp(0) := false.B
-
-            when(isStore(s2req(0))){
-                // store miss是要一定要发回nack的
-                sendNack(0) := true.B
-                s2StoreFailed := true.B
-            }.otherwise{
-                sendNack(0) := Mux(mshrs.io.full, true.B, false.B)
-            }
-
-        }.elsewhen((s2hit(0)||s2kill(0)) && (!s2hit(1)&& !s2kill(1))){
-            // 写1号的miss
-            when(!mshrs.io.full){
-
-                mshrs.io.req.valid := s2valid
-                mshrs.io.req.bits.addr := s2req(1).addr
-                mshrs.io.req.bits.uop := s2req(1).uop
-                mshrs.io.req.bits.data := s2req(1).data
-                mshrs.io.replacePos := s2missAllocPos(1)
-                mshrs.io.pipeNumberIn := 1.U
-            }
-
-            // 判定1号的返回情况(1号一定是load指令)
-            sendResp(1) := false.B
-            sendNack(1) := Mux(mshrs.io.full, true.B, false.B)
-
-
-        }.elsewhen( (!s2hit(0)&& !s2kill(0)) && (!s2hit(1) && !s2kill(1)) ){
-            // 1号优先级高，写1号的
-            when(!mshrs.io.full){
-
-                mshrs.io.req.valid := s2valid
-                mshrs.io.req.bits.addr := s2req(1).addr
-                mshrs.io.req.bits.uop := s2req(1).uop
-                mshrs.io.req.bits.data := s2req(1).data
-                mshrs.io.replacePos := s2missAllocPos(1)
-                mshrs.io.pipeNumberIn := 1.U
-            }
-
-            // 1号是load指令，看情况返回
-            sendResp(1) := false.B
-            sendNack(1) := Mux(mshrs.io.full, true.B, false.B)
-
-            // 0号不会写进去，load 和 store 都要发回nack
-            sendResp(0) := false.B
-            sendNack(0) := true.B
-            
-        }
 
 
     }.elsewhen(s2state === replay && s2valid){
@@ -1061,35 +1128,33 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         mshrs.io.replayDone := true.B
 
         // 然后根据replayPipeNumber来准备对应流水线返回的内容
+        when(s2replayPipeNumber === 0.U(1.W)){
+            sendResp(0) := true.B
+            sendNack(0) := false.B
+            sendResp(1) := false.B
+            sendNack(1) := false.B
+            
+        }.elsewhen(s2replayPipeNumber === 1.U(1.W)){
+            sendResp(0) := false.B
+            sendNack(0) := false.B
+            sendResp(1) := true.B
+            sendNack(1) := false.B
+        }
 
+//        when(( isStore(s2req(0)) && s2replayPipeNumber === 0.U(1.W)) ){
+//            s2StoreReplay := true.B
+//        }
+
+        
         for(w <- 0 until memWidth){
             //对hadleMetaLine处理
-            sendNack(w) := false.B//nack始终不发
-            sendResp(w) := Mux(s2replayPipeNumber === w.asUInt , true.B , false.B)//resp只发给对应的流水线
+            
             // 准备resp
                         when(isStore(s2req(w))) {
                             // store
-                            // data写操作
-                            val memSize = s2req(w).uop.mem_size
-                            val wordOffset = s2req(w).addr(log2Ceil(nRowWords) + 1, 2)
-                            var wdata = Wire(Vec(4, UInt(8.W)))
-                            for (i <- 0 until 4) {
-                                wdata(i) := Mux(s2req(w).mask(i), s2req(w).data(i*8+7,i*8), s2handleDataLine(w)(wordOffset)(i*8+7,i*8))
-                            }
-
-                            s2finalwbMetaLine(w).dirty := true.B
-                            s2finalwbMetaLine(w).age := s2handleMetaLine(w).age + 1.U
-                            s2finalwbDataLine(w)(wordOffset) := wdata.asUInt
-
-                            replayMetaWrite.req.valid := true.B
-                            replayMetaWrite.req.bits.idx := s2replayIdx
-                            replayMetaWrite.req.bits.wmeta := s2finalwbMetaLine(w)
-                            replayMetaWrite.req.bits.wayMask := 1.U << s2replayHitPos(w).asUInt
-
-                            replayDataWrite.req.valid := true.B
-                            replayDataWrite.req.bits.wayMask := 1.U << s2replayHitPos(w).asUInt
-                            replayDataWrite.req.bits.idx := s2replayIdx
-                            replayDataWrite.req.bits.wdata := s2finalwbDataLine(w)
+                            // data,meta写操作
+                            replayMetaWrite.req := storeInfoGenerator.io.metaWriteReq(w)
+                            replayDataWrite.req := storeInfoGenerator.io.dataWriteReq(w)
                             
 
                             io.lsu.resp(w).bits.data := DontCare
@@ -1108,7 +1173,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                             io.lsu.resp(w).bits.uop := s2req(w).uop
                             
                         }
-
 
         }
     }.elsewhen((s2state === fence ||s2state === mshrread )&& s2valid && RPU.io.ready){
@@ -1160,26 +1224,21 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         }
     }
 
+    //特判对于0号流水线store miss 的nack
     io.lsu.nack(0).bits := s2req(0)
     io.lsu.nack(1).bits := s2req(1)
-    
-    // 按情况返回resp或nack
+
+    // when(isStore(s2req(0)) && (s2state === replay || (s2state === lsu && s2hit(0)) ) ){
+    //     //如果有replay的话，或者lsu成功的话，让后面的store刷掉 这种情况必然发回的stqidx的下一个
+    //     sendNack(0) := true.B
+    //     io.lsu.nack(0).bits.uop.stqIdx := s2req(0).uop.stqIdx + 1.U
+    // }
+
+    // 按情况返回resp或nack(replay不用看kill，lsukiil自然为假)
     for(w <- 0 until memWidth){
         io.lsu.nack(w).valid := sendNack(w)
         io.lsu.resp(w).valid := sendResp(w)
     }
-
-
-
-    val debug_Truely_resp_commited = Wire(Vec(memWidth , Bool()))
-    val debug_Truely_nack_commited = Wire(Vec(memWidth , Bool()))
-    dontTouch(debug_Truely_resp_commited)
-    dontTouch(debug_Truely_nack_commited)
-    for(w <- 0 until memWidth){
-        debug_Truely_resp_commited(w) := s2valid && sendResp(w) && !s2kill(w) 
-        debug_Truely_nack_commited(w) := s2valid && sendNack(w) && !s2kill(w)
-    }
-
     
 
     // 检查流水线里面是不是至多有一条mshrread 
@@ -1188,15 +1247,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
       !(s2state === mshrread && s2valid)
 
     // TODO lr/sc
-    //
-
+    // TODO enable continuous hit store forwarding
+    // TODO simplify the IO channel of DCacheData and DCacheMeta
 
     // mmio
-
-
-
-
-
 
 
 }

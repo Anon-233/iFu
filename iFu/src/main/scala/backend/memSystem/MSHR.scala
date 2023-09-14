@@ -4,6 +4,7 @@ import chisel3.util._
 import iFu.common._
 import iFu.util._
 
+
 class MSHRdata extends CoreBundle with HasDcacheParameters{
     //该项是否有效
     val valid = Bool()
@@ -84,7 +85,9 @@ class MSHR extends CoreModule with HasDcacheParameters {
         // 该项的id（用于一表里面某一项对应的fetch结束时向二表中搜索同id的表项）111
         val getID = Output(UInt(log2Up(nFirstMSHRs).W))
         //111
-        val isStore = Output(Bool())
+        val hasStore = Output(Bool())
+
+        val wakeUp = Input(Bool())
     }}
 
     //io<>DontCare
@@ -93,7 +96,7 @@ class MSHR extends CoreModule with HasDcacheParameters {
     dontTouch(mshr)
 
     // 告诉外界是否存了一个store指令
-    io.isStore := isStore(mshr.req) && mshr.valid
+    io.hasStore := isStore(mshr.req) && mshr.valid
 
     // 该项是否有效并且已经fetch完毕（可以发出去replay）
     io.active := mshr.ready && mshr.valid
@@ -128,10 +131,12 @@ class MSHR extends CoreModule with HasDcacheParameters {
     // 传出流水线号
     io.getPipeNumber := mshr.pipeNumber
 
-    //分支预测调整
-    when (IsKilledByBranch(io.brupdate, mshr.req.uop)) {
+    //分支预测调整 或reset
+    when (io.reset || IsKilledByBranch(io.brupdate, mshr.req.uop)) {
         mshr.valid := false.B
+        mshr := 0.U.asTypeOf(new MSHRdata)
     }
+
     mshr.req.uop.brMask := GetNewBrMask(io.brupdate, mshr.req.uop)
 
     val mshrBlockAddr = Mux(mshr.valid, getBlockAddr(mshr.req.addr), 0.U)
@@ -141,6 +146,14 @@ class MSHR extends CoreModule with HasDcacheParameters {
     io.fetchingBlockAddrMatch := mshr.valid && mshr.fetching && mshrBlockAddr === io.fetchingBlockAddr
     // 状态机
     when (mshr.valid) {
+
+        when (io.wakeUp){
+            mshr.ready := true.B
+            mshr.waiting := false.B
+            mshr.fetching := false.B
+            mshr.issued := false.B
+        }
+
         when (mshr.waiting) {
             // 正在取，则转为fetching,这里没有fire判断,而是直接感知RPU的fetchingBlockAddr信号
             when (io.fetchingBlockAddr === mshrBlockAddr) {
@@ -159,12 +172,21 @@ class MSHR extends CoreModule with HasDcacheParameters {
             // 成功发出replay信号，则转为issued
             mshr.ready := false.B
             mshr.issued := true.B
+            when(isStore(mshr.req)){
+                // 是Store指令的话，只要issue发射了，一定会完成，所以直接转为无效就好，
+                // 不用等待replayDone
+                // 否则replay进流水线的时候还没清空，流水线里再进来一条store指令，会被误判为miss
+                mshr.valid := false.B
+                mshr := 0.U.asTypeOf(new MSHRdata)
+            }
+
         }
         //转换为issued时，replay已经进了s1,再一个周期检查是否传回了执行完毕的信号
-        when (RegNext(mshr.issued) && mshr.issued) {
+        when (RegNext(mshr.issued)) {
             when (io.replayDone) {
-                // replay执行完毕，则转为无效
+                // replay执行完毕，则转为无效(妈的这里别他妈偷懒啊，全置0)
                 mshr.valid := false.B
+                mshr := 0.U.asTypeOf(new MSHRdata)
             } .otherwise {
                 // replay没有执行完毕，回退到ready状态(还是直接清空?会有导致replay执行失败的情况吗)
                 mshr.issued := false.B
@@ -185,14 +207,14 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
             val replacePos = Input(UInt(log2Ceil(nWays).W)) 
             // 流水线号
             val pipeNumberIn = Input(UInt(1.W))
-
+            val addr  = Output(UInt(paddrBits.W))
         // 发起新的fetch请求
             // RPU是否空闲
             val RPUnotBusy = Input(Bool())
             // 传出所需的fetch地址111
             val newFetchAddr = Output(Valid(UInt(vaddrBits.W)))
             val readPos = Output(UInt(log2Ceil(nWays).W))
-        
+
             
         // 发出去的replay请求
             // 发出去的replay请求信息 111
@@ -211,6 +233,8 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
             // 去进行激活操作111
             val fetchReady = Input(Bool())
 
+            val recentStqIdx = Output(UInt(lsuParameters.stqAddrSz.W))
+            val hasStore = Output(Bool())
 
         // 告诉外界已满111
             val full = Output(Bool())
@@ -224,7 +248,9 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
             
         })
 
+
     //io := DontCare
+    io.addr  := 0.U.asTypeOf(UInt(paddrBits.W))
     val firstMSHRs = VecInit((Seq.fill(nFirstMSHRs)(Module(new MSHR))).map(_.io))
     val secondMSHRs = VecInit((Seq.fill(nSecondMSHRs)(Module(new MSHR))).map(_.io))
 
@@ -245,6 +271,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     val waitinglist = WireInit(0.U.asTypeOf(Vec(nFirstMSHRs, Bool())))
     val haswait = waitinglist.reduce(_ || _)
     val waitingpos = PriorityEncoder(waitinglist)
+
 
     
     
@@ -267,7 +294,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         newblockAddrMatches(i) := firstMSHRs(i).newblockAddrMatch
 
         firstMSHRs(i).brupdate := io.brupdate
-        firstMSHRs(i).reset := !firstMSHRs(i).isStore && io.fenceClear
+        firstMSHRs(i).reset := !firstMSHRs(i).hasStore && io.fenceClear
 
         firstMSHRs(i).fetchingBlockAddr := io.fetchingBlockAddr
         firstMSHRs(i).fetchReady := io.fetchReady
@@ -275,6 +302,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
         firstMSHRs(i).replayReq.ready := false.B
         firstMSHRs(i).replayDone := false.B
+        firstMSHRs(i).wakeUp := false.B
 
         // 查看1表有没有正在等候的
         waitinglist(i) := firstMSHRs(i).waiting
@@ -304,6 +332,11 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
     val hasStores = WireInit(0.U.asTypeOf(Vec(nSecondMSHRs, Bool())))
     val hasStore = hasStores.reduce(_ || _)
+    val recentStqIdx = RegInit(0.U(lsuParameters.stqAddrSz.W))
+
+    // hasStore
+    io.hasStore := hasStore
+    io.recentStqIdx := recentStqIdx
 
     for(i <- 0 until nSecondMSHRs) {
         // 二表相对于一表，只用来写入，和brupdate调整
@@ -317,13 +350,13 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         
         secondAllocatable(i) := secondMSHRs(i).req.ready
 
-        secondMSHRs(i).fetchingBlockAddr := io.fetchingBlockAddr
+        secondMSHRs(i).fetchingBlockAddr := DontCare
 
         // 先统一赋为假，之后会赋值
         secondMSHRs(i).fetchReady := false.B
 
         secondMSHRs(i).brupdate := io.brupdate
-        secondMSHRs(i).reset := !secondMSHRs(i).isStore && io.fenceClear
+        secondMSHRs(i).reset := !secondMSHRs(i).hasStore && io.fenceClear
 
         // 检查replay是否执行完毕
         secondMSHRs(i).replayDone := io.replayDone
@@ -332,9 +365,11 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         
 
         // 搜索存储store的信息
-        hasStores(i) := secondMSHRs(i).isStore
+        hasStores(i) := secondMSHRs(i).hasStore
 
-        secondMSHRs(i).newBlockAddr :=  getBlockAddr(io.req.bits.addr)
+        secondMSHRs(i).newBlockAddr :=  DontCare
+        //唤醒
+        secondMSHRs(i).wakeUp := false.B
 
     }
 
@@ -345,8 +380,11 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
     // 不满，并且不会再已有store的时候再存入新的store，才接收外界信号
     
-    when( !mshrFull && !(hasStore && isStore(io.req.bits)) ){
+    when( !mshrFull && !(hasStore && isStore(io.req.bits))&& io.req.valid){
         io.req.ready := true.B
+        //有效的store写入，会更新recentStqIdx
+        when(isStore(io.req.bits)){ recentStqIdx := io.req.bits.uop.stqIdx}
+
         // 首次miss，一表二表都要写入
         when(firstMiss){
             firstMSHRs(allocFirstMSHR).req.valid := io.req.valid
@@ -372,7 +410,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         // 激活second表中的fetch地址项
         for(i <- 0 until nSecondMSHRs) {
             when(secondMSHRs(i).getID === firstFetchMatchway){
-                secondMSHRs(i).fetchReady := true.B
+                secondMSHRs(i).wakeUp := true.B
             }
         }
 
