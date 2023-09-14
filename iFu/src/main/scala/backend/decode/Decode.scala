@@ -188,13 +188,13 @@ object XDecode extends DecodeTable  {
      val default_table : List[BitPat] = List(N, BitPat("b??????"), BitPat("?????????"))
 
  }
-object ExceptionInstrDecode extends DecodeTable{
-
-    val table:  Array[(BitPat, List[BitPat])] = Array(
-        SYSCALL  -> List(Y, SYS),
-        BREAK    -> List(Y, BRK)
-    )
-}
+//object ExceptionInstrDecode extends DecodeTable{
+//
+//    val table:  Array[(BitPat, List[BitPat])] = Array(
+//        SYSCALL  -> List(Y, SYS),
+//        BREAK    -> List(Y, BRK)
+//    )
+//}
 // object WeirdDecode extends DecodeTable {
                      //                                                                                          wakeup_delay
                  //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
@@ -249,14 +249,14 @@ class DecodeUnit extends CoreModule {
     uop := io.enq.uop
 
     var decode_table = XDecode.table
-    val interrupt_table = ExceptionInstrDecode.table
+    // val interrupt_table = ExceptionInstrDecode.table
     // if(usingCSR) decode_table ++= CSRDecode.table
     // if(usingTLB) decode_table ++= TLBDeocde.table
     // if(usingWired)decode_table ++= WeirdDecode.table
     
     val inst = uop.instr
     val cs = Wire(new CtrlSigs).decode(inst, decode_table)
-    val ins = Wire(new CSRExcept).csrdecode(inst,ExceptionInstrDecode.table)
+//    val ins = Wire(new CSRExcept).csrdecode(inst,ExceptionInstrDecode.table)
     // TODO: 异常检测
      def checkExceptions(x: Seq[(Bool, UInt)]) =
          (x.map(_._1).reduce(_||_), PriorityMux(x))
