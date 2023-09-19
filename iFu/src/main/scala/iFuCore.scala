@@ -851,7 +851,7 @@ class iFuCore extends CoreModule {
             rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
              if (eu.hasCSR) {
                  rob.io.debug_wb_wdata(cnt) := Mux(
-                     wb_uop.ctrl.csr_cmd =/= CSR_R,
+                     wb_uop.ctrl.csr_cmd =/= CSR_N,
                      csr.io.read_data,
                      data
                  )
