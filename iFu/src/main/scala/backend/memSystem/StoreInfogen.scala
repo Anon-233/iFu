@@ -81,14 +81,14 @@ class StoreInfogen extends CoreModule with HasDcacheParameters{
         io.metaWriteReq(w).valid := true.B
         io.metaWriteReq(w).bits.idx := getIdx(io.req(w).addr)
         io.metaWriteReq(w).bits.wmeta := finalwbMetaLine(w)
-        io.metaWriteReq(w).bits.wayMask := 1.U << io.writebackPos(w).asUInt
-
+        io.metaWriteReq(w).bits.isWrite := true.B
+        io.metaWriteReq(w).bits.writePos := io.writebackPos(w)
 
         io.dataWriteReq(w).valid := true.B
-        io.dataWriteReq(w).bits.wayMask := 1.U << io.writebackPos(w).asUInt
         io.dataWriteReq(w).bits.idx := getIdx(io.req(w).addr)
         io.dataWriteReq(w).bits.wdata := finalwbDataLine(w)
-
+        io.dataWriteReq(w).bits.isWrite := true.B
+        io.dataWriteReq(w).bits.writePos := io.writebackPos(w)
     }
 
 
