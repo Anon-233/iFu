@@ -38,7 +38,7 @@ sim:
 	rm -rf build
 	mkdir -p build
 	# cp -r vsrc/* build
-	make EMU_TRACE=1 emu -j16 NOOP_HOME=$(NOOP_HOME) NEMU_HOME=.
+	make EMU_TRACE=1 emu -j12 NOOP_HOME=$(NOOP_HOME) NEMU_HOME=.
 
 test-lab1a: sim
 	TEST=$(TEST) ./build/emu --diff ./riscv64-nemu-interpreter-so -i ./ready-to-run/lab1/lab1-test-a.bin $(VOPT) || true
