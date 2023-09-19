@@ -238,7 +238,7 @@ class DecodeUnitIO() extends CoreBundle {
     // from CSRFile
     // val status = Input(new freechips.rocketchip.rocket.MStatus())
      val interrupt = Input(Bool())
-     val interrupt_cause = Input(UInt(xLen.W))
+//     val interrupt_cause = Input(UInt(xLen.W))
 }
 //TODO 添加对CSR环境下异常指令的检测
 class DecodeUnit extends CoreModule {

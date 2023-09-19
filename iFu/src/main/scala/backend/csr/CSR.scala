@@ -127,7 +127,7 @@ class CSRReg extends CoreBundle{
     val tcfg = new TCFG
     val tval = new TVAL
     val ticlr = UInt(32.W)
-    val llbctl = UInt(32.W)
+    val llbctl = Vec(32, Bool())
     val tlbrentry = UInt(32.W)
     val ctag = UInt(32.W)
     val dmw0 = new DMW
@@ -146,7 +146,7 @@ class CSRFile extends CoreModule {
 
         val exception = Input(Bool())   // from rob -> valid
         val com_xcpt  = Input(Valid(new CommitExceptionSignals)) // from rob -> bits
-        val vaddr     = Input(UInt(vaddrBits.W))  //vaddr == badvaddr?
+//        val vaddr     = Input(UInt(vaddrBits.W))  //vaddr == badvaddr?
 
         val is_ertn = Input(Bool())
         // val is_llw  = Input(Bool())
@@ -228,7 +228,7 @@ class CSRFile extends CoreModule {
     .elsewhen(io.addr === CSR_TCFG) {io.read_data := csrReg.tcfg.asUInt}
     .elsewhen(io.addr === CSR_TVAL) {io.read_data := csrReg.tval.asUInt}
     .elsewhen(io.addr === CSR_TICLR) {io.read_data := 0.U(32.W)}
-    .elsewhen(io.addr === CSR_LLBCTL) {io.read_data := csrReg.llbctl}
+    .elsewhen(io.addr === CSR_LLBCTL) {io.read_data := csrReg.llbctl.asUInt}
     .elsewhen(io.addr === CSR_TLBRENTRY) {io.read_data := Cat(csrReg.tlbrentry(31,2),0.U(1.W),csrReg.tlbrentry(0))}
     .elsewhen(io.addr === CSR_CTAG) {io.read_data := csrReg.ctag}
     .elsewhen(io.addr === CSR_DMW0) {io.read_data := csrReg.dmw0.asUInt}
@@ -279,10 +279,9 @@ class CSRFile extends CoreModule {
             csrRegNxt.crmd.pg := 1.U(1.W)
         }
         when(~csrReg.llbctl(2)){
-            csrRegNxt.llbctl := csrRegNxt.llbctl & -2.S(32.W).asUInt
+            csrRegNxt.llbctl(0) := 0.U(1.W)
         }
-//        csrRegNxt.llbctl(2) := 1.U(1.W)
-        csrRegNxt.llbctl := csrRegNxt.llbctl | 4.U(32.W)
+        csrRegNxt.llbctl(2) := 1.U(1.W)
         io.csr_pc := csrReg.era
         modeNxt := 3.U(2.W)
     } /* .elsewhen(is_llw){
@@ -346,7 +345,7 @@ class CSRFile extends CoreModule {
         .elsewhen(io.addr === CSR_LLBCTL){
             csrRegNxt.llbctl:= Cat(
                 0.U(29.W), write_data(2) & (~write_data(1)), 0.U(1.W), csrReg.llbctl(0) & (~write_data(1))
-            )
+            ).asTypeOf(Vec(32, Bool()))
         }
         .elsewhen(io.addr === CSR_TLBRENTRY) {csrRegNxt.tlbrentry:= Cat(write_data(31,6),csrReg.tlbrentry(5,0))}
         .elsewhen(io.addr === CSR_CTAG) {csrRegNxt.ctag:= write_data}
