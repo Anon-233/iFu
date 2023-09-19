@@ -322,8 +322,8 @@ class DcacheMeta extends Module with HasDcacheParameters{
 }
 
 class DataReq extends CoreBundle with HasDcacheParameters{
-    val wayMask = UInt(nWays.W)
-    val wdata = Vec(nRowWords,UInt(32.W))
+    val isWrite = Bool()
+    
     val idx = UInt(nIdxBits.W)
 
     // mshr来读data的时候所选择的路
@@ -331,6 +331,10 @@ class DataReq extends CoreBundle with HasDcacheParameters{
 
     // 将命中的路
     val hitPos = UInt(log2Ceil(nWays).W)
+
+    val wdata = Vec(nRowWords,UInt(32.W))
+    // 将要写入的路 
+    val writePos = UInt(log2Ceil(nWays).W)
 }
 
 class DataResp extends CoreBundle with HasDcacheParameters{
@@ -368,8 +372,8 @@ class DcacheData extends Module with HasDcacheParameters{
 
 
     // 数据结构
-    val data = SyncReadMem(nSets, Vec(nWays,Vec(nRowWords, UInt(32.W))))
-
+    // val data = SyncReadMem(nSets, Vec(nWays,Vec(nRowWords, UInt(32.W))))
+    val data = Array.fill(nSets)(SyncReadMem(nWays,Vec(nRowWords,UInt(32.W))))
     // reset
     val reseting = RegInit(true.B)
     val resetIdx =  RegInit(0.U(nIdxBits.W))
@@ -383,17 +387,20 @@ class DcacheData extends Module with HasDcacheParameters{
     }
 
     when(reseting){
-        val resetData = VecInit(Seq.fill(nWays){
-            VecInit(Seq.fill(nRowWords)(0.U(32.W)))
-        })
-        data.write(resetIdx, resetData, (-1.S(nWays.W)).asBools)
+        val resetData = VecInit(Seq.fill(nRowWords)(0.U(32.W)))
+        for(i <- 0 until nWays){
+            data(resetIdx).write(i.U, resetData, (~0.U(nRowWords.W)).asBools)
+        }
     }
 
     // lsuRead
     for(w <- 0 until memWidth){
-        val rdataSet = data.read(io.lsuRead(w).req.bits.idx, io.lsuRead(w).req.valid)
+        // val rdataSet = data.read(io.lsuRead(w).req.bits.idx, io.lsuRead(w).req.valid)
+        // io.lsuRead(w).resp.valid := RegNext(io.lsuRead(w).req.valid)
+        // io.lsuRead(w).resp.bits.rdata := rdataSet(RegNext(io.lsuRead(w).req.bits.hitPos))
+        val rdata = data(io.lsuRead(w).req.bits.idx).read(io.lsuRead(w).req.bits.hitPos, io.lsuRead(w).req.valid)
         io.lsuRead(w).resp.valid := RegNext(io.lsuRead(w).req.valid)
-        io.lsuRead(w).resp.bits.rdata := rdataSet(RegNext(io.lsuRead(w).req.bits.hitPos))
+        io.lsuRead(w).resp.bits.rdata := rdata
     }
 
 
@@ -401,7 +408,8 @@ class DcacheData extends Module with HasDcacheParameters{
     for(w <- 0 until memWidth){
         when(!reseting && io.lsuWrite(w).req.valid){
 
-            data.write(io.lsuWrite(w).req.bits.idx, VecInit(Seq.fill(nWays)(io.lsuWrite(w).req.bits.wdata)), io.lsuWrite(w).req.bits.wayMask.asBools)
+            // data.write(io.lsuWrite(w).req.bits.idx, VecInit(Seq.fill(nWays)(io.lsuWrite(w).req.bits.wdata)), io.lsuWrite(w).req.bits.wayMask.asBools)
+            data(io.lsuWrite(w).req.bits.idx).write(io.lsuWrite(w).req.bits.hitPos, io.lsuWrite(w).req.bits.wdata)
         }
         io.lsuWrite(w).resp.valid := RegNext(io.lsuWrite(w).req.valid)
         io.lsuWrite(w).resp.bits := DontCare
@@ -793,7 +801,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 lsuMetaRead(w).req.bits.tag := getTag(s0req(w).addr)
 
                 // 单纯通知meta是不是一个写指令，不会实际store
-                lsuMetaRead(w).req.bits.wayMask := Mux(isStore(s0req(w)), 1.U(nWays.W), 0.U(nWays.W))
+                lsuMetaRead(w).req.bits.isWrite := (isStore(s0req(w)))
 
                 lsuMetaRead(w).req.bits.wmeta := DontCare
                 lsuMetaRead(w).req.bits.replacePos := DontCare
@@ -832,7 +840,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         rpuMetaWrite.req.valid := true.B
         rpuMetaWrite.req.bits.idx := s0newwbIdx
         rpuMetaWrite.req.bits.wmeta := s0newMetaLine
-        rpuMetaWrite.req.bits.wayMask := 1.U << s0newAlloceWay
+        rpuDataWrite.req.bits.isWrite := true.B
+        rpuMetaWrite.req.bits.writeWay := s0newAlloceWay
         // rpuMetaWrite.req.bits.replacePos := DontCare
         // rpuDataWrite.req.bits.tag := DontCare 
 
@@ -960,7 +969,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         rpuDataWrite.req.valid := true.B
         rpuDataWrite.req.bits.idx := s1newwbIdx
         rpuDataWrite.req.bits.wdata := s1newDataLine
-        rpuDataWrite.req.bits.wayMask := 1.U << s1newAlloceWay
+        rpuDataWrite.req.bits.isWrite := true.B
+        rpuDataWrite.req.bits.writeWay := s1newAlloceWay
     }.elsewhen(s1state === fence){
         when(!meta.io.hasDirty) {
             //没有Dirty就不做了
