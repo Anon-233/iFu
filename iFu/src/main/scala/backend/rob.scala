@@ -315,7 +315,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
                                                 refetchInst)
     io.flush.bits.cause :=DontCare
     io.flush.bits.badvaddr := DontCare
-
+    io.flush.bits.vaddrWriteEnable := flushUop.vaddrWriteEnable
     //------------------exception-------------------
     val nextXcptUop = Wire(new MicroOp())
     nextXcptUop := rXcptUop

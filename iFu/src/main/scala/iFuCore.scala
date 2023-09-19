@@ -357,7 +357,7 @@ class iFuCore extends CoreModule {
         // decode_units(w).io.status := csr.io.status
         //decode_units(w).io.csr_decode <> csr.io.decode(w)
         decode_units(w).io.interrupt := csr.io.interrupt
-        // decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
+//        decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
 
         dec_uops(w) := decode_units(w).io.deq.uop
     }
@@ -855,6 +855,8 @@ class iFuCore extends CoreModule {
                      csr.io.read_data,
                      data
                  )
+                 rob.io.debug_wb_ldst(cnt) := wb_uop.ldst
+                 rob.io.debug_wb_pc(cnt) := wb_uop.debug_pc
              } else {
                 rob.io.debug_wb_wdata(cnt) := data
                 rob.io.debug_wb_ldst(cnt)  := wb_uop.ldst
