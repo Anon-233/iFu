@@ -791,7 +791,7 @@ class iFuCore extends CoreModule {
             def wbIsValid(rtype: UInt) =
                 wbresp.valid && wbresp.bits.uop.rf_wen && wbresp.bits.uop.dst_rtype === rtype
 
-            val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= CSR_R
+            val wbReadsCSR = wbresp.bits.uop.ctrl.csr_cmd =/= CSR_N
 
             iregfile.io.write_ports(w_cnt).valid := wbIsValid(RT_FIX)
             iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
