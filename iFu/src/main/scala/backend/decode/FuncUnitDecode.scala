@@ -127,7 +127,7 @@ object MemRRdDecode extends RRdDecodeConstants {
                                        // |    |  |  use mem pipe          |         |        |     rf wen |
                                        // |    |  |  |       alu fcn       |         |        |     |      |
                                        // |    |  |  |       |             |         |        |     |      |
-            BitPat(uopLD)       -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS12, REN_0, CSR_N),
+            BitPat(uopLD)       -> List(BR_N , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS12, REN_0, CSR_N),
             BitPat(uopSTA)      -> List(BR_N , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS12, REN_0, CSR_N),
             BitPat(uopSTD)      -> List(BR_N , N, N, Y, aluFn.FN_X    , OP1_RS1, OP2_RS2 , immS12, REN_0, CSR_N),
             BitPat(uopLLW)      -> List(BR_N , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS14, REN_0, CSR_N),
@@ -167,7 +167,7 @@ class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
     if (supportedUnits.jmp)    dec_table ++= JmpRRdDecode.table
     if (supportedUnits.mem)    dec_table ++= MemRRdDecode.table
     if (supportedUnits.muldiv) dec_table ++= MulDivRRdDecode.table
-    // if (supportedUnits.csr)    dec_table ++= CsrRRdDecode.table
+     if (supportedUnits.csr)    dec_table ++= CsrRRdDecode.table
     val rrd_cs = Wire(new RRdCtrlSigs).decode(io.rrd_uop.uopc, dec_table)
 
     // rrd_use_alupipe is unused

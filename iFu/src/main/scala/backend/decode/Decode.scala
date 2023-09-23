@@ -2,7 +2,6 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
-
 import iFu.isa.Instructions._
 import iFu.common.Consts._
 import iFu.common.CauseCode._
@@ -21,18 +20,17 @@ abstract trait DecodeTable {
     val DC2 = BitPat.dontCare(2)
     val DC1 = BitPat.dontCare(1)
     def decode_default: List[BitPat] =
-    //                                                                  frs3_en                        wakeup_delay
-    //     is val inst?                                                 |  imm sel                     |    bypassable (aka, known/fixed latency)
-    //     |                                                            |  |     uses_ldq              |    |  is_br
-    //     |     is single-prec?                        rs1 regtype     |  |     |  uses_stq           |    |  |
-    //     |     |  micro-code                          |       rs2 type|  |     |  |  is_amo          |    |  |
-    //     |     |  |         iq-type  func unit        |       |       |  |     |  |  |  is_fence     |    |  |
-    //     |     |  |         |        |                |       |       |  |     |  |  |  |  is_fencei |    |  |  is breakpoint or ecall?
-    //     |     |  |         |        |        dst     |       |       |  |     |  |  |  |  |  mem    |    |  |  |  is unique? (clear pipeline for it)
-    //     |     |  |         |        |        regtype |       |       |  |     |  |  |  |  |  cmd    |    |  |  |  |  flush on commit
-    //     |     |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |    |  |  |  |  |  csr cmd
-    //     |     |  |         |        |        |       |       |       |  |     |  |  |  |  |  |      |    |  |  |  |  |  |
-        List(N, uopX, IQT_X, FU_X, RT_X, DC1, DC1, immX, X, X, X, X, N, /*M_X,*/ DC2, X, X, N, N, X, CSR_N) 
+    //
+    //       is val inst?                          imm_sel                       bypassable (aka, known/fixed latency)
+    //       |    micro-code                          |  uses_ldg                |  is_br
+    //       |    |  iq-type                          |  |  uses_stq             |  |  is_pc2epc
+    //       |    |     |     func unit               |  |  |  is_amo            |  |  |  is_unique(clear pipeline for it)
+    //       |    |     |      |     dst_type         |  |  |  |  is_fence       |  |  |  |  flush_on_commit
+    //       |    |     |      |     |    rs1_typ     |  |  |  |  |  is_fencei   |  |  |  |  |    csr_cmd
+    //       |    |     |      |     |    |           |  |  |  |  |  |           |  |  |  |  |    |
+    //       |    |     |      |     |    | rs2_type  |  |  |  |  |  |           |  |  |  |  |    |
+    //       |    |     |      |     |    |    |      |  |  |  |  |  |  mem_cmd  |  |  |  |  |    |
+        List(N, uopX, IQT_X, FU_X, RT_X, DC1, DC1, immX, X, X, X, X, N, /*M_X,*/ X, X, N, N, X, CSR_N)
 
     val table: Array[(BitPat, List[BitPat])]
 }
@@ -53,7 +51,6 @@ class CtrlSigs extends Bundle {
     val is_dbar         = Bool() //栅障指令
     val is_ibar         = Bool()
     /*val mem_cmd         = UInt(M_SZ.W)*/ //
-    val wakeup_delay    = UInt(2.W) // TODO: 删除
     val bypassable      = Bool() //rename中需要
     val is_br           = Bool() //
     val is_sys_pc2epc   = Bool() //pc to epc（例外）
@@ -66,7 +63,7 @@ class CtrlSigs extends Bundle {
         val sigs = Seq(
             legal, uopc, iq_type, fu_code, dst_type, rs1_type,
             rs2_type, imm_sel, uses_ldq, uses_stq, is_amo,
-            is_dbar, is_ibar, /*mem_cmd, */wakeup_delay, bypassable,
+            is_dbar, is_ibar, /*mem_cmd, */bypassable,
             is_br, is_sys_pc2epc, inst_unique, flush_on_commit, csr_cmd
         )
         sigs zip decoder map { case (s, d) => s := d } //将对应位相匹配
@@ -76,86 +73,86 @@ class CtrlSigs extends Bundle {
 }
 
 object XDecode extends DecodeTable  {
-                //                                                                                          wakeup_delay
-                //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
-                //      |  micro-code                                                |     uses_ldg               |   |  is_br
-                //      |  |              iq-type                                    |     |  uses_stq            |   |  |  is_pc2epc
-                //      |  |                 |       func unit                       |     |  |  is_amo           |   |  |  |  is_unique(clear pipeline for it)
-                //      |  |                 |        |       dst_type               |     |  |  |  is_fence      |   |  |  |  |  flush_on_commit
-                //      |  |                 |        |       |       rs1_type       |     |  |  |  |  is_fencei  |   |  |  |  |  |  csr_cmd
-                //      |  |                 |        |       |       |              |     |  |  |  |  |          |   |  |  |  |  |  |
-                //      |  |                 |        |       |       |    rs2_type  |     |  |  |  |  |          |   |  |  |  |  |  |
-                //      |  |                 |        |       |       |       |      |     |  |  |  |  |  mem_cmd |   |  |  |  |  |  |
-    val table: Array[(BitPat, List[BitPat])] = Array(//       |       |       |      |     |  |  |  |  |    |     |   |  |  |  |  |  |
-        LLW     -> List(Y, uopLLW       , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS14, Y, N, N, N, N, /*M_XLL,*/ 0.U, N, N, N, Y, Y, CSR_N),
-        SCW     -> List(Y, uopAMO_AG    , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS14, N, Y, Y, N, N, /*M_XSC,*/ 0.U, N, N, N, Y, Y, CSR_N),
-        PRELD   -> List(Y, uopLD        , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_X  , immS12, N, N, N, N, N, /*M_X  ,*/ 0.U, N, N, N, N, N, CSR_N),//暂定为load指令
-        DBAR    -> List(Y, uopDBAR      , IQT_MEM, FU_MEM, RT_X  , RT_X  , RT_X  , immX  , N, Y, N, Y, N, /*M_X  ,*/ 0.U, N, N, N, Y, Y, CSR_N),
-        IBAR    -> List(Y, uopNOP       , IQT_MEM, FU_X  , RT_X  , RT_X  , RT_X  , immX  , N, N, N, N, Y, /*M_X  ,*/ 0.U, N, N, N, Y, Y, CSR_N),
-        SRLIW   -> List(Y, uopSRLIW     , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immU5 , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        SRAIW   -> List(Y, uopSRAIW     , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immU5 , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        SRLW    -> List(Y, uopSRLW      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        SRAW    -> List(Y, uopSRAW      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        SLLIW   -> List(Y, uopSLLIW     , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immU5 , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        MODWU   -> List(Y, uopMODWU     , IQT_INT, FU_DIV, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 0.U, N, N, N, N, N, CSR_N),
-        DIVWU   -> List(Y, uopDIVWU     , IQT_INT, FU_DIV, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 0.U, N, N, N, N, N, CSR_N),
-        DIVW    -> List(Y, uopDIVW      , IQT_INT, FU_DIV, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 0.U, N, N, N, N, N, CSR_N),
-        MODW    -> List(Y, uopMODW      , IQT_INT, FU_DIV, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 0.U, N, N, N, N, N, CSR_N),
-        MULHWU  -> List(Y, uopMULHWU    , IQT_INT, FU_MUL, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 0.U, N, N, N, N, N, CSR_N),
-        MULHW   -> List(Y, uopMULHW     , IQT_INT, FU_MUL, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 0.U, N, N, N, N, N, CSR_N),
-        MULW    -> List(Y, uopMULW      , IQT_INT, FU_MUL, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 0.U, N, N, N, N, N, CSR_N),
-        ORN     -> List(Y, uopORN       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        ANDN    -> List(Y, uopANDN      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-       PCADDU12I-> List(Y, uopPCADDU12I , IQT_INT, FU_JMP, RT_FIX, RT_X  , RT_X  , immU20, N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        PCADDI  -> List(Y, uopPCADDI    , IQT_INT, FU_JMP, RT_FIX, RT_X  , RT_X  , immS20, N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        LU12IW  -> List(Y, uopLU12IW    , IQT_INT, FU_ALU, RT_FIX, RT_X  , RT_X  , immU20, N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        OR      -> List(Y, uopOR        , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        NOR     -> List(Y, uopNOR       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        LDW     -> List(Y, uopLD        , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS12, Y, N, N, N, N, /*M_XRD,*/ 3.U, N, N, N, N, N, CSR_N),
-        LDH     -> List(Y, uopLD        , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS12, Y, N, N, N, N, /*M_XRD,*/ 3.U, N, N, N, N, N, CSR_N),
-        LDHU    -> List(Y, uopLD        , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS12, Y, N, N, N, N, /*M_XRD,*/ 3.U, N, N, N, N, N, CSR_N),
-        LDB     -> List(Y, uopLD        , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS12, Y, N, N, N, N, /*M_XRD,*/ 3.U, N, N, N, N, N, CSR_N),
-        LDBU    -> List(Y, uopLD        , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS12, Y, N, N, N, N, /*M_XRD,*/ 3.U, N, N, N, N, N, CSR_N),
-        STW     -> List(Y, uopSTA       , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_FIX, immS12, N, Y, N, N, N, /*M_XWR,*/ 0.U, N, N, N, N, N, CSR_N),
-        STH     -> List(Y, uopSTA       , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_FIX, immS12, N, Y, N, N, N, /*M_XWR,*/ 0.U, N, N, N, N, N, CSR_N),
-        STB     -> List(Y, uopSTA       , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_FIX, immS12, N, Y, N, N, N, /*M_XWR,*/ 0.U, N, N, N, N, N, CSR_N),
-        ADDIW   -> List(Y, uopADDIW     , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immS12, N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        ANDI    -> List(Y, uopANDI      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immU12, N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        ORI     -> List(Y, uopORI       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immU12, N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        XORI    -> List(Y, uopXORI      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immU12, N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        SLTI    -> List(Y, uopSLTI      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immS12, N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        SLTUI   -> List(Y, uopSLTUI     , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immS12, N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        SLLW    -> List(Y, uopSLLW      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        ADDW    -> List(Y, uopADD       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        SUBW    -> List(Y, uopSUB       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        SLT     -> List(Y, uopSLT       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        SLTU    -> List(Y, uopSLTU      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        AND     -> List(Y, uopAND       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        XOR     -> List(Y, uopXOR       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/ 1.U, Y, N, N, N, N, CSR_N),
-        JIRL    -> List(Y, uopJIRL      , IQT_INT, FU_JMP, RT_FIX, RT_FIX, RT_X  , immS16, N, N, N, N, N, /*M_X  ,*/ 1.U, N, N, N, N, N, CSR_N),
-        B       -> List(Y, uopJAL       , IQT_INT, FU_JMP, RT_X  , RT_X  , RT_X  , immS26, N, N, N, N, N, /*M_X  ,*/ 1.U, N, N, N, N, N, CSR_N),
-        BL      -> List(Y, uopJAL       , IQT_INT, FU_JMP, RT_FIX, RT_X  , RT_X  , immS26, N, N, N, N, N, /*M_X  ,*/ 1.U, N, N, N, N, N, CSR_N),
-        BEQ     -> List(Y, uopBEQ       , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, /*M_X  ,*/ 0.U, N, Y, N, N, N, CSR_N),
-        BNE     -> List(Y, uopBNE       , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, /*M_X  ,*/ 0.U, N, Y, N, N, N, CSR_N),
-        BGE     -> List(Y, uopBGE       , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, /*M_X  ,*/ 0.U, N, Y, N, N, N, CSR_N),
-        BGEU    -> List(Y, uopBGEU      , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, /*M_X  ,*/ 0.U, N, Y, N, N, N, CSR_N),
-        BLT     -> List(Y, uopBLT       , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, /*M_X  ,*/ 0.U, N, Y, N, N, N, CSR_N),
-        BLTU    -> List(Y, uopBLTU      , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, /*M_X  ,*/ 0.U, N, Y, N, N, N, CSR_N),
+                //
+                //      is val inst?                                                imm_sel                          bypassable (aka, known/fixed latency)
+                //      |  micro-code                                                |     uses_ldg                   |  is_br
+                //      |  |              iq-type                                    |     |  uses_stq                |  |  is_pc2epc
+                //      |  |                 |       func unit                       |     |  |  is_amo               |  |  |  is_unique(clear pipeline for it)
+                //      |  |                 |        |       dst_type               |     |  |  |  is_fence          |  |  |  |  flush_on_commit
+                //      |  |                 |        |       |       rs1_type       |     |  |  |  |  is_fencei      |  |  |  |  |    csr_cmd
+                //      |  |                 |        |       |       |              |     |  |  |  |  |              |  |  |  |  |    |
+                //      |  |                 |        |       |       |    rs2_type  |     |  |  |  |  |              |  |  |  |  |    |
+                //      |  |                 |        |       |       |       |      |     |  |  |  |  |  mem_cmd     |  |  |  |  |    |
+    val table: Array[(BitPat, List[BitPat])] = Array(//       |       |       |      |     |  |  |  |  |    |         |  |  |  |  |    |
+        LLW     -> List(Y, uopLLW       , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS14, Y, N, N, N, N, /*M_XLL,*/  N, N, N, Y, Y, CSR_N),
+        SCW     -> List(Y, uopAMO_AG    , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS14, N, Y, Y, N, N, /*M_XSC,*/  N, N, N, Y, Y, CSR_N),
+        PRELD   -> List(Y, uopLD        , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_X  , immS12, N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),//暂定为load指令
+        DBAR    -> List(Y, uopDBAR      , IQT_MEM, FU_MEM, RT_X  , RT_X  , RT_X  , immX  , N, Y, N, Y, N, /*M_X  ,*/  N, N, N, Y, Y, CSR_N),
+        IBAR    -> List(Y, uopNOP       , IQT_MEM, FU_X  , RT_X  , RT_X  , RT_X  , immX  , N, N, N, N, Y, /*M_X  ,*/  N, N, N, Y, Y, CSR_N),
+        SRLIW   -> List(Y, uopSRLIW     , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immU5 , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        SRAIW   -> List(Y, uopSRAIW     , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immU5 , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        SRLW    -> List(Y, uopSRLW      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        SRAW    -> List(Y, uopSRAW      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        SLLIW   -> List(Y, uopSLLIW     , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immU5 , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        MODWU   -> List(Y, uopMODWU     , IQT_INT, FU_DIV, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),
+        DIVWU   -> List(Y, uopDIVWU     , IQT_INT, FU_DIV, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),
+        DIVW    -> List(Y, uopDIVW      , IQT_INT, FU_DIV, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),
+        MODW    -> List(Y, uopMODW      , IQT_INT, FU_DIV, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),
+        MULHWU  -> List(Y, uopMULHWU    , IQT_INT, FU_MUL, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),
+        MULHW   -> List(Y, uopMULHW     , IQT_INT, FU_MUL, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),
+        MULW    -> List(Y, uopMULW      , IQT_INT, FU_MUL, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),
+        ORN     -> List(Y, uopORN       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        ANDN    -> List(Y, uopANDN      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+       PCADDU12I-> List(Y, uopPCADDU12I , IQT_INT, FU_JMP, RT_FIX, RT_X  , RT_X  , immU20, N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        PCADDI  -> List(Y, uopPCADDI    , IQT_INT, FU_JMP, RT_FIX, RT_X  , RT_X  , immS20, N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        LU12IW  -> List(Y, uopLU12IW    , IQT_INT, FU_ALU, RT_FIX, RT_X  , RT_X  , immU20, N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        OR      -> List(Y, uopOR        , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        NOR     -> List(Y, uopNOR       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        LDW     -> List(Y, uopLD        , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS12, Y, N, N, N, N, /*M_XRD,*/  N, N, N, N, N, CSR_N),
+        LDH     -> List(Y, uopLD        , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS12, Y, N, N, N, N, /*M_XRD,*/  N, N, N, N, N, CSR_N),
+        LDHU    -> List(Y, uopLD        , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS12, Y, N, N, N, N, /*M_XRD,*/  N, N, N, N, N, CSR_N),
+        LDB     -> List(Y, uopLD        , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS12, Y, N, N, N, N, /*M_XRD,*/  N, N, N, N, N, CSR_N),
+        LDBU    -> List(Y, uopLD        , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS12, Y, N, N, N, N, /*M_XRD,*/  N, N, N, N, N, CSR_N),
+        STW     -> List(Y, uopSTA       , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_FIX, immS12, N, Y, N, N, N, /*M_XWR,*/  N, N, N, N, N, CSR_N),
+        STH     -> List(Y, uopSTA       , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_FIX, immS12, N, Y, N, N, N, /*M_XWR,*/  N, N, N, N, N, CSR_N),
+        STB     -> List(Y, uopSTA       , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_FIX, immS12, N, Y, N, N, N, /*M_XWR,*/  N, N, N, N, N, CSR_N),
+        ADDIW   -> List(Y, uopADDIW     , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immS12, N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        ANDI    -> List(Y, uopANDI      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immU12, N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        ORI     -> List(Y, uopORI       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immU12, N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        XORI    -> List(Y, uopXORI      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immU12, N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        SLTI    -> List(Y, uopSLTI      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immS12, N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        SLTUI   -> List(Y, uopSLTUI     , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , immS12, N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        SLLW    -> List(Y, uopSLLW      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        ADDW    -> List(Y, uopADD       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        SUBW    -> List(Y, uopSUB       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        SLT     -> List(Y, uopSLT       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        SLTU    -> List(Y, uopSLTU      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        AND     -> List(Y, uopAND       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        XOR     -> List(Y, uopXOR       , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, immX  , N, N, N, N, N, /*M_X  ,*/  Y, N, N, N, N, CSR_N),
+        JIRL    -> List(Y, uopJIRL      , IQT_INT, FU_JMP, RT_FIX, RT_FIX, RT_X  , immS16, N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),
+        B       -> List(Y, uopJAL       , IQT_INT, FU_JMP, RT_X  , RT_X  , RT_X  , immS26, N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),
+        BL      -> List(Y, uopJAL       , IQT_INT, FU_JMP, RT_FIX, RT_X  , RT_X  , immS26, N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),
+        BEQ     -> List(Y, uopBEQ       , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, /*M_X  ,*/  N, Y, N, N, N, CSR_N),
+        BNE     -> List(Y, uopBNE       , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, /*M_X  ,*/  N, Y, N, N, N, CSR_N),
+        BGE     -> List(Y, uopBGE       , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, /*M_X  ,*/  N, Y, N, N, N, CSR_N),
+        BGEU    -> List(Y, uopBGEU      , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, /*M_X  ,*/  N, Y, N, N, N, CSR_N),
+        BLT     -> List(Y, uopBLT       , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, /*M_X  ,*/  N, Y, N, N, N, CSR_N),
+        BLTU    -> List(Y, uopBLTU      , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, immS16, N, N, N, N, N, /*M_X  ,*/  N, Y, N, N, N, CSR_N),
     )
 }
 
 // object TLBDeocde extends DecodeTable {
-//                 //                                                                                          wakeup_delay
-//                 //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
-//                 //      |  micro-code                                                |    uses_ldg               |   |  is_br
-//                 //      |     |           iq-type                        rs1 regtype |    |  uses_stq            |   |  |  is_pc2epc
-//                 //      |     |              |       func unit                       |    |  |  is_amo           |   |  |  |  is_unique(clear pipeline for it)
-//                 //      |     |              |        |       dst_type          |    |    |  |  |  is_fence      |   |  |  |  |  flush_on_commit
-//                 //      |     |              |        |       |       rs1_type       |    |  |  |  |  is_fencei  |   |  |  |  |  |  csr_cmd
-//                 //      |     |              |        |       |       |              |    |  |  |  |  |          |   |  |  |  |  |  |
-//                 //      |     |              |        |       |       |    rs2_type  |    |  |  |  |  |          |   |  |  |  |  |  |
-//                 //      |     |              |        |       |       |       |      |    |  |  |  |  |  mem_cmd |   |  |  |  |  |  |
-//     val table: Array[(BitPat, List[BitPat])] = Array( //      |       |       |      |    |  |  |  |  |    |     |   |  |  |  |  |  |
+//                 //
+//                 //      is val inst?                                                imm_sel                        bypassable (aka, known/fixed latency)
+//                 //      |  micro-code                                                |    uses_ldg                 |  is_br
+//                 //      |     |           iq-type                        rs1 regtype |    |  uses_stq              |  |  is_pc2epc
+//                 //      |     |              |       func unit                       |    |  |  is_amo             |  |  |  is_unique(clear pipeline for it)
+//                 //      |     |              |        |       dst_type          |    |    |  |  |  is_fence        |  |  |  |  flush_on_commit
+//                 //      |     |              |        |       |       rs1_type       |    |  |  |  |  is_fencei    |  |  |  |  |  csr_cmd
+//                 //      |     |              |        |       |       |              |    |  |  |  |  |            |  |  |  |  |  |
+//                 //      |     |              |        |       |       |    rs2_type  |    |  |  |  |  |            |  |  |  |  |  |
+//                 //      |     |              |        |       |       |       |      |    |  |  |  |  |  mem_cmd   |  |  |  |  |  |
+//     val table: Array[(BitPat, List[BitPat])] = Array( //      |       |       |      |    |  |  |  |  |    |       |  |  |  |  |  |
 //         TLBSRCH -> List(Y, uopTLBSRCH),
 //         TLBFILL -> List(Y, uopTLBFILL),
 //         TLBRD   -> List(Y, uopTLBRD),
@@ -165,36 +162,42 @@ object XDecode extends DecodeTable  {
 // }
 
  object CSRDecode extends DecodeTable {
-                  //                                                                                          wakeup_delay
-                  //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
-                  //      |  micro-code                                                |    uses_ldg               |   |  is_br
-                  //      |     |           iq-type                        rs1 regtype |    |  uses_stq            |   |  |  is_pc2epc
-                  //      |     |              |       func unit                       |    |  |  is_amo           |   |  |  |  is_unique(clear pipeline for it)
-                  //      |     |              |        |       dst_type          |    |    |  |  |  is_fence      |   |  |  |  |  flush_on_commit
-                  //      |     |              |        |       |       rs1_type       |    |  |  |  |  is_fencei  |   |  |  |  |  |  csr_cmd
-                  //      |     |              |        |       |       |              |    |  |  |  |  |          |   |  |  |  |  |  |
-                  //      |     |              |        |       |       |    rs2_type  |    |  |  |  |  |          |   |  |  |  |  |  |
-                  //      |     |              |        |       |       |       |      |    |  |  |  |  |  mem_cmd |   |  |  |  |  |  |
-     val table:  Array[(BitPat, List[BitPat])] = Array( //      |       |       |      |    |  |  |  |  |    |     |   |  |  |  |  |  |
-         CSRRD   -> List(Y, uopCSRRD       , IQT_INT, FU_CSR, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR_R),
-         CSRWR   -> List(Y, uopCSRWR       , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR_W),
-         CSRXCHG1-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR_M),
-         CSRXCHG2-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR_M),
-         CSRXCHG3-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR_M),
-         ERTN    -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, N, Y, Y, CSR_R),//TODO 改成 CSR_I
-         SYSCALL -> List(Y, uopSYSC        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR_R),
-         BREAK   -> List(Y, uopBREA        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ 0.U, N, N, Y, Y, Y, CSR_R),
+                       //
+                       // is val inst?                                                imm_sel                        bypassable (aka, known/fixed latency)
+                       // |   micro-code                                                |   uses_ldg                 |  is_br
+                       // |      |            iq-type                        rs1 regtype |   |  uses_stq             |  | is_pc2epc
+                       // |      |               |       func unit                       |   |  |  is_amo            |  |  |  is_unique(clear pipeline for it)
+                       // |      |               |        |       dst_type          |    |   |  |  |  is_fence       |  |  |  |  flush_on_commit
+                       // |      |               |        |       |       rs1_type       |   |  |  |  |  is_fencei   |  |  |  |  |  csr_cmd
+                       // |      |               |        |       |       |              |   |  |  |  |  |           |  |  |  |  |    |
+                       // |      |               |        |       |       |    rs2_type  |   |  |  |  |  |           |  |  |  |  |    |
+                       // |      |               |        |       |       |       |      |   |  |  |  |  |  mem_cmd  |  |  |  |  |    |
+     val table:  Array[(BitPat, List[BitPat])] = Array(     //   |       |       |      |   |  |  |  |  |    |      |  |  |  |  |    |
+         CSRRD    -> List(Y, uopCSRRD       , IQT_INT, FU_CSR, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_R),
+         CSRWR    -> List(Y, uopCSRWR       , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_X  , immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_W),
+         CSRXCHG1 -> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG2 -> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG3 -> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG4 -> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG5 -> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG6 -> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG7 -> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG8 -> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG9 -> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG10-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG11-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG12-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG13-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG14-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+         CSRXCHG15-> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
+
+         ERTN    -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_R),//TODO 改成 CSR_I
+         SYSCALL -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ N, N, Y, Y, Y, CSR_R),
+         BREAK   -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ N, N, Y, Y, Y, CSR_R),
      )
-     val default_table : List[BitPat] = List(N, BitPat("b??????"), BitPat("?????????"))
+//     val default_table : List[BitPat] = List(N, )
 
  }
-//object ExceptionInstrDecode extends DecodeTable{
-//
-//    val table:  Array[(BitPat, List[BitPat])] = Array(
-//        SYSCALL  -> List(Y, SYS),
-//        BREAK    -> List(Y, BRK)
-//    )
-//}
 // object WeirdDecode extends DecodeTable {
                      //                                                                                          wakeup_delay
                  //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
@@ -249,6 +252,7 @@ class DecodeUnit extends CoreModule {
     uop := io.enq.uop
 
     var decode_table = XDecode.table
+    decode_table ++= CSRDecode.table
     // val interrupt_table = ExceptionInstrDecode.table
     // if(usingCSR) decode_table ++= CSRDecode.table
     // if(usingTLB) decode_table ++= TLBDeocde.table
@@ -270,8 +274,8 @@ class DecodeUnit extends CoreModule {
     } .elsewhen(uop.instr_misalign){
         xcpt_valid := true.B
         xcpt_cause := ADEF
-    } .elsewhen(cs.uopc === SYSCALL || cs.uopc === BREAK){
-        when(cs.uopc === SYSCALL) {
+    } .elsewhen(inst === SYSCALL || inst === BREAK){
+        when(inst === SYSCALL) {
             xcpt_cause := SYS
             xcpt_valid := true.B
         } .otherwise{
