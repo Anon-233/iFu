@@ -3,7 +3,7 @@ package iFu.backend
 import backend.memSystem.DTlb
 import chisel3._
 import chisel3.util._
-import iFu.common.CauseCode._
+import iFu.backend.CSR
 import iFu.common._
 import iFu.common.Consts._
 import iFu.frontend.TLB
@@ -131,6 +131,7 @@ class Lsu extends CoreModule {
     val numLdqEntries   = lsuParameters.numLDQEntries
     val stqAddrSz       = lsuParameters.stqAddrSz
     val ldqAddrSz       = lsuParameters.ldqAddrSz
+    val MINI_EXCEPTION_MEM_ORDERING = 2.U
     /** ************************************ */
     val dcache  = Module(new NonBlockingDcache)
     /** *********************************** */
@@ -220,11 +221,15 @@ class Lsu extends CoreModule {
         }
 
         ld_enq_idx = Mux(dis_ld_val, WrapInc(ld_enq_idx, numLdqEntries), ld_enq_idx)
+        
+
         next_live_store_mask = Mux(dis_st_val,      // 新增store指令
             next_live_store_mask | (1.U << st_enq_idx).asUInt,
             next_live_store_mask
         )
+
         st_enq_idx = Mux(dis_st_val, WrapInc(st_enq_idx, numStqEntries), st_enq_idx)
+
         assert(!(dis_ld_val && dis_st_val), "A UOP is trying to go into both the LDQ and the STQ")
     }
 
@@ -312,7 +317,11 @@ class Lsu extends CoreModule {
         !p1_block_load_mask(ldq_wakeup_idx) &&
         !p2_block_load_mask(ldq_wakeup_idx) &&
         !store_needs_order &&
-        !block_load_wakeup
+        !block_load_wakeup /*&&*/
+        /*(!ldq_wakeup_e.bits.addr_is_uncacheable ||*/
+        /*(io.core.commit_load_at_rob_head && //
+        ldq_head === ldq_wakeup_idx &&
+        ldq_wakeup_e.bits.st_dep_mask.asUInt === 0.U))*/
     ))
     // dontTouch(ldq_wakeup_e)
     // -----------------------
@@ -453,15 +462,16 @@ class Lsu extends CoreModule {
     val ae_ld = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).ae.ld && exe_tlb_uop(w).use_ldq)
     val ae_st = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).ae.st && exe_tlb_uop(w).use_stq)
 
+    // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
     val mem_xcpt_valids = RegNext(widthMap(w =>
         (ma_ld(w) || ma_st(w)) && !io.core.exception && !IsKilledByBranch(io.core.brupdate, exe_tlb_uop(w))
     ))
     val mem_xcpt_uops = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, exe_tlb_uop(w))))
     val mem_xcpt_causes = RegNext(widthMap(w =>
-        Mux(ma_ld(w), ADEM,
-        Mux(ma_st(w), ADEM,
-            0.U))
-    ))
+        Mux(ma_ld(w), 1.U,
+        Mux(ma_st(w), 2.U,
+            3.U))
+    ))          //TODO causes需要改变
     val mem_xcpt_vaddrs = RegNext(exe_tlb_vaddr)
 
     // for (w <- 0 until memWidth) {
@@ -857,18 +867,55 @@ class Lsu extends CoreModule {
         !io.core.exception && !RegNext(io.core.exception)
     ))
     mem_forward_stq_idx := forwarding_idx
+    //********?
+    // Avoid deadlock with a 1-w LSU prioritizing load wakeups > store commits
+    // On a 2W machine, load wakeups and store commits occupy separate pipelines,
+    // so only add this logic for 1-w LSU
+    if (memWidth == 1) {
+        // Wakeups may repeatedly find a st->ld addr conflict and fail to forward,
+        // repeated wakeups may block the store from ever committing
+        // Disallow load wakeups 1 cycle after this happens to allow the stores to drain
+        when(RegNext(ldst_addr_matches(0).reduce(_ || _) && !mem_forward_valid(0))) {
+            block_load_wakeup := true.B
+        }
 
+        // If stores remain blocked for 15 cycles, block load wakeups to get a store through
+        val store_blocked_counter = Reg(UInt(4.W))
+        when(will_fire_store_commit(0) || !can_fire_store_commit(0)) {
+            store_blocked_counter := 0.U
+        }.elsewhen(can_fire_store_commit(0) && !will_fire_store_commit(0)) {
+            store_blocked_counter := Mux(store_blocked_counter === 15.U, 15.U, store_blocked_counter + 1.U)
+        }
+        when(store_blocked_counter === 15.U) {
+            block_load_wakeup := true.B
+        }
+    }
+
+
+    // Task 3: Clr unsafe bit in ROB for succesful translations
+    //         Delay this a cycle to avoid going ahead of the exception broadcast
+    //         The unsafe bit is cleared on the first translation, so no need to fire for load wakeups
+//    for (w <- 0 until memWidth) {
+//        io.core.clr_unsafe(w).valid := RegNext((do_st_search(w) || do_ld_search(w)) && !fired_load_wakeup(w)) && false.B
+//        io.core.clr_unsafe(w).bits := RegNext(lcam_uop(w).robIdx)
+//    }
+
+    // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
+    // TODO encapsulate this in an age-based  priority-encoder
+    //   val l_idx = AgePriorityEncoder((Vec(Vec.tabulate(numLdqEntries)(i => failed_loads(i) && i.U >= laq_head)
+    //   ++ failed_loads)).asUInt)
     val temp_bits = (VecInit(VecInit.tabulate(numLdqEntries)(i =>
         failed_loads(i) && i.U >= ldq_head) ++ failed_loads)).asUInt
     val l_idx = PriorityEncoder(temp_bits)
 
-    // ----------------------------------------------异常处理---------------------------------------------------
+    // one exception port, but multiple causes!
+    // - 1) the incoming store-address finds a faulting load (it is by definition younger)
+    // - 2) the incoming load or store address is excepting. It must be older and thus takes precedent.
     val r_xcpt_valid = RegInit(false.B)
     val r_xcpt = Reg(new Exception)
 
     val ld_xcpt_valid = failed_loads.reduce(_|_)
     val ld_xcpt_uop = ldq(Mux(l_idx >= numLdqEntries.U, l_idx - numLdqEntries.U, l_idx)).bits.uop
-    ld_xcpt_uop.vaddrWriteEnable := false.B
 
     val use_mem_xcpt = (mem_xcpt_valid && IsOlder(mem_xcpt_uop.robIdx, ld_xcpt_uop.robIdx, io.core.rob_head_idx)) || !ld_xcpt_valid
 
@@ -1276,7 +1323,8 @@ object loadDataGen{
                 }.otherwise{
                     loadData := data(15,0)
                 }
-            }.elsewhen(addr(1) === 1.U){
+            }
+                    .elsewhen(addr(1) === 1.U){
                         when(memSigned) {
                             loadData := Cat(Fill(16, data(31)), data(31, 16))
                         }.otherwise {

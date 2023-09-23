@@ -172,27 +172,41 @@ class MSHR extends CoreModule with HasDcacheParameters {
             // 成功发出replay信号，则转为issued
             mshr.ready := false.B
             mshr.issued := true.B
-            when(isStore(mshr.req)){
-                // 是Store指令的话，只要issue发射了，一定会完成，所以直接转为无效就好，
-                // 不用等待replayDone
-                // 否则replay进流水线的时候还没清空，流水线里再进来一条store指令，会被误判为miss
-                mshr.valid := false.B
-                mshr := 0.U.asTypeOf(new MSHRdata)
-            }
 
         }
-        //转换为issued时，replay已经进了s1,再一个周期检查是否传回了执行完毕的信号
-        when (RegNext(mshr.issued)) {
-            when (io.replayDone) {
-                // replay执行完毕，则转为无效(妈的这里别他妈偷懒啊，全置0)
+
+        // 对于load和store的issue，有不同的处理
+        
+        when(isStore(mshr.req)){
+
+            // 对于store，没有打断的情况，不用看replayDone，然而有如下情况要考虑：
+
+            // 1.replay到s2之前，hasStore必须拉高，防止同一条store指令被lsu重发miss再次存进来
+            // 2.replay之后的指令到s1，即replay到s2的时候，hasStore必须已经拉低，防止s1的机制把重发的本来应该hit的store指令给判成miss
+            // 
+            // 因此唯一合适的时机，就是replay到s2的时候，hasStore已经拉低
+
+            when(mshr.issued){
+                // issued,此时replay到s1,进行赋值，由于寄存器的原因，s2会被拉低
                 mshr.valid := false.B
                 mshr := 0.U.asTypeOf(new MSHRdata)
-            } .otherwise {
-                // replay没有执行完毕，回退到ready状态(还是直接清空?会有导致replay执行失败的情况吗)
-                mshr.issued := false.B
-                mshr.ready := true.B
+            }
+                
+        }.otherwise{
+            //对于load，转换为issued时，replay已经进了s1,再一个周期检查是否传回了执行完毕的信号
+            when (RegNext(mshr.issued)) {
+                when (io.replayDone) {
+                    // replay执行完毕，则转为无效
+                    mshr.valid := false.B
+                    mshr := 0.U.asTypeOf(new MSHRdata)
+                } .otherwise {
+                    // replay没有执行完毕，回退到ready状态(还是直接清空?会有导致replay执行失败的情况吗)
+                    mshr.issued := false.B
+                    mshr.ready := true.B
+                }
             }
         }
+        
     }
 }
 
@@ -229,7 +243,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         // RPU的激活信号 
             // RPU传入的fetch地址
             val fetchingBlockAddr = Input(UInt(nBlockAddrBits.W))
-            // fetchReady，当RPU成功拿到了一行，就会发出这个信号，通知mshr根据这个地址，
+            // fetchReady，当RPU成功拿到了一行并写回，就会发出这个信号，通知mshr根据这个地址，
             // 去进行激活操作111
             val fetchReady = Input(Bool())
 
