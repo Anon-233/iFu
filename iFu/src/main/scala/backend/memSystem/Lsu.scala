@@ -3,7 +3,6 @@ package iFu.backend
 import backend.memSystem.DTlb
 import chisel3._
 import chisel3.util._
-import iFu.backend.CSR
 import iFu.common._
 import iFu.common.Consts._
 import iFu.frontend.TLB
