@@ -734,6 +734,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         //成功进入s2state fence并且RPU空闲的话，告诉metaRPU已经拿到了这个dirty，让他清空
         meta.io.fenceTakeDirtyMeta := s2state === fence && RPU.io.ready
 
+        // 用于测试ordered，不然老是报5000周期的错
+        io.lsu.ordered := s2state === fence
+
         // 同时告诉mshr这个fetchaddr,用于感知fetching状态转换
         mshrs.io.fetchingBlockAddr := getBlockAddr(s2fetchAddr.asUInt)
 

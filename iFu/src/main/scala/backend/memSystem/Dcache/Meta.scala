@@ -132,7 +132,7 @@ class DcacheMeta extends Module with HasDcacheParameters{
         io.dirtyMeta := dirtyMeta
 
         when (io.fenceTakeDirtyMeta) {
-            // 将这个脏行直接全0覆盖，dirtyTable对应位置0
+            // dirtyTable对应位置0,将这个脏行直接全0覆盖
             dirtyTable(dirtyIdx) := dirtyTable(dirtyIdx).asUInt & (~(1.asUInt << dirtyPos)).asUInt
             // meta.write(dirtyIdx, VecInit(Seq.fill(nWays)(dirtyMeta)), cleanedMask.asBools)
             for(w <- 0 until nSets){
