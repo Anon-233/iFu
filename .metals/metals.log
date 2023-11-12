@@ -1,0 +1,27 @@
+2023.11.12 16:37:16 INFO  Started: Metals version 1.1.0 in folders 'I:\LACPU\iFu' for client Visual Studio Code 1.84.2.
+2023.11.12 16:37:17 WARN  Build server is not auto-connectable.
+2023.11.12 16:37:17 WARN  no build target for: I:\LACPU\iFu\iFu\src\main\scala\backend\csr\CSRs.scala
+2023.11.12 16:37:21 INFO  no build target found for I:\LACPU\iFu\iFu\src\main\scala\backend\csr\CSRs.scala. Using presentation compiler with project's scala-library version: 3.3.1
+2023.11.12 16:37:23 INFO  time: code lens generation in 4.03s
+2023.11.12 16:37:58 WARN  no build target for: I:\LACPU\iFu\iFu\src\main\scala\iFuCore.scala
+11月 12, 2023 4:37:58 下午 org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+警告: Unmatched cancel notification for request id 23
+11月 12, 2023 4:37:58 下午 org.eclipse.lsp4j.jsonrpc.RemoteEndpoint handleCancellation
+警告: Unmatched cancel notification for request id 24
+2023.11.12 16:38:09 WARN  no build target for: I:\LACPU\iFu\iFu\src\main\scala\backend\csr\CSRs.scala
+2023.11.12 16:58:43 INFO  Shutting down server
+2023.11.12 16:58:43 INFO  shutting down Metals
+2023.11.12 16:58:43 INFO  Exiting server
+2023.11.12 16:58:43 ERROR Unexpected error initializing server: 
+org.eclipse.lsp4j.jsonrpc.ResponseErrorException: Request window/showMessageRequest failed with message: Canceled
+	at org.eclipse.lsp4j.jsonrpc.RemoteEndpoint.handleResponse(RemoteEndpoint.java:209)
+	at org.eclipse.lsp4j.jsonrpc.RemoteEndpoint.consume(RemoteEndpoint.java:193)
+	at org.eclipse.lsp4j.jsonrpc.json.StreamMessageProducer.handleMessage(StreamMessageProducer.java:194)
+	at org.eclipse.lsp4j.jsonrpc.json.StreamMessageProducer.listen(StreamMessageProducer.java:94)
+	at org.eclipse.lsp4j.jsonrpc.json.ConcurrentMessageProcessor.run(ConcurrentMessageProcessor.java:113)
+	at java.util.concurrent.Executors$RunnableAdapter.call(Executors.java:577)
+	at java.util.concurrent.FutureTask.run(FutureTask.java:317)
+	at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1144)
+	at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:642)
+	at java.lang.Thread.run(Thread.java:1589)
+
