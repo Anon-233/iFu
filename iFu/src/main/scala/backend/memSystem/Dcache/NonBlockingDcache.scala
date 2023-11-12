@@ -167,11 +167,18 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val replayMetaWrite = meta.io.replayWrite
     replayMetaWrite.req := 0.U.asTypeOf(Valid(new MetaReq))
 
+    val fenceMetaRead = meta.io.fenceRead
+    fenceMetaRead.req := 0.U.asTypeOf(Valid(new MetaReq))
+
+    val fenceMetaClean = meta.io.fenceClean
+    fenceMetaClean.req := 0.U.asTypeOf(Valid(new MetaReq))
+
     //只读设置
     meta.io.readOnlyBlockAddr.valid := !RPU.io.ready
     meta.io.readOnlyBlockAddr.bits  := RPU.io.fetchingAddr
 
-    meta.io.fenceTakeDirtyMeta := false.B
+//    meta.io.fenceTakeDirtyMeta := false.B
+    fenceMetaClean.req.valid := false.B
 
     // 存储data信息
     val data = Module(new DcacheData)
@@ -194,6 +201,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     replayDataRead.req := 0.U.asTypeOf(Valid(new DataReq))
     val replayDataWrite = data.io.replayWrite
     replayDataWrite.req := 0.U.asTypeOf(Valid(new DataReq))
+
+    val fenceDataRead = data.io.fenceRead
+    fenceDataRead.req := 0.U.asTypeOf(Valid(new DataReq))
+    val fenceDataClean = data.io.fenceClean
+    fenceDataClean.req := 0.U.asTypeOf(Valid(new DataReq))
 
 
     val rpuJustDone = Wire(Bool())
@@ -228,7 +240,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     //清掉里面所有的load指令
     mshrs.io.fenceClear := fenceValid
     // 只要meta没有dirty，就可以回应fence，不需要管流水线和mshr状态（如果里面有没做完的指令，lsu肯定非空，unique仍然会停留在dispatch）
-    io.lsu.ordered := !meta.io.hasDirty
+    io.lsu.ordered := !fenceMetaRead.resp.bits.hasDirty
 
     // TODO prefetch
 
@@ -333,7 +345,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 lsuMetaRead(w).req.bits.isWrite := (isStore(s0req(w)))
 
                 lsuMetaRead(w).req.bits.wmeta := DontCare
-                lsuMetaRead(w).req.bits.replacePos := DontCare
+                lsuMetaRead(w).req.bits.readPos := DontCare
             }
         }
 
@@ -349,7 +361,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 // replayMetaRead.req.bits.wayMask := DontCare
                 // replayMetaRead.req.bits.wmeta := DontCare
                 // replayMetaRead.req.bits.replacePos := DontCare
-                replayMetaRead.req.bits.hitPos := s0replayHitPos
+                replayMetaRead.req.bits.readPos := s0replayHitPos
             }
         }
 
@@ -362,7 +374,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // mshrMetaRead.req.bits.tag := DontCare
         // mshrMetaRead.req.bits.wayMask := DontCare
         // mshrMetaRead.req.bits.wmeta := DontCare
-        mshrMetaRead.req.bits.replacePos := s0replacePos
+        mshrMetaRead.req.bits.readPos := s0replacePos
 
     }.elsewhen(s0state === wb){
         // wb是kill不掉的,因为要已提交，要写回
@@ -447,15 +459,15 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                         when(isStore(s1req(0)) && mshrs.io.hasStore){s1hit(0) := false.B}
                         
 
-                        s1hitPos(w) := lsuMetaRead(w).resp.bits.hitPos
+                        s1hitPos(w) := lsuMetaRead(w).resp.bits.pos
                         // 接下来要去读data
                         lsuDataRead(w).req.valid := s1valid
                         lsuDataRead(w).req.bits.idx := getIdx(s1req(w).addr)
-                        lsuDataRead(w).req.bits.hitPos := s1hitPos(w)
+                        lsuDataRead(w).req.bits.readPos := s1hitPos(w)
                     }.otherwise{
                         // miss的时候,需要将要替换的位置记录下来,同时将mshr的状态转换为mshrwrite,不用再读data
                         s1hit(w) := false.B
-                        s1missAllocPos(w) := lsuMetaRead(w).resp.bits.replacePos
+                        s1missAllocPos(w) := lsuMetaRead(w).resp.bits.pos
                     }
                 }
             }
@@ -469,12 +481,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             }.otherwise{
                 when(replayMetaRead.resp.valid){
                     s1handleMetaLine(w) := replayMetaRead.resp.bits.rmeta
-                    s1replayHitPos := replayMetaRead.resp.bits.hitPos
+                    s1replayHitPos := replayMetaRead.resp.bits.pos
 
                     // 接下来要去读data
                     replayDataRead.req.valid := s1valid
                     replayDataRead.req.bits.idx := s1replayIdx
-                    replayDataRead.req.bits.hitPos := s1replayHitPos
+                    replayDataRead.req.bits.readPos := s1replayHitPos
                 }
             }
         }
@@ -490,7 +502,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             // 接下来要去读data
             mshrDataRead.req.valid := s1valid
             mshrDataRead.req.bits.idx := s1replaceIdx
-            mshrDataRead.req.bits.replacePos := s1replacePos
+            mshrDataRead.req.bits.readPos := s1replacePos
 
         }
     }.elsewhen(s1state === wb){
@@ -498,18 +510,16 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // 不用管读出什么meta,只要写回data就行
         
     }.elsewhen(s1state === fence){
-        when(!meta.io.hasDirty) {
+        when(!fenceMetaRead.resp.bits.hasDirty) {
             //没有Dirty就不做了
             s1state := nil 
         }.otherwise{
-            s1replacedMetaLine := meta.io.dirtyMeta
-            s1replaceAddr := Cat(meta.io.dirtyMeta.tag, s1replaceIdx, 0.U(nOffsetBits.W))
-            // 接下来要去读data(走的是metaread这个IO通路)
-            mshrDataRead.req.valid := s1valid 
-            mshrDataRead.req.bits.idx := meta.io.dirtyIdx
-            mshrDataRead.req.bits.replacePos := meta.io.dirtyPos
-
-
+            s1replacedMetaLine := fenceMetaRead.resp.bits.rmeta
+            s1replaceAddr := Cat(fenceMetaRead.resp.bits.rmeta.tag, fenceMetaRead.resp.bits.idx, 0.U(nOffsetBits.W))
+            // 接下来要去读data
+            fenceDataRead.req.valid := s1valid 
+            fenceDataRead.req.bits.idx := fenceMetaRead.resp.bits.idx
+            fenceDataRead.req.bits.readPos := fenceMetaRead.resp.bits.pos
         }
          
     }
@@ -719,11 +729,31 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                         }
 
         }
-    }.elsewhen((s2state === fence ||s2state === mshrread )&& s2valid && RPU.io.ready){
+    }.elsewhen(s2state === mshrread && s2valid && RPU.io.ready){
         //一条指令的fetch和dirty写回主存，都需要RPU请求
         // 此时已经收集好了所需的replaceMetaline和replaceDataLine
         // 将他们连同fetchaddr一并交给RPU
-        RPU.io.needReplace := (s2state === fence ||s2state === mshrread )&& s2valid
+        RPU.io.needReplace := s2state === mshrread && s2valid
+        RPU.io.replaceMetaLine := s2replacedMetaLine
+        RPU.io.replaceDataLine := s2replacedDataLine
+        RPU.io.replaceAddr := s2replaceAddr
+        RPU.io.fetchAddr := s2fetchAddr
+        RPU.io.replaceWay := s2replacePos
+
+        RPU.io.isFence := false.B
+
+        //同时告诉mshr这个fetchaddr,用于感知fetching状态转换
+        mshrs.io.fetchingBlockAddr := getBlockAddr(s2fetchAddr.asUInt)
+
+
+        // resp和nack都不发
+        for(w <- 0 until memWidth){
+            sendResp(w) := false.B
+            sendNack(w) := false.B
+        }
+
+    }.elsewhen(s2state ===fence && s2valid && RPU.io.ready){
+        RPU.io.needReplace := s2state === fence && s2valid
         RPU.io.replaceMetaLine := s2replacedMetaLine
         RPU.io.replaceDataLine := s2replacedDataLine
         RPU.io.replaceAddr := s2replaceAddr
@@ -732,17 +762,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
         RPU.io.isFence := s2state === fence
         //成功进入s2state fence并且RPU空闲的话，告诉metaRPU已经拿到了这个dirty，让他清空
-        meta.io.fenceTakeDirtyMeta := s2state === fence && RPU.io.ready
-
-        // 用于测试ordered，不然老是报5000周期的错
-        io.lsu.ordered := s2state === fence
-
+        fenceMetaClean.req.valid := s2state === fence && RPU.io.ready
+        fenceDataClean.req.valid := s2state === fence && RPU.io.ready
         // 同时告诉mshr这个fetchaddr,用于感知fetching状态转换
         mshrs.io.fetchingBlockAddr := getBlockAddr(s2fetchAddr.asUInt)
-
-
         // resp和nack都不发
-        for(w <- 0 until memWidth){
+        for (w <- 0 until memWidth) {
             sendResp(w) := false.B
             sendNack(w) := false.B
         }
@@ -810,8 +835,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
       !(s2state === mshrread && s2valid)
 
     // TODO lr/sc
-    // TODO enable continuous hit store forwarding
-    // TODO simplify the IO channel of DCacheData and DCacheMeta
+    // TODO enable continuous hit store forwarding(DONE)
+    // TODO simplify the IO channel of DCacheData and DCacheMeta(DONE)
 
-    // mmio
+    // TODO mmio
 }
