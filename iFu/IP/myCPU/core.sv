@@ -58,38 +58,45 @@ module core
     logic [31:0] ldpaddr [3:0];//load指令对应的物理地址
     logic [31:0] ldvaddr [3:0];//load指令对应的虚拟地址
 
-    // TODO csr 寄存器信息
-    logic [31:0] crmd;
-    logic [31:0] prmd;
-    logic [31:0] ecfg;
-    logic [31:0] estat;
-    logic [31:0] era;
-    logic [31:0] badv;
-    logic [31:0] eentry;
-    logic [31:0] tlbidx;
-    logic [31:0] tlbehi;
-    logic [31:0] tlbelo0;
-    logic [31:0] tlbelo1;
-    logic [31:0] asid;
-    logic [31:0] pgdl;
-    logic [31:0] pgdh;
-    logic [31:0] save0;
-    logic [31:0] save1;
-    logic [31:0] save2;
-    logic [31:0] save3;
-    logic [31:0] tid;
-    logic [31:0] tcfg;
-    logic [31:0] tval;
-    logic [31:0] ticlr;
-    logic [31:0] llbctl;
-    logic [31:0] tlbrentry;
-    logic [31:0] dmw0;
-    logic [31:0] dmw1;
-
     cbus_req_t  icreq;
     cbus_resp_t icresp;
     cbus_req_t  dcreq;
     cbus_resp_t dcresp;
+
+// csr寄存器信息
+logic [31:0] csr_crmd;
+logic [31:0] csr_prmd;
+logic [31:0] csr_euen;
+logic [31:0] csr_ecfg;
+logic [31:0] csr_estat;
+logic [31:0] csr_era;
+logic [31:0] csr_badv;
+logic [31:0] csr_eentry;
+logic [31:0] csr_tlbidx;
+logic [31:0] csr_tlbehi;
+logic [31:0] csr_tlbelo0;
+logic [31:0] csr_tlbelo1;
+logic [31:0] csr_asid;
+logic [31:0] csr_pgdl;
+logic [31:0] csr_pgdh;
+logic [31:0] csr_pgd;
+logic [31:0] csr_cpuid;
+logic [31:0] csr_save0;
+logic [31:0] csr_save1;
+logic [31:0] csr_save2;
+logic [31:0] csr_save3;
+logic [31:0] csr_tid;
+logic [31:0] csr_tcfg;
+logic [31:0] csr_tval;
+logic [31:0] csr_ticlr;
+logic [31:0] csr_llbctl;
+logic [31:0] csr_tlbrentry;
+logic [31:0] csr_ctag;
+logic [31:0] csr_dmw0;
+logic [31:0] csr_dmw1;
+
+
+
 
 
     iFuCore iFuCore(
@@ -185,6 +192,151 @@ module core
         .io_register_29 (register[29]),
         .io_register_30 (register[30]),
         .io_register_31 (register[31])
+
+        .io_csr_register_crmd_r0 (csr_crmd[31:9]),
+        .io_csr_register_crmd_datm (csr_crmd[8:7]),
+        .io_csr_register_crmd_datf (csr_crmd[6:5]),
+        .io_csr_register_crmd_pg (csr_crmd[4]),
+        .io_csr_register_crmd_da (csr_crmd[3]),
+        .io_csr_register_crmd_ie (csr_crmd[2]),
+        .io_csr_register_crmd_plv (csr_crmd[1:0]),
+
+        .io_csr_register_prmd_r0 (csr_prmd[31:3]),
+        .io_csr_register_pie (csr_prmd[2]),
+        .io_csr_register_pplv (csr_prmd[1:0]),
+
+        .io_csr_register_euen_r0 (csr_euen[31:1]),
+        .io_csr_register_euen_fpe (csr_euen[0]),
+
+        .io_csr_register_ecfg (csr_ecfg),
+
+        .io_csr_register_estat_r0 (csr_estat[31:21]),
+        .io_csr_register_estat_esubcode (csr_estat[20:13]),
+        .io_csr_register_estat_ecode (csr_estat[12:7]),
+        .io_csr_register_estat_r1 (csr_estat[6:4]),
+        .io_csr_register_estat_is_12 (csr_estat[3]),
+        .io_csr_register_estat_is_11 (csr_estat[2]),
+        .io_csr_register_estat_r2 (csr_estat[1:0]),
+        .io_csr_register_estat_is9_2 (csr_estat[9:2]),
+        .io_csr_register_estat_is1_0 (csr_estat[1:0]),
+
+        .io_csr_register_era (csr_era),
+
+        .io_csr_register_badv (csr_badv),
+
+        .io_csr_register_eentry (csr_eentry),
+
+        .io_csr_register_tlbidx_ne (csr_tlbidx[31]),
+        .io_csr_register_tlbidx_r0 (csr_tlbidx[30:29]),
+        .io_csr_register_tlbidx_ps (csr_tlbidx[28:23]),
+        .io_csr_register_tlbidx_r1 (csr_tlbidx[22:20]),
+        .io_csr_register_tlbidx_r (csr_tlbidx[19:9]),
+        .io_csr_register_tlbidx_index (csr_tlbidx[8:0]),
+
+        .io_csr_register_tlbehi_vppn (csr_tlbehi[31:14]),
+        .io_csr_register_tlbehi_r0 (csr_tlbehi[13:0]),
+        .io_csr_register_tlbelo0_r (csr_tlbelo0[31]),
+        .io_csr_register_tlbelo0_ppn (csr_tlbelo0[30:12]),
+        .io_csr_register_tlbelo0_r0 (csr_tlbelo0[11]),
+        .io_csr_register_tlbelo0_g (csr_tlbelo0[10]),
+        .io_csr_register_tlbelo0_mat (csr_tlbelo0[9:8]),
+        .io_csr_register_tlbelo0_plv (csr_tlbelo0[7:6]),
+        .io_csr_register_tlbelo0_d (csr_tlbelo0[5]),
+        .io_csr_register_tlbelo0_v (csr_tlbelo0[4]),
+        .io_csr_register_tlbelo1_r (csr_tlbelo1[31]),
+        .io_csr_register_tlbelo1_ppn (csr_tlbelo1[30:12]),
+        .io_csr_register_tlbelo1_r0 (csr_tlbelo1[11]),
+        .io_csr_register_tlbelo1_g (csr_tlbelo1[10]),
+        .io_csr_register_tlbelo1_mat (csr_tlbelo1[9:8]),
+        .io_csr_register_tlbelo1_plv (csr_tlbelo1[7:6]),
+        .io_csr_register_tlbelo1_d (csr_tlbelo1[5]),
+        .io_csr_register_tlbelo1_v (csr_tlbelo1[4]),
+
+        .io_csr_register_asid_r0 (csr_asid[31:25]),
+        .io_csr_register_asid_asidbits (csr_asid[24:17]),
+        .io_csr_register_asid_r1 (csr_asid[16:11]),
+        .io_csr_register_asid_asid (csr_asid[10:1]),
+
+        .io_csr_register_pgdl (csr_pgdl),
+
+        .io_csr_register_pgdh (csr_pgdh),
+
+        .io_csr_register_pgd (csr_pgd),
+
+        .io_csr_register_cpuid (csr_cpuid),
+
+        .io_csr_register_save0 (csr_save0),
+
+        .io_csr_register_save1 (csr_save1),
+
+        .io_csr_register_save2 (csr_save2),
+
+        .io_csr_register_save3 (csr_save3),
+
+        .io_csr_register_tid (csr_tid),
+
+        .io_csr_register_tcfg_initval (csr_tcfg[31:2]),
+        .io_csr_register_tcfg_periodic (csr_tcfg[1]),
+        .io_csr_register_tcfg_en (csr_tcfg[0]),
+
+        .io_csr_register_tval_timeval (csr_tval),
+
+        .io_csr_register_ticlr (csr_ticlr),
+
+        .io_csr_register_llbctl_0 (csr_llbctl[0]),
+        .io_csr_register_llbctl_1 (csr_llbctl[1]),
+        .io_csr_register_llbctl_2 (csr_llbctl[2]),
+        .io_csr_register_llbctl_3 (csr_llbctl[3]),
+        .io_csr_register_llbctl_4 (csr_llbctl[4]),
+        .io_csr_register_llbctl_5 (csr_llbctl[5]),
+        .io_csr_register_llbctl_6 (csr_llbctl[6]),
+        .io_csr_register_llbctl_7 (csr_llbctl[7]),
+        .io_csr_register_llbctl_8 (csr_llbctl[8]),
+        .io_csr_register_llbctl_9 (csr_llbctl[9]),
+        .io_csr_register_llbctl_10 (csr_llbctl[10]),
+        .io_csr_register_llbctl_11 (csr_llbctl[11]),
+        .io_csr_register_llbctl_12 (csr_llbctl[12]),
+        .io_csr_register_llbctl_13 (csr_llbctl[13]),
+        .io_csr_register_llbctl_14 (csr_llbctl[14]),
+        .io_csr_register_llbctl_15 (csr_llbctl[15]),
+        .io_csr_register_llbctl_16 (csr_llbctl[16]),
+        .io_csr_register_llbctl_17 (csr_llbctl[17]),
+        .io_csr_register_llbctl_18 (csr_llbctl[18]),
+        .io_csr_register_llbctl_19 (csr_llbctl[19]),
+        .io_csr_register_llbctl_20 (csr_llbctl[20]),
+        .io_csr_register_llbctl_21 (csr_llbctl[21]),
+        .io_csr_register_llbctl_22 (csr_llbctl[22]),
+        .io_csr_register_llbctl_23 (csr_llbctl[23]),
+        .io_csr_register_llbctl_24 (csr_llbctl[24]),
+        .io_csr_register_llbctl_25 (csr_llbctl[25]),
+        .io_csr_register_llbctl_26 (csr_llbctl[26]),
+        .io_csr_register_llbctl_27 (csr_llbctl[27]),
+        .io_csr_register_llbctl_28 (csr_llbctl[28]),
+        .io_csr_register_llbctl_29 (csr_llbctl[29]),
+        .io_csr_register_llbctl_30 (csr_llbctl[30]),
+        .io_csr_register_llbctl_31 (csr_llbctl[31]),
+
+        .io_csr_register_tlbrentry (csr_tlbrentry),
+
+        .io_csr_register_ctag (csr_ctag),
+
+        .io_csr_register_dmw0_vseg (csr_dmw0[31:29]),
+        .io_csr_register_dmw0_r0 (csr_dmw0[28]),
+        .io_csr_register_dmw0_pseg (csr_dmw0[27:25]),
+        .io_csr_register_dmw0_r1 (csr_dmw0[24:6]),
+        .io_csr_register_dmw0_mat (csr_dmw0[5:4]),
+        .io_csr_register_dmw0_plv3 (csr_dmw0[3]),
+        .io_csr_register_dmw0_r2 (csr_dmw0[2:0]),
+        .io_csr_register_dmw0_plv0 (csr_dmw0[1]),
+
+        .io_csr_register_dmw1_vseg (csr_dmw1[31:29]),
+        .io_csr_register_dmw1_r0 (csr_dmw1[28]),
+        .io_csr_register_dmw1_pseg (csr_dmw1[27:25]),
+        .io_csr_register_dmw1_r1 (csr_dmw1[24:6]),
+        .io_csr_register_dmw1_mat (csr_dmw1[5:4]),
+        .io_csr_register_dmw1_plv3 (csr_dmw1[3]),
+        .io_csr_register_dmw1_r2 (csr_dmw1[2:0]),
+        .io_csr_register_dmw1_plv0 (csr_dmw1[1])
     );
 
     CbusArbiter carib(
@@ -386,33 +538,33 @@ DifftestLoadEvent DifftestLoadEvent3(
 DifftestCSRRegState DifftestCSRRegState(
     .clock              (clk     ),
     .coreid             (0       ),
-    .crmd               (crmd    ),
-    .prmd               (prmd    ),
+    .crmd               (csr_crmd    ),
+    .prmd               (csr_prmd    ),
     .euen               (0       ),
-    .ecfg               (ectl    ),
-    .estat              (estat   ),
-    .era                (era     ),
-    .badv               (badv    ),
-    .eentry             (eentry  ),
-    .tlbidx             (tlbidx  ),
-    .tlbehi             (tlbehi  ),
-    .tlbelo0            (tlbelo0 ),
-    .tlbelo1            (tlbelo1 ),
-    .asid               (asid    ),
-    .pgdl               (pgdl    ),
-    .pgdh               (pgdh    ),
-    .save0              (save0   ),
-    .save1              (save1   ),
-    .save2              (save2   ),
-    .save3              (save3   ),
-    .tid                (tid     ),
-    .tcfg               (tcfg    ),
-    .tval               (tval    ),
-    .ticlr              (ticlr   ),
-    .llbctl             (llbctl  ),
-    .tlbrentry          (tlbrentry),
-    .dmw0               (dmw0    ),
-    .dmw1               (dmw1    )
+    .ecfg               (csr_ectl    ),
+    .estat              (csr_estat   ),
+    .era                (csr_era     ),
+    .badv               (csr_badv    ),
+    .eentry             (csr_eentry  ),
+    .tlbidx             (csr_tlbidx  ),
+    .tlbehi             (csr_tlbehi  ),
+    .tlbelo0            (csr_tlbelo0 ),
+    .tlbelo1            (csr_tlbelo1 ),
+    .asid               (csr_asid    ),
+    .pgdl               (csr_pgdl    ),
+    .pgdh               (csr_pgdh    ),
+    .save0              (csr_save0   ),
+    .save1              (csr_save1   ),
+    .save2              (csr_save2   ),
+    .save3              (csr_save3   ),
+    .tid                (csr_tid     ),
+    .tcfg               (csr_tcfg    ),
+    .tval               (csr_tval    ),
+    .ticlr              (csr_ticlr   ),
+    .llbctl             (csr_llbctl  ),
+    .tlbrentry          (csr_tlbrentry),
+    .dmw0               (csr_dmw0    ),
+    .dmw1               (csr_dmw1    )
 );
 
 //通用寄存器的堆值

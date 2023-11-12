@@ -16,3 +16,4 @@ iFu/nscscc-la/vsrc/pipeline/iFuCore.sv
 .vscode/c_cpp_properties.json
 iFu/nscscc-la/vsrc/pipeline/iFuCore.anno.json
 iFu/nscscc-la/vsrc/pipeline/iFuCore.fir
+iFu/IP/myCPU/iFuCore.sv
