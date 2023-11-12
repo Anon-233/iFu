@@ -1,0 +1,174 @@
+[0m[[0m[0mdebug[0m] [0m[0m[zinc] IncrementalCompile -----------[0m
+[0m[[0m[0mdebug[0m] [0m[0mIncrementalCompile.incrementalCompile[0m
+[0m[[0m[0mdebug[0m] [0m[0mprevious = Stamps for: 350 products, 62 sources, 4 libraries[0m
+[0m[[0m[0mdebug[0m] [0m[0mcurrent source = Set(${BASE}/src/main/scala/backend/csr/CSRs.scala, ${BASE}/src/main/scala/backend/memSystem/Dcache/RPU.scala, ${BASE}/src/main/scala/backend/rename/MapTable.scala, ${BASE}/src/main/scala/common/CbusToAXI.scala, ${BASE}/src/main/scala/common/CommonClasses.scala, ${BASE}/src/main/scala/backend/execute/FunctionalUnit/Multiplier.scala, ${BASE}/src/main/scala/frontend/bpu/Bim.scala, ${BASE}/src/main/scala/common/CoreParameters.scala, ${BASE}/src/main/scala/backend/execute/FuncUnit.scala, ${BASE}/src/main/scala/backend/execute/ExecutionUnits.scala, ${BASE}/src/main/scala/backend/memSystem/DTlb.scala, ${BASE}/src/main/scala/backend/memSystem/Lsu.scala, ${BASE}/src/main/scala/backend/rob.scala, ${BASE}/src/main/scala/backend/memSystem/Dcache/Data.scala, ${BASE}/src/main/scala/frontend/bpu/Loop.scala, ${BASE}/src/main/scala/backend/register/regfile.scala, ${BASE}/src/main/scala/backend/debugDiff.scala, ${BASE}/src/main/scala/frontend/bpu/Tage.scala, ${BASE}/src/main/scala/main.scala, ${BASE}/src/main/scala/backend/execute/FunctionalUnit/Divider.scala, ${BASE}/src/main/scala/frontend/bpu/common.scala, ${BASE}/src/main/scala/frontend/bpu/FaUBtb.scala, ${BASE}/src/main/scala/backend/register/registerRead.scala, ${BASE}/src/main/scala/frontend/FetchTargetQueue.scala, ${BASE}/src/main/scala/backend/memSystem/Dcache/NonBlockingDcache.scala, ${BASE}/src/main/scala/backend/execute/FunctionalUnit/CSA.scala, ${BASE}/src/main/scala/iFuCore.scala, ${BASE}/src/main/scala/backend/decode/DecodeLogic.scala, ${BASE}/src/main/scala/common/CBus.scala, ${BASE}/src/main/scala/backend/issue/IssueSlot.scala, ${BASE}/src/main/scala/frontend/TLB.scala, ${BASE}/src/main/scala/backend/issue/IssueUnitAgeOrdered.scala, ${BASE}/src/main/scala/backend/decode/PreDecode.scala, ${BASE}/src/main/scala/backend/distpatch/Dispatch.scala, ${BASE}/src/main/scala/backend/memSystem/Dcache/MSHR.scala, ${BASE}/src/main/scala/backend/memSystem/Dcache/Missarbiter.scala, ${BASE}/src/main/scala/backend/rename/BusyTable.scala, ${BASE}/src/main/scala/backend/rename/FreeList.scala, ${BASE}/src/main/scala/frontend/icache.scala, ${BASE}/src/main/scala/backend/memSystem/Dcache/Meta.scala, ${BASE}/src/main/scala/common/Utils.scala, ${BASE}/src/main/scala/frontend/bpu/BankedPredictor.scala, ${BASE}/src/main/scala/backend/issue/IssueUnit.scala, ${BASE}/src/main/scala/backend/decode/Decode.scala, ${BASE}/src/main/scala/common/CBusArbiter.scala, ${BASE}/src/main/scala/frontend/Frontend.scala, ${BASE}/src/main/scala/backend/rename/RenameTop.scala, ${BASE}/src/main/scala/frontend/bpu/BranchPredictor.scala, ${BASE}/src/main/scala/frontend/FetchBuffer.scala, ${BASE}/src/main/scala/backend/execute/FunctionalUnit/Comparer.scala, ${BASE}/src/main/scala/frontend/bpu/Btb.scala, ${BASE}/src/main/scala/backend/memSystem/Dcache/StoreInfogen.scala, ${BASE}/src/main/scala/frontend/bpu/RAS.scala, ${BASE}/src/main/scala/frontend/FrontendUtils.scala, ${BASE}/src/main/scala/backend/execute/ExecutionUnit.scala, ${BASE}/src/main/scala/common/Consts.scala, ${BASE}/src/main/scala/backend/decode/FuncUnitDecode.scala, ${BASE}/src/main/scala/cmtZipper.scala, ${BASE}/src/main/scala/isa/Instructions.scala, ${BASE}/src/main/scala/common/MicroOp.scala, ${BASE}/src/main/scala/common/Types.scala, ${BASE}/src/main/scala/backend/execute/FunctionalUnit/Alu.scala)[0m
+[0m[[0m[0mdebug[0m] [0m[0m> initialChanges = InitialChanges(Changes(added = Set(), removed = Set(), changed = Set(${BASE}/src/main/scala/backend/csr/CSRs.scala, ${BASE}/src/main/scala/common/MicroOp.scala, ${BASE}/src/main/scala/backend/rob.scala, ${BASE}/src/main/scala/iFuCore.scala), unmodified = ...),Set(),Set(),API Changes: Set())[0m
+[0m[[0m[0mdebug[0m] [0m[0m[0m
+[0m[[0m[0mdebug[0m] [0m[0mInitial source changes:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	removed: Set()[0m
+[0m[[0m[0mdebug[0m] [0m[0m	added: Set()[0m
+[0m[[0m[0mdebug[0m] [0m[0m	modified: Set(${BASE}/src/main/scala/backend/csr/CSRs.scala, ${BASE}/src/main/scala/common/MicroOp.scala, ${BASE}/src/main/scala/backend/rob.scala, ${BASE}/src/main/scala/iFuCore.scala)[0m
+[0m[[0m[0mdebug[0m] [0m[0mInvalidated products: Set()[0m
+[0m[[0m[0mdebug[0m] [0m[0mExternal API changes: API Changes: Set()[0m
+[0m[[0m[0mdebug[0m] [0m[0mModified binary dependencies: Set()[0m
+[0m[[0m[0mdebug[0m] [0m[0mInitial directly invalidated classes: Set(iFu.common.MicroOp, iFu.backend.DMW, iFu.iFuCore, iFu.backend.RobIO, iFu.debugCommit, iFu.backend.TVAL, iFu.backend.TCFG, iFu.backend.TLBELO, iFu.backend.PRMD, iFu.backend.TLBEHI, iFu.backend.CSRFile, iFu.backend.CSRReg, iFu.backend.Rob, iFu.backend.ASID, iFu.common.CtrlSignals, iFu.backend.CRMD, iFu.backend.EUEN, iFu.backend.TLBIDX, iFu.backend.ESTAT)[0m
+[0m[[0m[0mdebug[0m] [0m[0mSources indirectly invalidated by:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	product: Set()[0m
+[0m[[0m[0mdebug[0m] [0m[0m	binary dep: Set()[0m
+[0m[[0m[0mdebug[0m] [0m[0m	external source: Set()[0m
+[0m[[0m[0mdebug[0m] [0m[0mAll initially invalidated classes: Set(iFu.common.MicroOp, iFu.backend.DMW, iFu.iFuCore, iFu.backend.RobIO, iFu.debugCommit, iFu.backend.TVAL, iFu.backend.TCFG, iFu.backend.TLBELO, iFu.backend.PRMD, iFu.backend.TLBEHI, iFu.backend.CSRFile, iFu.backend.CSRReg, iFu.backend.Rob, iFu.backend.ASID, iFu.common.CtrlSignals, iFu.backend.CRMD, iFu.backend.EUEN, iFu.backend.TLBIDX, iFu.backend.ESTAT)[0m
+[0m[[0m[0mdebug[0m] [0m[0mAll initially invalidated sources:Set(${BASE}/src/main/scala/backend/csr/CSRs.scala, ${BASE}/src/main/scala/common/MicroOp.scala, ${BASE}/src/main/scala/backend/rob.scala, ${BASE}/src/main/scala/iFuCore.scala)[0m
+[0m[[0m[0mdebug[0m] [0m[0mInitial set of included nodes: iFu.common.MicroOp, iFu.backend.DMW, iFu.iFuCore, iFu.backend.RobIO, iFu.debugCommit, iFu.backend.TVAL, iFu.backend.TCFG, iFu.backend.TLBELO, iFu.backend.PRMD, iFu.backend.TLBEHI, iFu.backend.CSRFile, iFu.backend.CSRReg, iFu.backend.Rob, iFu.backend.ASID, iFu.common.CtrlSignals, iFu.backend.CRMD, iFu.backend.EUEN, iFu.backend.TLBIDX, iFu.backend.ESTAT[0m
+[0m[[0m[0mdebug[0m] [0m[0mcompilation cycle 1[0m
+[0m[[0m[0minfo[0m] [0m[0mcompiling 4 Scala sources to /mnt/i/LACPU/chiplab/target/scala-2.13/classes ...[0m
+[0m[[0m[0mdebug[0m] [0m[0mGetting org.scala-sbt:compiler-bridge_2.13:1.9.0:compile for Scala 2.13.10[0m
+[0m[[0m[0mdebug[0m] [0m[0m[zinc] Running cached compiler 42e86126 for Scala compiler version 2.13.10[0m
+[0m[[0m[0mdebug[0m] [0m[0m[zinc] The Scala compiler is invoked with:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-language:reflectiveCalls[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-deprecation[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-feature[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-Xcheckinit[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-Xplugin:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/edu/berkeley/cs/chisel3-plugin_2.13.10/3.6.0/chisel3-plugin_2.13.10-3.6.0.jar[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-bootclasspath[0m
+[0m[[0m[0mdebug[0m] [0m[0m	/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala-library/2.13.10/scala-library-2.13.10.jar[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-classpath[0m
+[0m[[0m[0mdebug[0m] [0m[0m	/mnt/i/LACPU/chiplab/target/scala-2.13/classes:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/edu/berkeley/cs/chisel3_2.13/3.6.0/chisel3_2.13-3.6.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/edu/berkeley/cs/chisel3-macros_2.13/3.6.0/chisel3-macros_2.13-3.6.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/edu/berkeley/cs/chisel3-core_2.13/3.6.0/chisel3-core_2.13-3.6.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala-reflect/2.13.10/scala-reflect-2.13.10.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/upickle_2.13/2.0.0/upickle_2.13-2.0.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/edu/berkeley/cs/firrtl_2.13/1.6.0/firrtl_2.13-1.6.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/os-lib_2.13/0.8.1/os-lib_2.13-0.8.1.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/ujson_2.13/2.0.0/ujson_2.13-2.0.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/upack_2.13/2.0.0/upack_2.13-2.0.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/upickle-implicits_2.13/2.0.0/upickle-implicits_2.13-2.0.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/antlr/antlr4-runtime/4.9.3/antlr4-runtime-4.9.3.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/google/protobuf/protobuf-java/3.18.3/protobuf-java-3.18.3.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/scopt/scopt_2.13/3.7.1/scopt_2.13-3.7.1.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/net/jcazevedo/moultingyaml_2.13/0.4.2/moultingyaml_2.13-0.4.2.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/json4s/json4s-native_2.13/4.0.6/json4s-native_2.13-4.0.6.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/apache/commons/commons-text/1.10.0/commons-text-1.10.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/io/github/alexarchambault/data-class_2.13/0.2.5/data-class_2.13-0.2.5.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/modules/scala-parallel-collections_2.13/1.0.4/scala-parallel-collections_2.13-1.0.4.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/geny_2.13/0.7.1/geny_2.13-0.7.1.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/upickle-core_2.13/2.0.0/upickle-core_2.13-2.0.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/nscala-time/nscala-time_2.13/2.22.0/nscala-time_2.13-2.22.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/yaml/snakeyaml/1.26/snakeyaml-1.26.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/json4s/json4s-core_2.13/4.0.6/json4s-core_2.13-4.0.6.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/json4s/json4s-native-core_2.13/4.0.6/json4s-native-core_2.13-4.0.6.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.12.0/commons-lang3-3.12.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/joda-time/joda-time/2.10.1/joda-time-2.10.1.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/joda/joda-convert/2.2.0/joda-convert-2.2.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/json4s/json4s-ast_2.13/4.0.6/json4s-ast_2.13-4.0.6.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/json4s/json4s-scalap_2.13/4.0.6/json4s-scalap_2.13-4.0.6.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/thoughtworks/paranamer/paranamer/2.8/paranamer-2.8.jar[0m
+[0m[[0m[0mdebug[0m] [0m[0mInvalidating (transitively) by inheritance from iFu.common.MicroOp...[0m
+[0m[[0m[0mdebug[0m] [0m[0mInitial set of included nodes: iFu.common.MicroOp[0m
+[0m[[0m[0mdebug[0m] [0m[0mInvalidated by transitive inheritance dependency: Set(iFu.common.MicroOp)[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.util.GetNewUopAndBrMask. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.RenameStage. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.DecodeUnit. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.IssueSlotIO. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.iFuCore. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.frontend.FetchBufferResp. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.RobIO. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.MSHR. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.DecodeUnitIO. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.common.Exception. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.debugDiff. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.BasicDispatcher. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.PredRenameStage. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.BusyTable. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.Lsu. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.MSHRFile. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.RegisterReadDecode. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.frontend.FetchBuffer. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.AbsRenameStage. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.WritePort. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.common.ExeUnitResp. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.DivUnit. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.common.BrResolutionInfo. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.frontend.FetchTargetQueue. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.HasUop. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.MemAddrCalcUnit. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.PipelinedFuncUnit. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.util.IsKilledByBranch. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.IterativeFuncUnit. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.common.CommitSignals. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.PipelinedMulUnit. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.ALUExeUnit. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mThe following modified names cause invalidation of iFu.backend.Rob: [UsedName(vaddrWriteEnable,[Default])][0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.common.DCacheResp. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.common.DcacheParameters. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.IssueUnitAgeOrdered. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.util.GetNewBrMask. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.IssueSlot. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.BranchMaskGenerationLogic. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.RegisterRead. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.DispatchIO. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.common.FuncUnitResp. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.common.Consts. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.StoreInfogen. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.RenameMapTable. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.util.UpdateBrMask. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.common.DCacheReq. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.AbsIssueUnit. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.IssueUnitIO. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.LSUCoreIO. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.ALUUnit. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.NonBlockingDcache. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.FreeList. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.common.FuncUnitReq. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mChange NamesChange(iFu.common.MicroOp,ModifiedNames(changes = UsedName(instr_misalign,[Default]), UsedName(csrAddr,[Default]), UsedName(vaddrWriteEnable,[Default]))) invalidates 2 classes due to The iFu.common.MicroOp has the following regular definitions changed:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	UsedName(instr_misalign,[Default]), UsedName(csrAddr,[Default]), UsedName(vaddrWriteEnable,[Default]).[0m
+[0m[[0m[0mdebug[0m] [0m[0m  > by transitive inheritance: Set(iFu.common.MicroOp)[0m
+[0m[[0m[0mdebug[0m] [0m[0m  > [0m
+[0m[[0m[0mdebug[0m] [0m[0m  > by member reference: Set(iFu.backend.Rob)[0m
+[0m[[0m[0mdebug[0m] [0m[0m        [0m
+[0m[[0m[0mdebug[0m] [0m[0mInvalidating (transitively) by inheritance from iFu.iFuCore...[0m
+[0m[[0m[0mdebug[0m] [0m[0mInitial set of included nodes: iFu.iFuCore[0m
+[0m[[0m[0mdebug[0m] [0m[0mInvalidated by transitive inheritance dependency: Set(iFu.iFuCore)[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.Main. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mChange NamesChange(iFu.iFuCore,ModifiedNames(changes = UsedName(csr_register,[Default]), UsedName(csr,[Default]), UsedName(io,[Default]))) invalidates 1 classes due to The iFu.iFuCore has the following regular definitions changed:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	UsedName(csr_register,[Default]), UsedName(csr,[Default]), UsedName(io,[Default]).[0m
+[0m[[0m[0mdebug[0m] [0m[0m  > by transitive inheritance: Set(iFu.iFuCore)[0m
+[0m[[0m[0mdebug[0m] [0m[0m  > [0m
+[0m[[0m[0mdebug[0m] [0m[0m  > [0m
+[0m[[0m[0mdebug[0m] [0m[0m        [0m
+[0m[[0m[0mdebug[0m] [0m[0mInvalidating (transitively) by inheritance from iFu.common.CtrlSignals...[0m
+[0m[[0m[0mdebug[0m] [0m[0mInitial set of included nodes: iFu.common.CtrlSignals[0m
+[0m[[0m[0mdebug[0m] [0m[0mInvalidated by transitive inheritance dependency: Set(iFu.common.CtrlSignals)[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.Lsu. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mThe following modified names cause invalidation of iFu.backend.RegisterReadDecode: [UsedName(csr_cmd,[Default])][0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.DivUnit. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.MemAddrCalcUnit. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.PipelinedMulUnit. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.common.Consts. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mNone of the modified names appears in source file of iFu.backend.ALUUnit. This dependency is not being considered for invalidation.[0m
+[0m[[0m[0mdebug[0m] [0m[0mChange NamesChange(iFu.common.CtrlSignals,ModifiedNames(changes = UsedName(csr_cmd,[Default]))) invalidates 2 classes due to The iFu.common.CtrlSignals has the following regular definitions changed:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	UsedName(csr_cmd,[Default]).[0m
+[0m[[0m[0mdebug[0m] [0m[0m  > by transitive inheritance: Set(iFu.common.CtrlSignals)[0m
+[0m[[0m[0mdebug[0m] [0m[0m  > [0m
+[0m[[0m[0mdebug[0m] [0m[0m  > by member reference: Set(iFu.backend.RegisterReadDecode)[0m
+[0m[[0m[0mdebug[0m] [0m[0m        [0m
+[0m[[0m[0mdebug[0m] [0m[0mInvalidating (transitively) by inheritance from iFu.backend.CSRFile...[0m
+[0m[[0m[0mdebug[0m] [0m[0mInitial set of included nodes: iFu.backend.CSRFile[0m
+[0m[[0m[0mdebug[0m] [0m[0mInvalidated by transitive inheritance dependency: Set(iFu.backend.CSRFile)[0m
+[0m[[0m[0mdebug[0m] [0m[0mThe following modified names cause invalidation of iFu.iFuCore: [UsedName(csr_reg,[Default]), UsedName(io,[Default])][0m
+[0m[[0m[0mdebug[0m] [0m[0mChange NamesChange(iFu.backend.CSRFile,ModifiedNames(changes = UsedName(csr_reg,[Default]), UsedName(io,[Default]))) invalidates 2 classes due to The iFu.backend.CSRFile has the following regular definitions changed:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	UsedName(csr_reg,[Default]), UsedName(io,[Default]).[0m
+[0m[[0m[0mdebug[0m] [0m[0m  > by transitive inheritance: Set(iFu.backend.CSRFile)[0m
+[0m[[0m[0mdebug[0m] [0m[0m  > [0m
+[0m[[0m[0mdebug[0m] [0m[0m  > by member reference: Set(iFu.iFuCore)[0m
+[0m[[0m[0mdebug[0m] [0m[0m        [0m
+[0m[[0m[0mdebug[0m] [0m[0mNew invalidations:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	iFu.backend.RegisterReadDecode[0m
+[0m[[0m[0mdebug[0m] [0m[0m	iFu.backend.Rob[0m
+[0m[[0m[0mdebug[0m] [0m[0mInitial set of included nodes: iFu.backend.RegisterReadDecode, iFu.backend.Rob[0m
+[0m[[0m[0mdebug[0m] [0m[0mIncluding iFu.backend.RegisterRead by iFu.backend.RegisterReadDecode[0m
+[0m[[0m[0mdebug[0m] [0m[0mIncluding iFu.iFuCore by iFu.backend.RegisterRead[0m
+[0m[[0m[0mdebug[0m] [0m[0mIncluding iFu.Main by iFu.iFuCore[0m
+[0m[[0m[0mdebug[0m] [0m[0mPreviously invalidated, but (transitively) depend on new invalidations:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	iFu.iFuCore[0m
+[0m[[0m[0mdebug[0m] [0m[0mFinal step, transitive dependencies:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Set(iFu.iFuCore, iFu.backend.RegisterReadDecode, iFu.backend.Rob)[0m
+[0m[[0m[0mdebug[0m] [0m[0mScala compilation took 15.946734947 s[0m
+[0m[[0m[0mdebug[0m] [0m[0mdone compiling[0m
+[0m[[0m[0mdebug[0m] [0m[0mInitial set of included nodes: iFu.backend.AluRRdDecode, iFu.backend.RRdDecodeConstants, iFu.backend.RRdCtrlSigs, iFu.iFuCore, iFu.backend.RobIO, iFu.backend.JmpRRdDecode, iFu.debugCommit, iFu.backend.RegisterReadDecode, iFu.backend.CsrRRdDecode, iFu.backend.Rob, iFu.backend.MemRRdDecode, iFu.backend.MulDivRRdDecode[0m
+[0m[[0m[0mdebug[0m] [0m[0mIncluding iFu.backend.JmpRRdDecode by iFu.backend.RRdDecodeConstants[0m
+[0m[[0m[0mdebug[0m] [0m[0mIncluding iFu.backend.CsrRRdDecode by iFu.backend.RRdDecodeConstants[0m
+[0m[[0m[0mdebug[0m] [0m[0mIncluding iFu.backend.MemRRdDecode by iFu.backend.RRdDecodeConstants[0m
+[0m[[0m[0mdebug[0m] [0m[0mIncluding iFu.backend.MulDivRRdDecode by iFu.backend.RRdDecodeConstants[0m
+[0m[[0m[0mdebug[0m] [0m[0mcompilation cycle 2[0m
+[0m[[0m[0minfo[0m] [0m[0mcompiling 3 Scala sources to /mnt/i/LACPU/chiplab/target/scala-2.13/classes ...[0m
+[0m[[0m[0mdebug[0m] [0m[0mGetting org.scala-sbt:compiler-bridge_2.13:1.9.0:compile for Scala 2.13.10[0m
+[0m[[0m[0mdebug[0m] [0m[0m[zinc] Running cached compiler 7e4a96b6 for Scala compiler version 2.13.10[0m
+[0m[[0m[0mdebug[0m] [0m[0m[zinc] The Scala compiler is invoked with:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-language:reflectiveCalls[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-deprecation[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-feature[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-Xcheckinit[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-Xplugin:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/edu/berkeley/cs/chisel3-plugin_2.13.10/3.6.0/chisel3-plugin_2.13.10-3.6.0.jar[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-bootclasspath[0m
+[0m[[0m[0mdebug[0m] [0m[0m	/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala-library/2.13.10/scala-library-2.13.10.jar[0m
+[0m[[0m[0mdebug[0m] [0m[0m	-classpath[0m
+[0m[[0m[0mdebug[0m] [0m[0m	/mnt/i/LACPU/chiplab/target/scala-2.13/classes:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/edu/berkeley/cs/chisel3_2.13/3.6.0/chisel3_2.13-3.6.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/edu/berkeley/cs/chisel3-macros_2.13/3.6.0/chisel3-macros_2.13-3.6.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/edu/berkeley/cs/chisel3-core_2.13/3.6.0/chisel3-core_2.13-3.6.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala-reflect/2.13.10/scala-reflect-2.13.10.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/upickle_2.13/2.0.0/upickle_2.13-2.0.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/edu/berkeley/cs/firrtl_2.13/1.6.0/firrtl_2.13-1.6.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/os-lib_2.13/0.8.1/os-lib_2.13-0.8.1.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/ujson_2.13/2.0.0/ujson_2.13-2.0.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/upack_2.13/2.0.0/upack_2.13-2.0.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/upickle-implicits_2.13/2.0.0/upickle-implicits_2.13-2.0.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/antlr/antlr4-runtime/4.9.3/antlr4-runtime-4.9.3.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/google/protobuf/protobuf-java/3.18.3/protobuf-java-3.18.3.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/scopt/scopt_2.13/3.7.1/scopt_2.13-3.7.1.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/net/jcazevedo/moultingyaml_2.13/0.4.2/moultingyaml_2.13-0.4.2.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/json4s/json4s-native_2.13/4.0.6/json4s-native_2.13-4.0.6.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/apache/commons/commons-text/1.10.0/commons-text-1.10.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/io/github/alexarchambault/data-class_2.13/0.2.5/data-class_2.13-0.2.5.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/modules/scala-parallel-collections_2.13/1.0.4/scala-parallel-collections_2.13-1.0.4.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/geny_2.13/0.7.1/geny_2.13-0.7.1.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/lihaoyi/upickle-core_2.13/2.0.0/upickle-core_2.13-2.0.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/github/nscala-time/nscala-time_2.13/2.22.0/nscala-time_2.13-2.22.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/yaml/snakeyaml/1.26/snakeyaml-1.26.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/json4s/json4s-core_2.13/4.0.6/json4s-core_2.13-4.0.6.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/json4s/json4s-native-core_2.13/4.0.6/json4s-native-core_2.13-4.0.6.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/apache/commons/commons-lang3/3.12.0/commons-lang3-3.12.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/joda-time/joda-time/2.10.1/joda-time-2.10.1.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/joda/joda-convert/2.2.0/joda-convert-2.2.0.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/json4s/json4s-ast_2.13/4.0.6/json4s-ast_2.13-4.0.6.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/org/json4s/json4s-scalap_2.13/4.0.6/json4s-scalap_2.13-4.0.6.jar:/home/liusiyuan/.cache/coursier/v1/https/repo1.maven.org/maven2/com/thoughtworks/paranamer/paranamer/2.8/paranamer-2.8.jar[0m
+[0m[[0m[0mdebug[0m] [0m[0mNew invalidations:[0m
+[0m[[0m[0mdebug[0m] [0m[0mInitial set of included nodes: [0m
+[0m[[0m[0mdebug[0m] [0m[0mPreviously invalidated, but (transitively) depend on new invalidations:[0m
+[0m[[0m[0mdebug[0m] [0m[0mFinal step, transitive dependencies:[0m
+[0m[[0m[0mdebug[0m] [0m[0m	Set()[0m
+[0m[[0m[0mdebug[0m] [0m[0mNo classes were invalidated.[0m
+[0m[[0m[0mdebug[0m] [0m[0mScala compilation took 6.805607449 s[0m
+[0m[[0m[0mdebug[0m] [0m[0mdone compiling[0m

@@ -1,0 +1,5 @@
+.vscode
+.idea
+iFu/IP/myCPU/iFuCore.sv
+iFu/IP/myCPU/iFuCore.fir
+iFu/IP/myCPU/iFuCore.anno.json

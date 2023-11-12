@@ -1,0 +1,7 @@
+[0m[[0m[31merror[0m] [0m[0m/mnt/i/LACPU/chiplab/src/main/scala/backend/rob.scala:293:51: value vaddrWriteEnable is not a member of iFu.common.MicroOp[0m
+[0m[[0m[31merror[0m] [0m[0m    io.com_xcpt.bits.vaddrWriteEnable := rXcptUop.vaddrWriteEnable[0m
+[0m[[0m[31merror[0m] [0m[0m                                                  ^[0m
+[0m[[0m[31merror[0m] [0m[0m/mnt/i/LACPU/chiplab/src/main/scala/backend/rob.scala:326:48: value vaddrWriteEnable is not a member of iFu.common.MicroOp[0m
+[0m[[0m[31merror[0m] [0m[0m    io.flush.bits.vaddrWriteEnable := flushUop.vaddrWriteEnable[0m
+[0m[[0m[31merror[0m] [0m[0m                                               ^[0m
+[0m[[0m[31merror[0m] [0m[0mtwo errors found[0m

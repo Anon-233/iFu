@@ -1,0 +1,50 @@
+%Warning-EOFNEWLINE: /mnt/i/LACPU/chiplab/IP/myCPU/mycpu_top.v:258:7: Missing newline at end of file (POSIX 3.206).
+                                                                    : ... Suggest add newline.
+  258 | `endif
+      |       ^
+                     ... For warning description see https://verilator.org/warn/EOFNEWLINE?v=4.226
+                     ... Use "/* verilator lint_off EOFNEWLINE */" and lint_on around source to disable this message.
+%Error: /mnt/i/LACPU/chiplab/IP/myCPU/common.sv:4:10: Cannot find include file: include/config.sv
+    4 | `include "include/config.sv" 
+      |          ^~~~~~~~~~~~~~~~~~~
+        ... Looked in:
+             /mnt/i/LACPU/chiplab/IP/myCPU/include/config.sv
+             /mnt/i/LACPU/chiplab/IP/myCPU/include/config.sv.v
+             /mnt/i/LACPU/chiplab/IP/myCPU/include/config.sv.sv
+             /mnt/i/LACPU/chiplab/IP/CONFREG/include/config.sv
+             /mnt/i/LACPU/chiplab/IP/CONFREG/include/config.sv.v
+             /mnt/i/LACPU/chiplab/IP/CONFREG/include/config.sv.sv
+             /mnt/i/LACPU/chiplab/IP/AXI_DELAY_RAND/include/config.sv
+             /mnt/i/LACPU/chiplab/IP/AXI_DELAY_RAND/include/config.sv.v
+             /mnt/i/LACPU/chiplab/IP/AXI_DELAY_RAND/include/config.sv.sv
+             /mnt/i/LACPU/chiplab/IP/AXI_SRAM_BRIDGE/include/config.sv
+             /mnt/i/LACPU/chiplab/IP/AXI_SRAM_BRIDGE/include/config.sv.v
+             /mnt/i/LACPU/chiplab/IP/AXI_SRAM_BRIDGE/include/config.sv.sv
+             /mnt/i/LACPU/chiplab/IP/AMBA/include/config.sv
+             /mnt/i/LACPU/chiplab/IP/AMBA/include/config.sv.v
+             /mnt/i/LACPU/chiplab/IP/AMBA/include/config.sv.sv
+             /mnt/i/LACPU/chiplab/IP/APB_DEV/include/config.sv
+             /mnt/i/LACPU/chiplab/IP/APB_DEV/include/config.sv.v
+             /mnt/i/LACPU/chiplab/IP/APB_DEV/include/config.sv.sv
+             /mnt/i/LACPU/chiplab/IP/APB_DEV/URT/include/config.sv
+             /mnt/i/LACPU/chiplab/IP/APB_DEV/URT/include/config.sv.v
+             /mnt/i/LACPU/chiplab/IP/APB_DEV/URT/include/config.sv.sv
+             /mnt/i/LACPU/chiplab/IP/APB_DEV/NAND/include/config.sv
+             /mnt/i/LACPU/chiplab/IP/APB_DEV/NAND/include/config.sv.v
+             /mnt/i/LACPU/chiplab/IP/APB_DEV/NAND/include/config.sv.sv
+             ../testbench/include/config.sv
+             ../testbench/include/config.sv.v
+             ../testbench/include/config.sv.sv
+             /mnt/i/LACPU/chiplab/chip/soc_demo/sim/include/config.sv
+             /mnt/i/LACPU/chiplab/chip/soc_demo/sim/include/config.sv.v
+             /mnt/i/LACPU/chiplab/chip/soc_demo/sim/include/config.sv.sv
+             include/config.sv
+             include/config.sv.v
+             include/config.sv.sv
+             obj_dir/include/config.sv
+             obj_dir/include/config.sv.v
+             obj_dir/include/config.sv.sv
+%Warning-EOFNEWLINE: /mnt/i/LACPU/chiplab/IP/myCPU/CBusArbiter.sv:79:7: Missing newline at end of file (POSIX 3.206).
+                                                                      : ... Suggest add newline.
+   79 | `endif
+      |       ^

@@ -1,0 +1,68 @@
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.PassExceptions: [0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.addr <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.exception <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.bits.pc_lob <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.in_pc <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.rj <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.bits.vaddrWriteEnable <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.is_ertn <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.bits.ftq_idx <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.rd <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.valid <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.ext_int <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.cmd <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.bits.cause <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.bits.flush_typ <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.bits.badvaddr <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.exevalid <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.PassException: 16 errors detected![0m
+[0m[[0m[31merror[0m] [0m[0m(Compile / [31mrun[0m) firrtl.passes.PassExceptions: [0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.addr <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.exception <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.bits.pc_lob <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.in_pc <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.rj <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.bits.vaddrWriteEnable <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.is_ertn <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.bits.ftq_idx <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.rd <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.valid <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.ext_int <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.cmd <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.bits.cause <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.bits.flush_typ <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.com_xcpt.bits.badvaddr <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.CheckInitialization$RefNotInitializedException:  @[src/main/scala/iFuCore.scala 103:21] : [module iFuCore]  Reference csr is not fully initialized.[0m
+[0m[[0m[31merror[0m] [0m[0m   : csr.io.exevalid <= VOID[0m
+[0m[[0m[31merror[0m] [0m[0mfirrtl.passes.PassException: 16 errors detected![0m
