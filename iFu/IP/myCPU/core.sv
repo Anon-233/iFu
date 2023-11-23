@@ -191,7 +191,7 @@ logic [31:0] csr_dmw1;
         .io_register_28 (register[28]),
         .io_register_29 (register[29]),
         .io_register_30 (register[30]),
-        .io_register_31 (register[31])
+        .io_register_31 (register[31]),
 
         .io_csr_register_crmd_r0 (csr_crmd[31:9]),
         .io_csr_register_crmd_datm (csr_crmd[8:7]),
@@ -202,8 +202,8 @@ logic [31:0] csr_dmw1;
         .io_csr_register_crmd_plv (csr_crmd[1:0]),
 
         .io_csr_register_prmd_r0 (csr_prmd[31:3]),
-        .io_csr_register_pie (csr_prmd[2]),
-        .io_csr_register_pplv (csr_prmd[1:0]),
+        .io_csr_register_prmd_pie (csr_prmd[2]),
+        .io_csr_register_prmd_pplv (csr_prmd[1:0]),
 
         .io_csr_register_euen_r0 (csr_euen[31:1]),
         .io_csr_register_euen_fpe (csr_euen[0]),
@@ -339,7 +339,7 @@ logic [31:0] csr_dmw1;
         .io_csr_register_dmw1_plv0 (csr_dmw1[1])
     );
 
-    CbusArbiter carib(
+    CBusArbiter carib(
         .clk (clk),
         .reset(reset),
         .ireqs ({icreq, dcreq}),
@@ -359,7 +359,7 @@ DifftestInstrCommit DifftestInstrCommit0(
     .coreid             (0              ),
     .index              (0              ),
     .valid              (valid[0]      ),
-    .pc                 (pc0         ),
+    .pc                 (pc[0]         ),
     .instr              (instr[0]       ),
     .skip               (0              ),
     .is_TLBFILL         (tlbFillEn[0] ),//tlbfill指令使能，当前指令为tlbfill指令时，该信号拉高
@@ -541,7 +541,7 @@ DifftestCSRRegState DifftestCSRRegState(
     .crmd               (csr_crmd    ),
     .prmd               (csr_prmd    ),
     .euen               (0       ),
-    .ecfg               (csr_ectl    ),
+    .ecfg               (csr_ecfg    ),
     .estat              (csr_estat   ),
     .era                (csr_era     ),
     .badv               (csr_badv    ),

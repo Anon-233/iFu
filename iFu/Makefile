@@ -29,7 +29,7 @@ clean:
 	rm -rf $(gen_dir)/iFuCore.sv $(out_dir) test_run_dir
 
 run:
-	$(CHIPLAB_HOME)/sims/verilator/run_prog/configure.sh --run --dump-fst func/func_lab$(TEST) && \
+	$(CHIPLAB_HOME)/sims/verilator/run_prog/configure.sh --run func/func_lab$(TEST) && \
 	make -C $(CHIPLAB_HOME)/sims/verilator/run_prog
 
 .PHONY: clean log split

@@ -4,4 +4,7 @@ target
 project
 .vscode
 .metals
-log
+iFu/sims/verilator/run_prog/obj_dir/*
+iFu/software/func/func_lab14/inst/*
+iFu/sims/verilator/run_prog/obj/*
+iFu/sims/verilator/run_prog
