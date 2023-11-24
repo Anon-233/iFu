@@ -198,7 +198,7 @@ object XDecode extends DecodeTable  {
 //     val default_table : List[BitPat] = List(N, )
 
  }
-// object WeirdDecode extends DecodeTable {
+ object WeirdDecode extends DecodeTable {
                      //                                                                                          wakeup_delay
                  //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
                  //      |  micro-code                                                |    uses_ldg               |   |  is_br
@@ -209,13 +209,13 @@ object XDecode extends DecodeTable  {
                  //      |     |              |        |       |       |              |    |  |  |  |  |          |   |  |  |  |  |  |
                  //      |     |              |        |       |       |    rs2_type  |    |  |  |  |  |          |   |  |  |  |  |  |
                  //      |     |              |        |       |       |       |      |    |  |  |  |  |  mem_cmd |   |  |  |  |  |  |
-//      val table: Array[(BitPat, List[BitPat])] = Array( //      |       |       |      |    |  |  |  |  |    |     |   |  |  |  |  |  |
-// //         IDLE    -> List(Y, uopIDLE),
-// //         CACOP   -> List(Y, uopCACOP     , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N, M_X, 0.U, N, N, N, N, N, CSR_N),
+      val table: Array[(BitPat, List[BitPat])] = Array( //      |       |       |      |    |  |  |  |  |    |     |   |  |  |  |  |  |
+//          IDLE    -> List(Y, uopIDLE),
+          CACOP   -> List(Y, uopNOP       , IQT_MEM, FU_X  , RT_X  , RT_X  , RT_X  , immX  , N, N, N, N, Y, /*M_X  ,*/  N, N, N, Y, Y, CSR_N)
 //          RDCNTIDW-> List(Y, uopRDCNTIDW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, 0.U, Y, N, N, N, N, CSR_N),
 //          RDCNTVLW-> List(Y, uopRDCNTVLW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, 0.U, Y, N, N, N, N, CSR_N),
 //          RDCNTVHW-> List(Y, uopRDCNTVHW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, 0.U, Y, N, N, N, N, CSR_N)
-//      )
+      )
 // }
 
 
@@ -253,6 +253,7 @@ class DecodeUnit extends CoreModule {
 
     var decode_table = XDecode.table
     decode_table ++= CSRDecode.table
+    decode_table ++= WeirdDecode.table
     // val interrupt_table = ExceptionInstrDecode.table
     // if(usingCSR) decode_table ++= CSRDecode.table
     // if(usingTLB) decode_table ++= TLBDeocde.table
