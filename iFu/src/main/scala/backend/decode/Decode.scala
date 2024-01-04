@@ -216,7 +216,7 @@ object XDecode extends DecodeTable  {
 //          RDCNTVLW-> List(Y, uopRDCNTVLW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, 0.U, Y, N, N, N, N, CSR_N),
 //          RDCNTVHW-> List(Y, uopRDCNTVHW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N, 0.U, Y, N, N, N, N, CSR_N)
       )
-// }
+}
 
 
 //TODO 修改CSRFile
