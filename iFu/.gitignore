@@ -1,7 +1,7 @@
 .idea
 .bsp
-target
-project
 .vscode
 .metals
-log
+iFu/build
+target
+project
