@@ -100,6 +100,7 @@ class MicroOp extends CoreBundle {
     def rf_wen: Bool                = dst_rtype =/= RT_X
     def unsafe: Bool                = use_ldq || (use_stq && !is_fence) || isBr || isJalr
     def fu_code_is(_fu: UInt): Bool = (fuCode & _fu) =/= 0.U
+    def is_nop: Bool                = uopc === uopNOP
 }
 
 class CtrlSignals extends CoreBundle {

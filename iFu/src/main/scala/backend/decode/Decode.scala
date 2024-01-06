@@ -85,7 +85,7 @@ object XDecode extends DecodeTable  {
                 //      |  |                 |        |       |       |       |      |     |  |  |  |  |  mem_cmd     |  |  |  |  |    |
     val table: Array[(BitPat, List[BitPat])] = Array(//       |       |       |      |     |  |  |  |  |    |         |  |  |  |  |    |
 
-       NEMU_TRAP-> List(Y, uopNOP       , IQT_INT, FU_ALU, RT_X  , RT_X  , RT_X  , immX  , N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),
+       NEMU_TRAP-> List(Y, uopNOP       , IQT_INT, FU_X  , RT_X  , RT_X  , RT_X  , immX  , N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),
 
         LLW     -> List(Y, uopLLW       , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS14, Y, N, N, N, N, /*M_XLL,*/  N, N, N, Y, Y, CSR_N),
         SCW     -> List(Y, uopAMO_AG    , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS14, N, Y, Y, N, N, /*M_XSC,*/  N, N, N, Y, Y, CSR_N),
