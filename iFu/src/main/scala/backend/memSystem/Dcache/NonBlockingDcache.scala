@@ -240,7 +240,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     //清掉里面所有的load指令
     mshrs.io.fenceClear := fenceValid
     // 只要meta没有dirty，就可以回应fence，不需要管流水线和mshr状态（如果里面有没做完的指令，lsu肯定非空，unique仍然会停留在dispatch）
-    io.lsu.ordered := !fenceMetaRead.resp.bits.hasDirty
+    io.lsu.ordered := /* !fenceMetaRead.resp.bits.hasDirty */ true.B
 
     // TODO prefetch
 
