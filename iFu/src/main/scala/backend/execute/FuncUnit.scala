@@ -43,28 +43,38 @@ abstract class PipelinedFuncUnit (
     isAluUnit = isAluUnit,
     isMemAddrCalcUnit = isMemAddrCalcUnit
 ) {
-    io.resp.bits.rd  := io.req.bits.rs1Data
-    io.resp.bits.rj  := io.req.bits.rs2Data
     io.req.ready := true.B
     var rValids: Vec[Bool]  = null
     var rUops: Vec[MicroOp] = null
+    var rRd: Vec[UInt]      = null
+    var rRj: Vec[UInt]      = null
+
     if (numStages > 0) {
         rValids = RegInit(VecInit(Seq.fill(numStages){ false.B }))
         rUops = Reg(Vec(numStages, new MicroOp()))
+        rRd = RegInit(VecInit(Seq.fill(numStages){ 0.U }))
+        rRj = RegInit(VecInit(Seq.fill(numStages){ 0.U }))
 
         rValids(0) := io.req.valid && !IsKilledByBranch(io.brUpdate, io.req.bits.uop) && !io.req.bits.kill
         rUops(0) := io.req.bits.uop
         rUops(0).brMask := GetNewBrMask(io.brUpdate, io.req.bits.uop)
+        rRd(0) := io.req.bits.rs1Data
+        rRj(0) := io.req.bits.rs2Data
+
         for (i <- 1 until numStages) {
             rValids(i) := rValids(i - 1) && !IsKilledByBranch(io.brUpdate, rUops(i-1)) && !io.req.bits.kill
             rUops(i) := rUops(i - 1)
             rUops(i).brMask := GetNewBrMask(io.brUpdate, rUops(i - 1))
+            rRd(i) := rRd(i - 1)
+            rRj(i) := rRj(i - 1)
         }
 
         io.resp.valid := rValids(numStages - 1) && !IsKilledByBranch(io.brUpdate, rUops(numStages - 1)) && !io.req.bits.kill
         io.resp.bits.predicated := false.B  // default
         io.resp.bits.uop := rUops(numStages - 1)
         io.resp.bits.uop.brMask := GetNewBrMask(io.brUpdate, rUops(numStages - 1))
+        io.resp.bits.rd := rRd(numStages - 1)
+        io.resp.bits.rj := rRj(numStages - 1)
 
         io.bypass(0).bits.uop := io.req.bits.uop
         for (i <- 1 until numStages) {
@@ -77,6 +87,8 @@ abstract class PipelinedFuncUnit (
         io.resp.bits.predicated := false.B  // default
         io.resp.bits.uop := io.req.bits.uop
         io.resp.bits.uop.brMask := GetNewBrMask(io.brUpdate, io.req.bits.uop)
+        io.resp.bits.rd := io.req.bits.rs1Data
+        io.resp.bits.rj := io.req.bits.rs2Data
     }
 }
 
