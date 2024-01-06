@@ -2,7 +2,7 @@ default: compile
 
 base_dir = $(abspath .)
 src_dir = $(base_dir)/src/main
-gen_dir = $(base_dir)/nscscc-la/vsrc/pipeline
+gen_dir = $(base_dir)/build
 out_dir = $(base_dir)/outputs
 
 SPLIT = true
