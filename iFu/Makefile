@@ -21,6 +21,6 @@ log:
 	make split > ./log
 
 clean:
-	rm -rf $(gen_dir)/iFuCore.sv $(out_dir) test_run_dir
+	rm -rf $(gen_dir)/iFuCore.* $(out_dir) test_run_dir
 
 .PHONY: clean log split
