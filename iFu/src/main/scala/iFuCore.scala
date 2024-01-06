@@ -29,6 +29,7 @@ class iFuCore extends CoreModule {
         val dresp = Input(new CBusResp)
         val commit = Output(new debugCommit)
         val register = Output(Vec(32 , UInt(32.W) ))
+        val csr_register = Output(new CSRReg)
     })
 /*-----------------------------*/
 
@@ -100,6 +101,8 @@ class iFuCore extends CoreModule {
 
     val rob = Module(new Rob(numWritePorts))
     val csr = Module(new CSRFile)
+
+    io.csr_register := csr.io.reg
 
 /*-----------------------------*/
 
@@ -897,38 +900,39 @@ class iFuCore extends CoreModule {
     lregOut := diff.io.lregOut   //用这个接difftest，或者进入后端debugDiff文件中接入
     io.register := lregOut
 
-    val rawCommit = Wire(new debugCommit)
+    val rawCommit = WireInit(0.U.asTypeOf(new debugCommit))
+
+    val cmtZipper = Module(new cmtZipper)
 
     for(w <- 0 until robParameters.retireWidth) {
-        rawCommit.debug_pc(w) := RegNext(rob.io.commit.uops(w).debug_pc , 0.U)
-        rawCommit.debug_ldst(w) := RegNext(rob.io.commit.uops(w).ldst, 0.U)
-        rawCommit.debug_insts(w) := RegNext(rob.io.commit.uops(w).debug_inst,0.U)
-        rawCommit.debug_wdata(w) := RegNext(rob.io.commit.debug_wdata(w), 0.U)
-        rawCommit.debug_wen(w) := RegNext(rob.io.commit.uops(w).ldst_val && rob.io.commit.arch_valids(w), 0.U)
-        rawCommit.arch_valids(w) := RegNext(rob.io.commit.arch_valids(w), 0.U)
+        rawCommit.debug_pc(w) := rob.io.commit.uops(w).debug_pc
+        rawCommit.debug_ldst(w) := rob.io.commit.uops(w).ldst
+        rawCommit.debug_insts(w) := rob.io.commit.uops(w).debug_inst
+        rawCommit.debug_wdata(w) := rob.io.commit.debug_wdata(w)
+        rawCommit.debug_wen(w) := rob.io.commit.uops(w).ldst_val && rob.io.commit.arch_valids(w)
+        rawCommit.arch_valids(w) := rob.io.commit.arch_valids(w)
     }
 
 //    var lastidx = 0.U
 
+    cmtZipper.io.rawCommit := rawCommit
+
     io.commit := 0.U.asTypeOf(new debugCommit)
+
+    io.commit := cmtZipper.io.zippedCommit
     
-    var commitIdx = 0
-    when(rawCommit.arch_valids.reduce(_|_)){
-        for (w <- 0 until robParameters.retireWidth) {
-            when(rawCommit.arch_valids(w)){
-                io.commit.debug_pc(commitIdx)   := rawCommit.debug_pc(w)
-                io.commit.debug_ldst(commitIdx) := rawCommit.debug_ldst(w)
-                io.commit.debug_insts(commitIdx):= rawCommit.debug_insts(w)
-                io.commit.debug_wdata(commitIdx):= rawCommit.debug_wdata(w)
-                io.commit.debug_wen(commitIdx)  := rawCommit.debug_wen(w)
-                io.commit.arch_valids(commitIdx):= rawCommit.arch_valids(w)
-                commitIdx += 1
-            }
-        }
-    }
-
-
-
-    
-
+    // var commitIdx = 0
+    // when(rawCommit.arch_valids.reduce(_|_)){
+    //     for (w <- 0 until robParameters.retireWidth) {
+    //         when(rawCommit.arch_valids(w)){
+    //             io.commit.debug_pc(commitIdx)   := rawCommit.debug_pc(w)
+    //             io.commit.debug_ldst(commitIdx) := rawCommit.debug_ldst(w)
+    //             io.commit.debug_insts(commitIdx):= rawCommit.debug_insts(w)
+    //             io.commit.debug_wdata(commitIdx):= rawCommit.debug_wdata(w)
+    //             io.commit.debug_wen(commitIdx)  := rawCommit.debug_wen(w)
+    //             io.commit.arch_valids(commitIdx):= rawCommit.arch_valids(w)
+    //             commitIdx += 1
+    //         }
+    //     }
+    // }
 }

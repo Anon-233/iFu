@@ -161,6 +161,8 @@ class CSRFile extends CoreModule {
 
         val cmd = Input(UInt(CSR_SZ.W))
         val exevalid = Input(Bool())
+
+        val reg = Output(new CSRReg)
     })
 
     val wen = io.cmd === CSR_W || io.cmd === CSR_M
@@ -178,6 +180,8 @@ class CSRFile extends CoreModule {
 
     val csrRegNxt     = Wire(new CSRReg)
     val csrReg        = RegNext(csrRegNxt, init = csrRst)
+
+    io.reg := csrReg
 
     val modeRst       = 0.U(2.W) // ??? 3/U(2.W)
     val modeNxt       = Wire(UInt(2.W))
