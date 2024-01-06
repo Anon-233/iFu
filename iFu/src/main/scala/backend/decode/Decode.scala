@@ -84,6 +84,9 @@ object XDecode extends DecodeTable  {
                 //      |  |                 |        |       |       |    rs2_type  |     |  |  |  |  |              |  |  |  |  |    |
                 //      |  |                 |        |       |       |       |      |     |  |  |  |  |  mem_cmd     |  |  |  |  |    |
     val table: Array[(BitPat, List[BitPat])] = Array(//       |       |       |      |     |  |  |  |  |    |         |  |  |  |  |    |
+
+       NEMU_TRAP-> List(Y, uopNOP       , IQT_INT, FU_X  , RT_X  , RT_X  , RT_X  , immX  , N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),
+
         LLW     -> List(Y, uopLLW       , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS14, Y, N, N, N, N, /*M_XLL,*/  N, N, N, Y, Y, CSR_N),
         SCW     -> List(Y, uopAMO_AG    , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , immS14, N, Y, Y, N, N, /*M_XSC,*/  N, N, N, Y, Y, CSR_N),
         PRELD   -> List(Y, uopLD        , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_X  , immS12, N, N, N, N, N, /*M_X  ,*/  N, N, N, N, N, CSR_N),//暂定为load指令
@@ -172,7 +175,7 @@ object XDecode extends DecodeTable  {
                        // |      |               |        |       |       |              |   |  |  |  |  |           |  |  |  |  |    |
                        // |      |               |        |       |       |    rs2_type  |   |  |  |  |  |           |  |  |  |  |    |
                        // |      |               |        |       |       |       |      |   |  |  |  |  |  mem_cmd  |  |  |  |  |    |
-     val table:  Array[(BitPat, List[BitPat])] = Array(     //   |       |       |      |   |  |  |  |  |    |      |  |  |  |  |    |
+    val table:  Array[(BitPat, List[BitPat])] = Array(     //   |       |       |      |   |  |  |  |  |    |      |  |  |  |  |    |
          CSRRD    -> List(Y, uopCSRRD       , IQT_INT, FU_CSR, RT_FIX, RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_R),
          CSRWR    -> List(Y, uopCSRWR       , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_X  , immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_W),
          CSRXCHG1 -> List(Y, uopCSRXCHG     , IQT_INT, FU_CSR, RT_FIX, RT_FIX, RT_FIX, immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_M),
@@ -194,10 +197,11 @@ object XDecode extends DecodeTable  {
          ERTN    -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ N, N, N, Y, Y, CSR_R),//TODO 改成 CSR_I
          SYSCALL -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ N, N, Y, Y, Y, CSR_R),
          BREAK   -> List(Y, uopERET        , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , immX, N, N, N, N, N,/* M_X,*/ N, N, Y, Y, Y, CSR_R),
-     )
-//     val default_table : List[BitPat] = List(N, )
+    )
+    // val default_table : List[BitPat] = List(N, )
 
- }
+}
+
 // object WeirdDecode extends DecodeTable {
                      //                                                                                          wakeup_delay
                  //      is val inst?                                                imm_sel                      |   bypassable (aka, known/fixed latency)
@@ -225,28 +229,30 @@ class CSRExcept extends Bundle{
     val valid   = Bool()
     val totalCode = UInt(causeCodeBits.W)
 
-//    def csrdecode(instr: UInt, table: Iterable[(BitPat, List[BitPat])]): Unit = {
-//        val decoder = DecodeLogic(instr, CSRDecode.decode_default, table) //返回一个List[BitPat] 若匹配不到，则返回默认值
-//        val sigs = Seq(
-//           valid, totalCode
-//        )
-//        sigs zip decoder map { case (s, d) => s := d } //将对应位相匹配
-//        this
-//    }
+    // def csrdecode(instr: UInt, table: Iterable[(BitPat, List[BitPat])]): Unit = {
+    //     val decoder = DecodeLogic(instr, CSRDecode.decode_default, table) //返回一个List[BitPat] 若匹配不到，则返回默认值
+    //     val sigs = Seq(
+    //         valid, totalCode
+    //     )
+    //     sigs zip decoder map { case (s, d) => s := d } //将对应位相匹配
+    //     this
+    // }
 }
+
 class DecodeUnitIO() extends CoreBundle {
     val enq = new Bundle { val uop = Input(new MicroOp()) }
     val deq = new Bundle { val uop = Output(new MicroOp()) }
 
     // from CSRFile
     // val status = Input(new freechips.rocketchip.rocket.MStatus())
-     val interrupt = Input(Bool())
-//     val interrupt_cause = Input(UInt(xLen.W))
+    val interrupt = Input(Bool())
+    // val interrupt_cause = Input(UInt(xLen.W))
 }
+
 //TODO 添加对CSR环境下异常指令的检测
 class DecodeUnit extends CoreModule {
     val io = IO(new DecodeUnitIO)
-//    io <> DontCare
+    // io <> DontCare
 
     val uop = Wire(new MicroOp)
     uop := io.enq.uop
@@ -260,7 +266,7 @@ class DecodeUnit extends CoreModule {
     
     val inst = uop.instr
     val cs = Wire(new CtrlSigs).decode(inst, decode_table)
-//    val ins = Wire(new CSRExcept).csrdecode(inst,ExceptionInstrDecode.table)
+    // val ins = Wire(new CSRExcept).csrdecode(inst,ExceptionInstrDecode.table)
     // TODO: 异常检测
     def checkExceptions(x: Seq[(Bool, UInt)]) =
          (x.map(_._1).reduce(_||_), PriorityMux(x))
@@ -333,7 +339,7 @@ class DecodeUnit extends CoreModule {
         uop.ldst_is_rs1 := false.B
     }
 
-   /* when (!uop.is_sfb_shadow && cs.uopc === uopORI && inst(21,10) === 0.U) {
+    /* when (!uop.is_sfb_shadow && cs.uopc === uopORI && inst(21,10) === 0.U) {
         uop.uopc := uopMOV
     }*/
     when(cs.uopc === uopANDI && inst(21,0) === 0.U){
@@ -364,8 +370,7 @@ class DecodeUnit extends CoreModule {
     io.deq.uop  := uop
 }
 
-class BranchMaskGenerationLogic extends CoreModule
-{
+class BranchMaskGenerationLogic extends CoreModule {
     val io = IO(new Bundle {
         // guess if the uop is a branch (we'll catch this later)
         val is_branch = Input(Vec(coreWidth, Bool()))
