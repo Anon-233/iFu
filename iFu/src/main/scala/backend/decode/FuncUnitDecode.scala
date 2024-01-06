@@ -167,7 +167,7 @@ class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
     if (supportedUnits.jmp)    dec_table ++= JmpRRdDecode.table
     if (supportedUnits.mem)    dec_table ++= MemRRdDecode.table
     if (supportedUnits.muldiv) dec_table ++= MulDivRRdDecode.table
-     if (supportedUnits.csr)    dec_table ++= CsrRRdDecode.table
+    if (supportedUnits.csr)    dec_table ++= CsrRRdDecode.table
     val rrd_cs = Wire(new RRdCtrlSigs).decode(io.rrd_uop.uopc, dec_table)
 
     // rrd_use_alupipe is unused
@@ -184,9 +184,6 @@ class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
         io.rrd_uop.immPacked := 0.U
     }
 
-    val raddr1 = io.rrd_uop.prs1 // although renamed, it'll stay 0 if lrs1 = 0
-//    val csr_ren = (rrd_cs.csr_cmd === CSR.S || rrd_cs.csr_cmd === CSR.C) && raddr1 === 0.U
-//    io.rrd_uop.ctrl.csr_cmd := Mux(csr_ren, CSR.R, rrd_cs.csr_cmd)
-
     io.rrd_valid := io.iss_valid
+    io.rrd_uop.ctrl.csr_cmd := rrd_cs.csr_cmd
 }
