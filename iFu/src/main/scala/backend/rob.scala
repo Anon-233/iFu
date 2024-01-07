@@ -141,9 +141,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
             robVal(robTail)        := true.B
             robBsy(robTail)        := !(io.enq_uops(w).is_fence ||
                                         io.enq_uops(w).is_fencei ||
-                                        io.enq_uops(w).is_nop ||
-                                        io.enq_uops(w).excCause === SYS ||
-                                        io.enq_uops(w).excCause === BRK)
+                                        io.enq_uops(w).is_nop)
             robException(robTail)  := io.enq_uops(w).exception
             robUop(robTail)        := io.enq_uops(w)
             robPredicated(robTail) := false.B
@@ -206,6 +204,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         when (rbkRow) {
             robVal(comIdx)       := false.B
             robException(comIdx) := false.B
+            canCommit(comIdx)    := (robUop(comIdx).excCause === SYS || robUop(comIdx).excCause === BRK)
         }
 
         for (i <- 0 until numRobRows) {
@@ -266,7 +265,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         io.commit.debug_pc(w)    := rob_debug_pc(robHead)
     }
 
-    var blockCommit = (robState =/= stateNormal) && (robState =/= stateWatiTillEmpty) || RegNext(exceptionThrown) ||RegNext(RegNext(exceptionThrown))
+    var blockCommit = (robState =/= stateNormal) && (robState =/= stateWatiTillEmpty) || RegNext(exceptionThrown) || RegNext(RegNext(exceptionThrown))
     var willThrowException = false.B
     var blockXcpt = false.B
 
@@ -415,27 +414,27 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         is (stateReset) {
             robState := stateNormal
         }
-        is(stateNormal){
-            when(RegNext(RegNext(exceptionThrown))){
+        is (stateNormal) {
+            when (RegNext(RegNext(exceptionThrown))) {
                 robState := stateRollback
-            } .otherwise{
-                for (w <-0 until coreWidth){
-                    //进入rob的指令一旦检测到is_unque就暂停rob
+            } .otherwise {
+                for (w <- 0 until coreWidth){
+                    // 进入rob的指令一旦检测到is_unque就暂停rob
                     when(io.enq_valids(w) && io.enq_uops(w).is_unique){
                         robState := stateWatiTillEmpty
                     }
                 }
             }
         }
-        is(stateRollback){
-            when (empty){
+        is (stateRollback) {
+            when (empty) {
                 robState := stateNormal
             }
         }
-        is(stateWatiTillEmpty){
-            when(RegNext(exceptionThrown)){
+        is (stateWatiTillEmpty) {
+            when (RegNext(exceptionThrown)) {
                 robState := stateRollback
-            } .elsewhen (empty){
+            } .elsewhen (empty) {
                 robState := stateNormal
             }
         }
