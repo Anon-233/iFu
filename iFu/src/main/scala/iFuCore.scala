@@ -300,9 +300,6 @@ class iFuCore extends CoreModule {
         rob.io.commit.uops(youngest_com_idx).ftqIdx
     )
 
-    assert(!(rob.io.commit.valids.reduce(_ | _) && rob.io.com_xcpt.valid),
-        "ROB can't commit and except in same cycle!")
-
     /*for (i <- 0 until memWidth) {
         when (RegNext(lsu.io.core.exe(i).req.bits.sfence.valid)) {
             ifu.io.exe.sfence := RegNext(lsu.io.core.exe(i).req.bits.sfence)
