@@ -270,7 +270,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     for (w <- 0 until coreWidth) {
         willThrowException = (canThrowException(w) && !blockCommit && !blockXcpt) || willThrowException
-        willCommit(w) := (canCommit(w) && !canThrowException(w) && !blockCommit) || isXcpt2Commit
+        willCommit(w) := (canCommit(w) && !canThrowException(w) && !blockCommit) || isXcpt2Commit(w)
         blockCommit = (robHeadVals(w) && (!canCommit(w) || canThrowException(w))) ||blockCommit
         blockXcpt = willCommit(w)
     }
