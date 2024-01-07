@@ -199,12 +199,12 @@ class ALUExeUnit(
             (f.io.resp.valid, f.io.resp.bits.predicated)).toSeq
         )
 
-         if (hasAlu) {
-             io.iresp.bits.uop.csrAddr := immGen(alu.io.resp.bits.uop.immPacked, immCSR).asUInt
-             io.iresp.bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
-             io.iresp.bits.rj := alu.io.resp.bits.rj
-             io.iresp.bits.rd := alu.io.resp.bits.rd
-         }
+        if (hasAlu) {
+            io.iresp.bits.uop.csrAddr := immGen(alu.io.resp.bits.uop.immPacked, immCSR).asUInt
+            io.iresp.bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
+            io.iresp.bits.rj := alu.io.resp.bits.rj
+            io.iresp.bits.rd := alu.io.resp.bits.rd
+        }
     }
     assert ((PopCount(iresp_fu_units.map(_.io.resp.valid)) <= 1.U && !div_resp_val) ||
             (PopCount(iresp_fu_units.map(_.io.resp.valid)) <= 2.U && (div_resp_val)),
