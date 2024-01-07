@@ -52,8 +52,8 @@ abstract class PipelinedFuncUnit (
     if (numStages > 0) {
         rValids = RegInit(VecInit(Seq.fill(numStages){ false.B }))
         rUops = Reg(Vec(numStages, new MicroOp()))
-        rRd = Reg(Vec(numStages, 0.U(32.W)))
-        rRj = Reg(Vec(numStages, 0.U(32.W)))
+        rRd = Reg(Vec(numStages, UInt(xLen.W)))
+        rRj = Reg(Vec(numStages, UInt(xLen.W)))
 
         rValids(0) := io.req.valid && !IsKilledByBranch(io.brUpdate, io.req.bits.uop) && !io.req.bits.kill
         rUops(0) := io.req.bits.uop
