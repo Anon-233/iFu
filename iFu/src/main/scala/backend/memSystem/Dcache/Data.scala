@@ -9,6 +9,7 @@ import iFu.common.Consts._
 import iFu.util._
 
 class DataReq extends CoreBundle with HasDcacheParameters {
+    val isWrite  = Bool()
     val idx      = UInt(nIdxBits.W)
     val readPos  = UInt(log2Ceil(nWays).W)
     val wdata    = Vec(nRowWords, UInt(xLen.W)) 
