@@ -180,7 +180,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         //---------------output:commit------------
 
         canCommit(w) := robVal(robHead) && !(robBsy(robHead)) /* && !io.csr_stall */
-        isXcpt2Commit(w) := (robUop(comIdx).excCause === SYS) || (robUop(comIdx).excCause === BRK)
+        isXcpt2Commit(w) := false.B
 
         io.commit.valids(w)      := willCommit(w)
         io.commit.arch_valids(w) := willCommit(w) && !robPredicated(comIdx)
@@ -204,6 +204,8 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         when (rbkRow) {
             robVal(comIdx)       := false.B
             robException(comIdx) := false.B
+            isXcpt2Commit(w) := robVal(comIdx) &&
+                            ((robUop(comIdx).excCause === SYS) || (robUop(comIdx).excCause === BRK))
         }
 
         for (i <- 0 until numRobRows) {
