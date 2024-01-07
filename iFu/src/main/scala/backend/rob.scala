@@ -118,7 +118,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     //---------------------------------------------
 
-    for (w <-0 until coreWidth) {
+    for (w <- 0 until coreWidth) {
         def MatchBank(bankIdx : UInt): Bool = (bankIdx === w.U)
 
         val robVal        = RegInit(VecInit(Seq.fill(numRobRows){ false.B }))
@@ -180,7 +180,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         //---------------output:commit------------
 
         canCommit(w) := robVal(robHead) && !(robBsy(robHead)) /* && !io.csr_stall */
-        isXcpt2Commit(w) := (robUop(robHead).excCause === SYS) || (robUop(robHead).excCause === BRK)
+        isXcpt2Commit(w) := (robUop(comIdx).excCause === SYS) || (robUop(comIdx).excCause === BRK)
 
         io.commit.valids(w)      := willCommit(w)
         io.commit.arch_valids(w) := willCommit(w) && !robPredicated(comIdx)
@@ -204,7 +204,6 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         when (rbkRow) {
             robVal(comIdx)       := false.B
             robException(comIdx) := false.B
-            canCommit(comIdx)    := (robUop(comIdx).excCause === SYS || robUop(comIdx).excCause === BRK)
         }
 
         for (i <- 0 until numRobRows) {
@@ -271,7 +270,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     for (w <- 0 until coreWidth) {
         willThrowException = (canThrowException(w) && !blockCommit && !blockXcpt) || willThrowException
-        willCommit(w) := canCommit(w) && (!canThrowException(w) || isXcpt2Commit(w)) && !blockCommit
+        willCommit(w) := (canCommit(w) && !canThrowException(w) && !blockCommit) || isXcpt2Commit
         blockCommit = (robHeadVals(w) && (!canCommit(w) || canThrowException(w))) ||blockCommit
         blockXcpt = willCommit(w)
     }
