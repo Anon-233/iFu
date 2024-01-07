@@ -111,7 +111,13 @@ class MSHR extends CoreModule with HasDcacheParameters {
     io.replayReq.valid := mshr.valid && mshr.ready
 
     io.replayReq.bits := mshr.req
-    
+
+    //分支预测调整 或reset
+    when (io.reset || IsKilledByBranch(io.brupdate, mshr.req.uop)) {
+        mshr.valid := false.B
+        mshr := 0.U.asTypeOf(new MSHRdata)
+    }
+    // reset 和写入调换了顺序，见fixlog说明
     
     when(io.req.fire){
         // 满足则写入新的请求
@@ -131,11 +137,6 @@ class MSHR extends CoreModule with HasDcacheParameters {
     // 传出流水线号
     io.getPipeNumber := mshr.pipeNumber
 
-    //分支预测调整 或reset
-    when (io.reset || IsKilledByBranch(io.brupdate, mshr.req.uop)) {
-        mshr.valid := false.B
-        mshr := 0.U.asTypeOf(new MSHRdata)
-    }
 
     mshr.req.uop.brMask := GetNewBrMask(io.brupdate, mshr.req.uop)
 
