@@ -711,8 +711,8 @@ class iFuCore extends CoreModule {
 
     csr.io.cmd := csr_rw_cmd
     csr.io.exevalid := csr_exe_unit.io.iresp.valid
-    csr.io.exception := rob.io.com_xcpt.valid
-    csr.io.com_xcpt  := rob.io.com_xcpt
+    csr.io.exception := RegNext(rob.io.com_xcpt.valid)
+    csr.io.com_xcpt  := RegNext(rob.io.com_xcpt)
 
     csr.io.in_pc := (
         AlignPCToBoundary(ifu.io.exe.getFtqPc(0).compc, iCacheLineBytes) +
