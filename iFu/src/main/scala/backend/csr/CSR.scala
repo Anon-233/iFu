@@ -146,9 +146,7 @@ class CSRFile extends CoreModule {
 
         val exception = Input(Bool())   // from rob -> valid
         val com_xcpt  = Input(Valid(new CommitExceptionSignals)) // from rob -> bits
-//        val vaddr     = Input(UInt(vaddrBits.W))  //vaddr == badvaddr?
-
-        val is_ertn = Input(Bool())
+        // val vaddr     = Input(UInt(vaddrBits.W))  //vaddr == badvaddr?
         // val is_llw  = Input(Bool())
         // val is_scw  = Input(Bool())
 
@@ -275,7 +273,7 @@ class CSRFile extends CoreModule {
         when(io.com_xcpt.bits.vaddrWriteEnable){
             csrRegNxt.badv := io.com_xcpt.bits.badvaddr
         }
-    }.elsewhen(io.is_ertn){
+    }.elsewhen(io.cmd === CSR_E){
         csrRegNxt.crmd.ie := csrReg.prmd.pie
         csrRegNxt.crmd.plv := csrReg.prmd.pplv
         when(csrReg.estat.ecode === 0x3f.U(ecodeBits.W)){
@@ -312,7 +310,7 @@ class CSRFile extends CoreModule {
         }
     }
 
-    when(wen && io.exevalid && !io.exception && !io.is_ertn){
+    when(wen && io.exevalid && !io.exception && io.cmd =/= CSR_E){
         when(io.addr === CSR_CRMD) {csrRegNxt.crmd := Cat(0.U(23.W),write_data(8,0)).asTypeOf(new CRMD)}
         .elsewhen(io.addr === CSR_PRMD) {csrRegNxt.prmd := Cat(0.U(29.W),write_data(2,0)).asTypeOf(new PRMD)}
         .elsewhen(io.addr === CSR_EUEN) {csrRegNxt.euen := Cat(0.U(31.W),write_data(0)).asTypeOf(new EUEN)}

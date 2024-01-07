@@ -714,8 +714,6 @@ class iFuCore extends CoreModule {
 
     csr.io.cmd := csr_rw_cmd
     csr.io.exevalid := csr_exe_unit.io.iresp.valid
-
-    csr.io.is_ertn := csr_exe_unit.io.iresp.bits.uop.uopc === uopERET && csr_exe_unit.io.iresp.valid
     csr.io.exception := RegNext(rob.io.com_xcpt.valid)
     csr.io.com_xcpt := RegNext(rob.io.com_xcpt)
 
