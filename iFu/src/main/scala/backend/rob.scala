@@ -23,23 +23,23 @@ class RobIO(val numWritePorts: Int) extends CoreBundle {
 
     val wb_resps = Flipped(Vec(numWritePorts, Valid(new ExeUnitResp)))
 
-    //store stage
+    // store stage
     val lsu_clr_bsy = Input(Vec(memWidth, Valid(UInt(robParameters.robAddrSz.W))))
     val lxcpt       = Flipped(new ValidIO(new Exception))
 
-    //commit stage
+    // commit stage
     val commit = Output(new CommitSignals)
 
-    //load指令位于ROB头指针处
+    // load指令位于ROB头指针处
     val com_load_is_at_rob_head = Output(Bool())
 
-    //excetion to CSR
+    // excetion to CSR
     val com_xcpt = Valid(new CommitExceptionSignals)
 
     // val csr_stall = Input(Bool())
 
-    //flush signals
-    //可能因为异常，流水线延迟或者访存阶段错误等,发送给frondend
+    // flush signals
+    // 可能因为异常，流水线延迟或者访存阶段错误等,发送给frondend
     val flush = Valid(new CommitExceptionSignals)
 
     val empty = Output(Bool())
@@ -56,22 +56,18 @@ class RobIO(val numWritePorts: Int) extends CoreBundle {
 }
 
 class Rob(val numWritePorts: Int) extends CoreModule {
-
-    //printf("\n\nROB:\n")
-
-
-
     val io = IO(new RobIO(numWritePorts))
 
-    //-------------------------------
+    // -------------------------------
     val numRobRows = robParameters.numRobRows
     val numRobEntries = robParameters.numRobEntries
-    //-------------------------------
+    // -------------------------------
 
-    //state
-    val stateReset :: stateNormal ::stateRollback ::stateWatiTillEmpty ::Nil = Enum(4)
+    // state
+    val stateReset :: stateNormal ::stateRollback ::stateWatiTillEmpty :: Nil = Enum(4)
     val robState = RegInit(stateReset)
 
+    // rob pointers
     val robHead    = RegInit(0.U(log2Ceil(numRobRows).W))
     val robHeadLsb = RegInit(0.U(log2Ceil(coreWidth).W))
     val robHeadIdx = Cat(robHead, robHeadLsb)
@@ -80,10 +76,14 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     val robTailLsb = RegInit(0.U(log2Ceil(coreWidth).W))
     val robTailIdx = Cat(robTail, robTailLsb)
 
+    // 有什么用
     val comIdx = Mux(robState === stateRollback, robTail, robHead)
 
     val willCommit        = Wire(Vec(coreWidth, Bool()))
     val canCommit         = Wire(Vec(coreWidth, Bool()))
+    val isXcpt2Commit     = Wire(Vec(coreWidth, Bool()))
+
+    // 4 instr, which one is valid and exception is true
     val canThrowException = Wire(Vec(coreWidth, Bool()))
 
     val robHeadVals    = Wire(Vec(coreWidth, Bool()))
@@ -180,14 +180,12 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         //---------------output:commit------------
 
         canCommit(w) := robVal(robHead) && !(robBsy(robHead)) /* && !io.csr_stall */
+        isXcpt2Commit(w) := (robUop(robHead).excCause === SYS) || (robUop(robHead).excCause === BRK)
 
         io.commit.valids(w)      := willCommit(w)
         io.commit.arch_valids(w) := willCommit(w) && !robPredicated(comIdx)
         io.commit.uops(w)        := robUop(comIdx)
         io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
-
-        // printf(p"rob commit: pc:${Hexadecimal(io.commit.uops(w).pc)} inst:${Hexadecimal(io.commit.debug_insts(w))}\n")
-        // printf(p"rob arch_valids($w) = ${io.commit.arch_valids(w)}\n")
 
         // 感觉没什么用
         when (
@@ -227,13 +225,11 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         }
 
         //------------------commit--------------------------
-
         when (willCommit(w)) {
             robVal(robHead) := false.B
         }
 
         //--------------------output-----------------------
-
         robHeadVals(w)    := robVal(robHead)
         robHeadUsesLdq(w) := robUop(robHead).use_ldq
 
@@ -272,9 +268,9 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     var willThrowException = false.B
     var blockXcpt = false.B
 
-    for(w<- 0 until coreWidth) {
+    for (w <- 0 until coreWidth) {
         willThrowException = (canThrowException(w) && !blockCommit && !blockXcpt) || willThrowException
-        willCommit(w) := canCommit(w) && !canThrowException(w) && !blockCommit
+        willCommit(w) := canCommit(w) && (!canThrowException(w) || isXcpt2Commit(w)) && !blockCommit
         blockCommit = (robHeadVals(w) && (!canCommit(w) || canThrowException(w))) ||blockCommit
         blockXcpt = willCommit(w)
     }
