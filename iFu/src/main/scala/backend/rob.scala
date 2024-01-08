@@ -81,7 +81,6 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     val willCommit        = Wire(Vec(coreWidth, Bool()))
     val canCommit         = Wire(Vec(coreWidth, Bool()))
-    val isXcpt2Commit     = Wire(Vec(coreWidth, Bool()))
 
     // 4 instr, which one is valid and exception is true
     val canThrowException = Wire(Vec(coreWidth, Bool()))
@@ -178,9 +177,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         canThrowException(w) := robVal(robHead) && robException(robHead)
 
         //---------------output:commit------------
-
         canCommit(w) := robVal(robHead) && !(robBsy(robHead)) /* && !io.csr_stall */
-        isXcpt2Commit(w) := false.B
 
         io.commit.valids(w)      := willCommit(w)
         io.commit.arch_valids(w) := willCommit(w) && !robPredicated(comIdx)
@@ -204,8 +201,6 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         when (rbkRow) {
             robVal(comIdx)       := false.B
             robException(comIdx) := false.B
-            isXcpt2Commit(w) := robVal(comIdx) &&
-                            ((robUop(comIdx).excCause === SYS) || (robUop(comIdx).excCause === BRK))
         }
 
         for (i <- 0 until numRobRows) {
@@ -272,7 +267,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     for (w <- 0 until coreWidth) {
         willThrowException = (canThrowException(w) && !blockCommit && !blockXcpt) || willThrowException
-        willCommit(w) := (canCommit(w) && !canThrowException(w) && !blockCommit) || isXcpt2Commit(w)
+        willCommit(w) := (canCommit(w) && !canThrowException(w) && !blockCommit)
         blockCommit = (robHeadVals(w) && (!canCommit(w) || canThrowException(w))) ||blockCommit
         blockXcpt = willCommit(w)
     }
@@ -368,14 +363,16 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         rPartialRow := io.enq_partial_stall
     }
 
-    val finishedCommittingRow = (io.commit.valids.asUInt =/= 0.U) &&
-                                ((willCommit.asUInt ^ robHeadVals.asUInt) === 0.U) &&
-                                !(rPartialRow && robHead === robTail && !maybeFull)
+    val finishedCommittingRow = (
+        (io.commit.valids.asUInt =/= 0.U) &&
+        ((willCommit.asUInt ^ robHeadVals.asUInt) === 0.U) &&
+        !(rPartialRow && robHead === robTail && !maybeFull)
+    )
 
-    when(finishedCommittingRow){
-        robHead := WrapInc(robHead,numRobRows)
+    when (finishedCommittingRow) {
+        robHead    := WrapInc(robHead,numRobRows)
         robHeadLsb := 0.U
-        robDeq := true.B
+        robDeq     := true.B
     } .otherwise {
         robHeadLsb := OHToUInt(PriorityEncoderOH(robHeadVals.asUInt))
     }
@@ -384,20 +381,20 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     val robEnq = WireInit(false.B)
 
-    when(robState === stateRollback && (robTail =/= robHead || maybeFull)){
-        robTail := WrapDec(robTail,numRobRows)
+    when (robState === stateRollback && (robTail =/= robHead || maybeFull)) {
+        robTail    := WrapDec(robTail, numRobRows)
         robTailLsb := (coreWidth-1).U
-        robDeq := true.B
-    } .elsewhen(robState === stateRollback && (robTail === robHead) && !maybeFull){
-        robTailLsb :=robHeadLsb
-    }.elsewhen(io.brupdate.b2.mispredict){
-        robTail := WrapInc(GetRowIdx(io.brupdate.b2.uop.robIdx),numRobRows)
+        robDeq     := true.B
+    } .elsewhen (robState === stateRollback && (robTail === robHead) && !maybeFull) {
+        robTailLsb := robHeadLsb
+    } .elsewhen (io.brupdate.b2.mispredict) {
+        robTail    := WrapInc(GetRowIdx(io.brupdate.b2.uop.robIdx), numRobRows)
         robTailLsb := 0.U
-    } .elsewhen(io.enq_valids.asUInt =/= 0.U && !io.enq_partial_stall){
-        robTail := WrapInc(robTail,numRobRows)
+    } .elsewhen (io.enq_valids.asUInt =/= 0.U && !io.enq_partial_stall) {
+        robTail    := WrapInc(robTail,numRobRows)
         robTailLsb := 0.U
-        robEnq := true.B
-    } .elsewhen(io.enq_valids.asUInt =/= 0.U && io.enq_partial_stall){
+        robEnq     := true.B
+    } .elsewhen(io.enq_valids.asUInt =/= 0.U && io.enq_partial_stall) {
         robTailLsb := PriorityEncoder(~MaskLower(io.enq_valids.asUInt))
     }
 

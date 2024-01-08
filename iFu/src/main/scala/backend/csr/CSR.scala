@@ -174,7 +174,7 @@ class CSRFile extends CoreModule {
     val csrRegNxt = Wire(new CSRReg)
     val csrReg    = RegNext(csrRegNxt, init = csrRst)
 
-    io.reg := csrReg
+    io.reg := csrRegNxt
     
     // a?
     val trint = csrReg.estat.is_11 & csrReg.ecfg(11)
