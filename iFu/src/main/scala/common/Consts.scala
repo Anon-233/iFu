@@ -335,8 +335,8 @@ object FlushTypes {
 
     def getType(valid: Bool, i_xcpt: Bool, i_eret: Bool, i_refetch: Bool): UInt = {
         val ret = Mux(!valid, none,
-                  Mux(i_eret, eret,
                   Mux(i_xcpt, xcpt,
+                  Mux(i_eret, eret,
                   Mux(i_refetch,refetch,
                   next))))
         ret
