@@ -81,6 +81,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     val willCommit        = Wire(Vec(coreWidth, Bool()))
     val canCommit         = Wire(Vec(coreWidth, Bool()))
+    val isXcpt2Commit     = Wire(Vec(coreWidth, Bool()))
 
     // 4 instr, which one is valid and exception is true
     val canThrowException = Wire(Vec(coreWidth, Bool()))
@@ -180,6 +181,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
         //---------------output:commit------------
         canCommit(w) := robVal(robHead) && !(robBsy(robHead)) /* && !io.csr_stall */
+        isXcpt2Commit(w) := (robUop(robHead).excCause === SYS) || (robUop(robHead).excCause === BRK)
 
         io.commit.valids(w)      := willCommit(w)
         io.commit.arch_valids(w) := willCommit(w) && !robPredicated(comIdx)
@@ -269,7 +271,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     for (w <- 0 until coreWidth) {
         willThrowException = (canThrowException(w) && !blockCommit && !blockXcpt) || willThrowException
-        willCommit(w) := (canCommit(w) && !canThrowException(w) && !blockCommit)
+        willCommit(w) := canCommit(w) && (!canThrowException(w) || isXcpt2Commit(w)) && !blockCommit
         blockCommit = (robHeadVals(w) && (!canCommit(w) || canThrowException(w))) ||blockCommit
         blockXcpt = willCommit(w)
     }
