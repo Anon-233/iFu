@@ -3,62 +3,41 @@ package iFu.common
 import chisel3._
 import chisel3.util._
 
-object CauseCode{
-    val ecodeBits = 6
-    val subcodeBits = 9
-
+object CauseCode {
+    val ecodeBits     = 6
+    val subcodeBits   = 9
     val causeCodeBits = ecodeBits + subcodeBits
 
-    //中断：接收到外部硬件中断，核间中断，内部软中断，定时器中断
-    def INT  =  Cat(0x0.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-
-    //Load操作页无效：load指令访问的页表项无效
-    def PIL  =  Cat(0x1.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-
-    //store操作页无效:store指令访问的页表项无效
-    def PIS  = Cat(0x2.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-
-    //取指操作页无效:取指操作访问的页表项无效
-    def PIF  = Cat(0x3.U(ecodeBits.W),0x0.U(subcodeBits.W))
-
-    //页修改:store指令访问一个可写位和脏位不全为1的有效页表项
-    def PME  = Cat(0x4.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-
-    //页特权等级不合规 :访问的有效页表项的PLV等级权限高于CPU当前的PLV等级
-    def PPI  =  Cat(0x7.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-
-    //取指地址错 :取指PC不对齐；映射地址模式下，CPU当前处于PLV3，PC第31位为1且不落在任何有效的直接映射窗口中
+    // 接收到外部硬件中断 核间中断 内部软中断 定时器中断
+    def INT = Cat(0x0.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    // load 指令访问的页表项无效
+    def PIL = Cat(0x1.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    // store 指令访问的页表项无效
+    def PIS = Cat(0x2.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    // 取指操作访问的页表项无效
+    def PIF = Cat(0x3.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    // store 指令访问一个可写位和脏位不全为 1 的有效页表项
+    def PME = Cat(0x4.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    // 访问的有效页表项的PLV等级权限高于CPU当前的PLV等级
+    def PPI = Cat(0x7.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    // 取指PC不对齐 映射地址模式下 CPU当前处于PLV3 PC第31位为 1 且不落在任何有效的直接映射窗口中
     def ADEF = Cat(0x8.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    // 映射地址模式下 CPU当前处于PLV3 访存指令虚地址的第31位为 1 且不落在任何有效的直接映射窗口中
+    def ADEM = Cat(0x8.U(ecodeBits.W), 0x1.U(subcodeBits.W))
+    // 非字节访存指令的地址不是自然对齐的
+    def ALE = Cat(0x9.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    // 执行 syscall 指令
+    def SYS = Cat(0xb.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    // 执行 break 指令
+    def BRK = Cat(0xc.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    // 指令不存在
+    def INE = Cat(0xd.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    // CPU当前处于PLV3，执行特权指令
+    def IPE = Cat(0xe.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    // 映射地址模式下 访存地址不落在任何有效的直接映射窗口中 且在 TLB 中找不到对应的表项
+    def TLBR = Cat(0x3f.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
-    //访存指令地址错:映射地址模式下，CPU当前处于PLV3，访存指令虚地址的第31位为1,且不落在任何有效的直接映射窗口中
-    def ADEM =  Cat(0x8.U(ecodeBits.W), 0x1.U(subcodeBits.W))
-
-    //地址非对齐 : 非字节访存指令的地址不是自然对齐的
-    def ALE  =  Cat(0x9.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-
-    //系统调用  : 执行syscall指令
-    def SYS  =  Cat(0xb.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-
-    //断点 :执行break指令
-    def BRK  =  Cat(0xc.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-
-    //指令不存在 : 当前指令是一条未定义（/未实现）指令
-    def INE  =  Cat(0xd.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-
-    // 指令特权等级错 :CPU当前处于PLV3，执行特权指令
-    def IPE  =  Cat(0xe.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-
-    //浮点指令未使能 :CPU实现了浮点指令前提下，当CSR.EUEN.FPE=0时执行浮点指令
-    def FPD  =  Cat(0xf.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-
-    //基础浮点运算异常:浮点运算过程中满足IEEE754规范中触发浮点运算异常的情况
-    def FPE  =  Cat(0x12.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-
-    //TLB重填 : 映射地址模式下，访存地址不落在任何有效的直接映射窗口中，且在TLB中找不到对应的TLB表项
-    def TLBR =  Cat(0x3f.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-
-    def MINI_EXCEPTION_MEM_ORDERING = Cat(0x13.U(ecodeBits.W),0x0.U(subcodeBits.W))
-
+    def MINI_EXCEPTION_MEM_ORDERING = Cat(0x13.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 }
 
 object Consts {
@@ -255,23 +234,24 @@ object Consts {
 
     val uopMOV = 63.U(UOPC_SZ.W)
     val uopBREA = 64.U(UOPC_SZ.W)
+
     def NullMicroOp: MicroOp = {
         val uop = Wire(new MicroOp)
-        uop := DontCare // Overridden in the following lines
-        uop.uopc := uopNOP // maybe not required, but helps on asserts that try to catch spurious behavior
+        uop := DontCare
+        uop.uopc       := uopNOP
         uop.bypassable := false.B
-        uop.use_stq := false.B
-        uop.use_ldq := false.B
-        uop.pdst := 0.U
-        uop.dst_rtype := RT_X
+        uop.use_stq    := false.B
+        uop.use_ldq    := false.B
+        uop.pdst       := 0.U
+        uop.dst_rtype  := RT_X
 
         val cs = Wire(new CtrlSignals())
-        cs := DontCare // Overridden in the following lines
+        cs := DontCare
         cs.br_type := BR_N
-        /*cs.csr_cmd := freechips.rocketchip.rocket.CSR.N*/
+        cs.csr_cmd := CSR_N
         cs.is_load := false.B
-        cs.is_sta := false.B
-        cs.is_std := false.B
+        cs.is_sta  := false.B
+        cs.is_std  := false.B
 
         uop.ctrl := cs
         uop
@@ -282,11 +262,11 @@ object Consts {
     val TLBIDX_INDEX: Int = TLB_INDEX_LENGTH
 
     val PALEN: Int = 32
-    val TLBELO_r: Int = 36-PALEN
-    val TLBELO_ppn: Int = PALEN-12
+    val TLBELO_r: Int = 36 - PALEN
+    val TLBELO_ppn: Int = PALEN - 12
 
     val TIMER_LENGTH: Int = 32
-    val TCFG_initval: Int = TIMER_LENGTH-2
+    val TCFG_initval: Int = TIMER_LENGTH - 2
 
     val CSR_CRMD = 0.U(14.W)
     val CSR_PRMD = 1.U(14.W)
