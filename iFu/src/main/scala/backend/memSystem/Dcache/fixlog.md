@@ -55,3 +55,29 @@ fenceValid := io.lsu.force_order && fenceMetaRead.resp.bits.hasDirty
 ```
 真正有脏行才启动fence模式
 
+
+1.8
+1. TIPS: MissArbiter 并不是直接连接到mshrs的req.valid，只负责产生一些信号bits，当且仅当s2state == lsu ，他出来的mshrs.valid才具有参考意义 
+
+2. 在NonBlockingDcache里面，550-554行
+```scala
+val writebackPos = WireInit(0.U.asTypeOf(Vec(memWidth , UInt(log2Ceil(nWays).W))))
+    for(w <- 0 until memWidth){
+        writebackPos(w) :=  Mux(s2state === lsu, s2hitPos(w),
+                            Mux(s2state === replay, s2replayHitPos(w),
+                                        0.U(log2Ceil(nWays).W)))
+    }
+```
+
+由于
+```scala
+val s2replayHitPos = RegNext(s1replayHitPos)
+
+val s2hitPos = RegNext(s1hitPos)
+```
+把他们混淆成都可以(w)索引，但是实际上s2hitpos是Vec，而s2replayHitPos是UInt，因此如果向上面那样取s2replayHitPos(w)，
+实际上是取s2replayHitPos的第w位，只可能是0或者1，这样就会导致writebackPos(w)，0和1可能不一样，replay要求的是此处一样，因此会导致replay失败
+iFuCore.sv逻辑中实际上对s2state === replay的情况下，取得writebackpos_1，即s2replayHitPos的第1位
+因此如果要写入的是b'001 ， 那么s2replayHitPos(0) = 1，s2replayHitPos(1) = 0，本来要写001的写成了0 ，就会写歪！！！
+
+因此需要将s2replayHitpos(w)，直接改成s2replayHitpos即可

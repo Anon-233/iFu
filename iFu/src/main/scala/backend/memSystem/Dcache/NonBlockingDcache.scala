@@ -299,7 +299,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s0kill = Wire(Vec( memWidth , Bool()))
     
     for(w <- 0 until memWidth){
-        s0kill(w) := !(io.lsu.req.bits(w).valid)
+        s0kill(w) := (!(io.lsu.req.bits(w).valid))
     }
 
 
@@ -550,7 +550,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val writebackPos = WireInit(0.U.asTypeOf(Vec(memWidth , UInt(log2Ceil(nWays).W))))
     for(w <- 0 until memWidth){
         writebackPos(w) :=  Mux(s2state === lsu, s2hitPos(w),
-                            Mux(s2state === replay, s2replayHitPos(w),
+                            Mux(s2state === replay, s2replayHitPos,
                                         0.U(log2Ceil(nWays).W)))
     }
 
