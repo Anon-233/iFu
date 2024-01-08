@@ -279,7 +279,7 @@ object Consts {
 
     val TLB_INDEX_LENGTH: Int = 5
     val TLBIDX_r: Int = 16 - TLB_INDEX_LENGTH
-    val TLBIDX_INDEX:Int = TLB_INDEX_LENGTH
+    val TLBIDX_INDEX: Int = TLB_INDEX_LENGTH
 
     val PALEN: Int = 32
     val TLBELO_r: Int = 36-PALEN

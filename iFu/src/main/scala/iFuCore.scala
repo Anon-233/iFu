@@ -102,7 +102,7 @@ class iFuCore extends CoreModule {
     val rob = Module(new Rob(numWritePorts))
     val csr = Module(new CSRFile)
 
-    io.csr_register := csr.io.reg
+    io.csr_register := csr.io.debug_csr_reg
 
 /*-----------------------------*/
 
@@ -714,7 +714,7 @@ class iFuCore extends CoreModule {
     csr.io.exception := RegNext(rob.io.com_xcpt.valid)
     csr.io.com_xcpt  := RegNext(rob.io.com_xcpt)
 
-    csr.io.in_pc := (
+    csr.io.err_pc := (
         AlignPCToBoundary(ifu.io.exe.getFtqPc(0).compc, iCacheLineBytes) +
         RegNext(rob.io.com_xcpt.bits.pc_lob)
     )
@@ -795,7 +795,7 @@ class iFuCore extends CoreModule {
             iregfile.io.write_ports(w_cnt).bits.addr := wbpdst
             wbresp.ready := true.B
             if (exe_units(i).hasCSR) {
-                iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.read_data, wbdata)
+                iregfile.io.write_ports(w_cnt).bits.data := Mux(wbReadsCSR, csr.io.rdata, wbdata)
             } else {
                 iregfile.io.write_ports(w_cnt).bits.data := wbdata
             }
@@ -850,7 +850,7 @@ class iFuCore extends CoreModule {
              if (eu.hasCSR) {
                  rob.io.debug_wb_wdata(cnt) := Mux(
                      wb_uop.ctrl.csr_cmd =/= CSR_N,
-                     csr.io.read_data,
+                     csr.io.rdata,
                      data
                  )
                  rob.io.debug_wb_ldst(cnt) := wb_uop.ldst
