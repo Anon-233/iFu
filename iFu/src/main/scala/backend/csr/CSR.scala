@@ -134,7 +134,7 @@ class CSRFileIO extends CoreBundle {
     val interrupt = Output(Bool())
 
     val exception = Input(Bool())
-    val com_xcpt  = Input(new CommitExceptionSignals)
+    val com_xcpt  = Input(Valid(new CommitExceptionSignals))
 
     val err_pc  = Input(UInt(32.W))
     val csr_pc = Output(UInt(32.W))
@@ -322,21 +322,21 @@ class CSRFile extends CoreModule {
         csrRegNxt.crmd.plv       := 0.U(2.W)
         csrRegNxt.crmd.ie        := 0.U(1.W)
         csrRegNxt.era            := io.err_pc
-        csrRegNxt.estat.ecode    := io.com_xcpt.cause(14,9)
-        csrRegNxt.estat.esubcode := io.com_xcpt.cause(8,0)
+        csrRegNxt.estat.ecode    := io.com_xcpt.bits.cause(14,9)
+        csrRegNxt.estat.esubcode := io.com_xcpt.bits.cause(8,0)
 
         when (
-            io.com_xcpt.cause === TLBR ||
-            io.com_xcpt.cause === PIL  ||
-            io.com_xcpt.cause === PIS  ||
-            io.com_xcpt.cause === PIF  ||
-            io.com_xcpt.cause === PME  ||
-            io.com_xcpt.cause === PPI
+            io.com_xcpt.bits.cause === TLBR ||
+            io.com_xcpt.bits.cause === PIL  ||
+            io.com_xcpt.bits.cause === PIS  ||
+            io.com_xcpt.bits.cause === PIF  ||
+            io.com_xcpt.bits.cause === PME  ||
+            io.com_xcpt.bits.cause === PPI
         ) {
-            csrRegNxt.tlbehi.vppn := io.com_xcpt.badvaddr(31, 13)
+            csrRegNxt.tlbehi.vppn := io.com_xcpt.bits.badvaddr(31, 13)
         }
 
-        when (io.com_xcpt.cause === TLBR) {
+        when (io.com_xcpt.bits.cause === TLBR) {
             csrRegNxt.crmd.da := 1.U(1.W)
             csrRegNxt.crmd.pg := 0.U(1.W)
             io.csr_pc := csrReg.tlbrentry
@@ -344,8 +344,8 @@ class CSRFile extends CoreModule {
             io.csr_pc := csrReg.eentry
         }
 
-        when (io.com_xcpt.vaddrWriteEnable) {
-            csrRegNxt.badv := io.com_xcpt.badvaddr
+        when (io.com_xcpt.bits.vaddrWriteEnable) {
+            csrRegNxt.badv := io.com_xcpt.bits.badvaddr
         }
     } .elsewhen(io.cmd === CSR_E) {
         csrRegNxt.crmd.ie  := csrReg.prmd.pie

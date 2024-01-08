@@ -20,6 +20,15 @@ class debugCommit extends CoreBundle{
     val arch_valids = Vec(robParameters.retireWidth,Bool())
 }
 
+class debugEvent extends  CoreBundle{
+    val excpvalid = Bool()//当前指令例外/中断
+    val isEret = Bool()//当前指令是eret
+    val intrNo = UInt(11.W)//当前指令中断号，即estat[12:2]
+    val ecode = UInt(15.W)//当前指令异常码，即estat.ecode
+    val epc = UInt(32.W)//出错指令的pc
+    val einst = UInt(32.W)//出错指令
+}
+
 class iFuCore extends CoreModule {
     val io = IO(new CoreBundle {
         val ext_int = Input(UInt(8.W))
@@ -28,6 +37,7 @@ class iFuCore extends CoreModule {
         val dreq = Output(new CBusReq)
         val dresp = Input(new CBusResp)
         val commit = Output(new debugCommit)
+        val event = Output(new debugEvent)
         val register = Output(Vec(32 , UInt(32.W) ))
         val csr_register = Output(new CSRReg)
     })
@@ -891,12 +901,17 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     val diff      = Module(new debugDiff)
     val cmtZipper = Module(new cmtZipper)
+    val eventDetector = Module(new eventDetector)
     val lregOut   = Wire(Vec(32, UInt(xLen.W)))
     val rawCommit = WireInit(0.U.asTypeOf(new debugCommit))
 
     diff.io.commit := rob.io.commit
     lregOut        := diff.io.lregOut   //用这个接difftest，或者进入后端debugDiff文件中接入
     io.register    := lregOut
+    
+    // 为了和commit的指令以及csr对上周期，这里多等一下
+    eventDetector.io.commit := RegNext(rob.io.commit)
+    eventDetector.io.debug_csr_reg := csr.io.debug_csr_reg
 
     for(w <- 0 until robParameters.retireWidth) {
         rawCommit.debug_pc(w)    := rob.io.commit.uops(w).debug_pc
@@ -910,4 +925,5 @@ class iFuCore extends CoreModule {
     cmtZipper.io.rawCommit := rawCommit
 
     io.commit := cmtZipper.io.zippedCommit
+    io.event  := eventDetector.io.debug_event
 }
