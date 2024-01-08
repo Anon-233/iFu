@@ -114,8 +114,8 @@ class DcacheMeta extends Module with HasDcacheParameters{
     val dirtyPos = PriorityEncoder(dirtyTable(dirtyIdx))
     val hasDirty = dirtySet.reduce(_||_)
 
-    // 实时向外界反应是否有脏行
-    io.fenceRead.resp.bits.hasDirty := hasDirty
+    // // 实时向外界反应是否有脏行
+    // io.fenceRead.resp.bits.hasDirty := hasDirty
 
     val lsu_R :: lsu_W :: mshr_R :: rpu_W :: replay_R :: replay_W :: fence_R :: fence_C :: none :: Nil = Enum(9)
     
@@ -216,6 +216,8 @@ class DcacheMeta extends Module with HasDcacheParameters{
                 readResp(w).bits.hit := DontCare
                 readResp(w).bits.idx := ridx
                 readResp(w).bits.pos := rpos
+                // 向外界反映是否有脏行
+                readResp(w).bits.hasDirty := hasDirty
             }
         }
     }

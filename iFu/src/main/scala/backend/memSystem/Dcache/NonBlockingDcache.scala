@@ -388,6 +388,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             lsuMetaRead(w).req.valid := false.B
         }
 
+        // 要告诉meta，fenceRead一行出来
+        fenceMetaRead.req.valid := true.B
+
         mshrMetaRead.req.valid := false.B
         rpuMetaWrite.req.valid := false.B
     }.otherwise{
@@ -590,7 +593,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     missArbiter.io.missAllocPos := s2missAllocPos
 
     val s2replacedMetaLine = RegNext(s1replacedMetaLine)
-    val s2replacedDataLine = mshrDataRead.resp.bits.rdata
+    // val s2replacedDataLine = mshrDataRead.resp.bits.rdata
+    val s2replacedDataLine = Mux(s2state === mshrread, mshrDataRead.resp.bits.rdata,
+                             Mux(s2state === fence,    fenceDataRead.resp.bits.rdata,
+                                0.U.asTypeOf(Vec(nRowWords, UInt(32.W)))))
 
 
 
@@ -758,15 +764,22 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         RPU.io.replaceMetaLine := s2replacedMetaLine
         RPU.io.replaceDataLine := s2replacedDataLine
         RPU.io.replaceAddr := s2replaceAddr
-        RPU.io.fetchAddr := s2fetchAddr
-        RPU.io.replaceWay := s2replacePos
+
+        // fence 不需要告诉RPU这个fetchaddr,因为他不会去fetch
+        // RPU.io.fetchAddr := s2fetchAddr
+        
+        // 这个是用于RPU，fecth完了想要写回的路，不会fetch，不会写回fetch到的什么meta和data，因此也不需要 
+        // RPU.io.replaceWay := s2replacePos
 
         RPU.io.isFence := s2state === fence
         //成功进入s2state fence并且RPU空闲的话，告诉metaRPU已经拿到了这个dirty，让他清空
         fenceMetaClean.req.valid := s2state === fence && RPU.io.ready
         fenceDataClean.req.valid := s2state === fence && RPU.io.ready
-        // 同时告诉mshr这个fetchaddr,用于感知fetching状态转换
-        mshrs.io.fetchingBlockAddr := getBlockAddr(s2fetchAddr.asUInt)
+        
+        // fence 不需要告诉mshr这个fetchaddr,因为他不会去fetch
+        // // 同时告诉mshr这个fetchaddr,用于感知fetching状态转换
+        // mshrs.io.fetchingBlockAddr := getBlockAddr(s2fetchAddr.asUInt)
+        
         // resp和nack都不发
         for (w <- 0 until memWidth) {
             sendResp(w) := false.B

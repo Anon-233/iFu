@@ -15,13 +15,15 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
 
         // 只有mshr才能负责来替换
         val needReplace = Input(Bool())
-        // 要被替换的行的信息，用于写回(如果是fence状态下传过来的，会写回，但是不会进入fetch newline 的状态)
+        // 要被替换的行的信息，用于写回总线(如果是fence状态下传过来的，会写回，但是不会进入fetch newline 的状态)
         val replaceMetaLine = Input(new MetaLine)
         val replaceDataLine = Input(Vec(nRowWords,UInt(32.W)))
         // 被替换的行的地址，在参与写回的时候要用
         val replaceAddr = Input(UInt(32.W))
+
+        // 要去总线fetch读，并且之后写回meta和data的地址
         val fetchAddr = Input(UInt(32.W))
-        // 被替换的行所属的路号，会保存起来，这也是fetch之后要写回的路号
+        // 被替换的行所属的路号，会保存起来，这也是fetch之后要写回meta和data的路号
         val replaceWay = Input(UInt(log2Ceil(nWays).W))
 
         // 11新的行的信息，用于传给外界

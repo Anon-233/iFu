@@ -81,3 +81,8 @@ iFuCore.sv逻辑中实际上对s2state === replay的情况下，取得writebackp
 因此如果要写入的是b'001 ， 那么s2replayHitPos(0) = 1，s2replayHitPos(1) = 0，本来要写001的写成了0 ，就会写歪！！！
 
 因此需要将s2replayHitpos(w)，直接改成s2replayHitpos即可
+
+3. 完善了fence，之前meta对于fenceRead实际上只向外resp一个hasDirty，这个fenceRead实际上并没有成功执行，此处在s0state === fence 的时候加入了fenceMetaRead.req.valid = true,使得可以取到脏行信息，另外之前s2replacedDataLine只会是是mshrDataread.resp的数据，
+
+对于s2replacedDataLine加入了选择机制，s2state === fence的时候，取的是fenceRead的数据，
+s2state === mshrread 的时候，取的是mshrDataread的数据 , 其他时候为0
