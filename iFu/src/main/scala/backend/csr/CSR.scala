@@ -238,7 +238,7 @@ class CSRFile extends CoreModule {
                 csrRegNxt.eentry := Cat(write_data(31, 6), csrReg.eentry(5,0))
             }
             is (CSR_TLBIDX) {
-                csrRegNxt.tlbidx := Cat(write_data(31), 0.U(1.W), write_data(29, 24), 0.U(8.W),0.U(TLBIDX_r.W), write_data(TLB_INDEX - 1,0)).asTypeOf(new TLBIDX)
+                csrRegNxt.tlbidx := Cat(write_data(31), 0.U(1.W), write_data(29, 24), 0.U(8.W),0.U(TLBIDX_r.W), write_data(TLB_INDEX_LENGTH - 1,0)).asTypeOf(new TLBIDX)
             }
             is (CSR_TLBEHI) {
                 csrRegNxt.tlbehi := Cat(write_data(31, 13), csrReg.tlbehi.asUInt(12, 0)).asTypeOf(new TLBEHI)
