@@ -220,8 +220,8 @@ class ALUUnit(
 class CntUnit(numStages: Int = 1) extends PipelinedFuncUnit (
     numStages = numStages,
 ) {
-    val counter = Module(new Counter)
-    counter.io.fn := io.req.bits.uop.ctrl.op_fc
+    val counter = Module(new Counter64)
+    counter.io.fn := io.req.bits.uop.ctrl.op_fcn
 
     val rData = Reg(Vec(numStages, UInt(xLen.W)))
     rData(0) := counter.io.data

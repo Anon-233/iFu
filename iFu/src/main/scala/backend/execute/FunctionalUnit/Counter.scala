@@ -24,7 +24,7 @@ abstract class AbstractCnt[T <: CntFuncCode](val cntFn: T) extends CoreModule {
     })
 }
 
-class Counter extends AbstractCnt(CntFuncCode()) {
+class Counter64 extends AbstractCnt(CntFuncCode()) {
     val cnt = RegInit(0.U((xLen * 2).W))
     cnt := cnt + 1.U
 
