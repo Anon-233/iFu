@@ -55,6 +55,8 @@ fenceValid := io.lsu.force_order && fenceMetaRead.resp.bits.hasDirty
 ```
 真正有脏行才启动fence模式
 
+TIPS：此处可以实现衔接 ， 如果既有未完成的store指令，又有别的脏行，会写回所有脏行之后，ordered置低，但是lsu的stqEmpty还是false，流水线还处于fence状态中，紧接着当执行完这个store指令之后，stqEmpty变为true，但是因为有dirty位了，ordered又变成了false，因此正好衔接fence状态，直到该做完的都做完。
+
 
 1.8
 1. TIPS: MissArbiter 并不是直接连接到mshrs的req.valid，只负责产生一些信号bits，当且仅当s2state == lsu ，他出来的mshrs.valid才具有参考意义 
@@ -83,6 +85,19 @@ iFuCore.sv逻辑中实际上对s2state === replay的情况下，取得writebackp
 因此需要将s2replayHitpos(w)，直接改成s2replayHitpos即可
 
 3. 完善了fence，之前meta对于fenceRead实际上只向外resp一个hasDirty，这个fenceRead实际上并没有成功执行，此处在s0state === fence 的时候加入了fenceMetaRead.req.valid = true,使得可以取到脏行信息，另外之前s2replacedDataLine只会是是mshrDataread.resp的数据，
+    
+    - TIPS :
+    fenceMetaRead 传入一个valid，meta找出一个脏行，将信息通过resp传出来
+    fenceMetaClean 传入一个Valid ， meta将对应的脏行清空
 
-对于s2replacedDataLine加入了选择机制，s2state === fence的时候，取的是fenceRead的数据，
-s2state === mshrread 的时候，取的是mshrDataread的数据 , 其他时候为0
+    对于s2replacedDataLine加入了选择机制，s2state === fence的时候，取的是fenceRead的数据，
+    s2state === mshrread 的时候，取的是mshrDataread的数据 , 其他时候为0
+
+- 当前fence只是脏行写回 清空，因此fence之后，会完成前面所有的store指令，写回并清空所有的脏行，此时一些一直不脏的行不会被清空。
+
+
+
+可能的TODO ： 外设的uncachable
+当一条被检测为外设的访存指令传入dcache，实际上是不经过dcache的，直接和总线交互，那么会选一个周期进RPU单元进行总线交互，此时需要总线申请的不同任务之间的协调，如：
+- 如果一条外设指令进来的时候，RPU正忙，需要怎么处理这个请求？
+- 进一步的，RPU忙的时候，其他任务要如何处理这个RPU忙的事件？
