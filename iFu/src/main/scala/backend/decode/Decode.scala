@@ -194,7 +194,26 @@ object CSRDecode extends DecodeTable {
     )
 }
 
-//object WeirdDecode extends DecodeTable {
+object CntDecode extends DecodeTable {
+   val table: Array[(BitPat, List[BitPat])] = Array(
+               //
+               //    is val inst?                                                 imm_sel                        bypassable
+               //        | micro-code                                                |  uses_ldg                      | is_br
+               //        |    |           iq-type                                    |     | uses_stq                 |  | is_pc2epc
+               //        |    |              |   func unit                           |     |  |  is_amo               |  |  | is_unique(clear pipeline for it)
+               //        |    |              |       |    dst_type                   |     |  |  |  is_fence          |  |  |  | flush_on_commit
+               //        |    |              |       |       |    rs1_type           |     |  |  |  |  is_fencei      |  |  |  |  |
+               //        |    |              |       |       |       |               |     |  |  |  |  |              |  |  |  |  |
+               //        |    |              |       |       |       |    rs2_type   |     |  |  |  |  |              |  |  |  |  |
+               //        |    |              |       |       |       |       |       |     |  |  |  |  |  mem_cmd     |  |  |  |  |
+               //        |    |              |       |       |       |       |       |     |  |  |  |  |     |        |  |  |  |  |
+       // RDCNTIDW  -> List(Y, uopRDCNTIDW  , IQT_INT, FU_???, RT_FIX, RT_X  , RT_X  , immX,  N, N, N, N, N, /*M_X,*/    N, N, N, Y, Y),
+       RDCNTVLW  -> List(Y, uopRDCNTVLW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX,  N, N, N, N, N, /*M_X,*/    Y, N, N, N, N),
+       RDCNTVHW  -> List(Y, uopRDCNTVHW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX,  N, N, N, N, N, /*M_X,*/    Y, N, N, N, N)
+   )
+}
+
+// object WeirdDecode extends DecodeTable {
 //    val table: Array[(BitPat, List[BitPat])] = Array(
 //                //
 //                //    is val inst?                                                 imm_sel                        bypassable
@@ -208,12 +227,9 @@ object CSRDecode extends DecodeTable {
 //                //        |    |              |       |       |       |       |       |     |  |  |  |  |  mem_cmd     |  |  |  |  |
 //                //        |    |              |       |       |       |       |       |     |  |  |  |  |     |        |  |  |  |  |
 //        IDLE      -> List(Y, uopIDLE),
-//        CACOP     -> List(Y, uopCACOP     , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, immX,  N, N, N, N, N, /*M_X,*/    N, N, N, N, N),
-//        RDCNTIDW  -> List(Y, uopRDCNTIDW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX,  N, N, N, N, N, /*M_X,*/    Y, N, N, N, N),
-//        RDCNTVLW  -> List(Y, uopRDCNTVLW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX,  N, N, N, N, N, /*M_X,*/    Y, N, N, N, N),
-//        RDCNTVHW  -> List(Y, uopRDCNTVHW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , immX,  N, N, N, N, N, /*M_X,*/    Y, N, N, N, N)
+//        CACOP     -> List(Y, uopCACOP     , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, immX,  N, N, N, N, N, /*M_X,*/    N, N, N, N, N)
 //    )
-//}
+// }
 
 class DecodeUnitIO() extends CoreBundle {
     val enq = new Bundle { val uop = Input(new MicroOp()) }
@@ -230,7 +246,8 @@ class DecodeUnit extends CoreModule {
 
     var decode_table = XDecode.table
     decode_table ++= CSRDecode.table
-    
+    decode_table ++= CntDecode.table
+
     val inst = uop.instr
     val cs = Wire(new CtrlSigs).decode(inst, decode_table)
     val id_illegal_insn = !cs.legal

@@ -36,6 +36,7 @@ abstract trait RRdDecodeConstants {
     val aluFn = new AluFuncCode
     val mulFn = new MultFuncCode
     val divFn = new DivFuncCode
+    val cntFn = new CntFuncCode
     val default: List[BitPat] =
         List[BitPat](BR_N , Y, N, N, aluFn.FN_ADD , OP1_X   , OP2_X   , immX, REN_0, CSR_N)
     val table: Array[(BitPat, List[BitPat])]
@@ -135,21 +136,36 @@ object MemRRdDecode extends RRdDecodeConstants {
         )
 }
 
- object CsrRRdDecode extends RRdDecodeConstants {
-     val table: Array[(BitPat, List[BitPat])] =
-         Array[(BitPat, List[BitPat])](
-                    //                  br type
-                    //                    |  use alu pipe               op1 sel   op2 sel
-                    //                    |    |  use muldiv pipe         |         |        immsel       csr_cmd
-                    //                    |    |  |  use mem pipe         |         |        |      rf wen   |
-                    //                    |    |  |  |     alu fcn        |         |        |        |      |
-                    //                    |    |  |  |       |            |         |        |        |      |
-             BitPat(uopCSRWR)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_ZERO, immX  , REN_1, CSR_W),
-             BitPat(uopCSRRD)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_ZERO, OP2_ZERO, immX  , REN_1, CSR_R),
-             BitPat(uopCSRXCHG) -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_RS2 , immX  , REN_1, CSR_M),
-             BitPat(uopERET)    -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, CSR_E)
-         )
- }
+object CsrRRdDecode extends RRdDecodeConstants {
+    val table: Array[(BitPat, List[BitPat])] =
+        Array[(BitPat, List[BitPat])](
+                   //                  br type
+                   //                    |  use alu pipe               op1 sel   op2 sel
+                   //                    |    |  use muldiv pipe         |         |        immsel       csr_cmd
+                   //                    |    |  |  use mem pipe         |         |        |      rf wen   |
+                   //                    |    |  |  |     alu fcn        |         |        |        |      |
+                   //                    |    |  |  |       |            |         |        |        |      |
+            BitPat(uopCSRWR)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_ZERO, immX  , REN_1, CSR_W),
+            BitPat(uopCSRRD)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_ZERO, OP2_ZERO, immX  , REN_1, CSR_R),
+            BitPat(uopCSRXCHG) -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_RS2 , immX  , REN_1, CSR_M),
+            BitPat(uopERET)    -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, CSR_E)
+        )
+}
+
+object CntRRdDecode extends RRdDecodeConstants {
+    val table: Array[(BitPat, List[BitPat])] =
+        Array[(BitPat, List[BitPat])](
+                   //                  br type
+                   //                    |  use alu pipe               op1 sel   op2 sel
+                   //                    |    |  use muldiv pipe         |         |        immsel       csr_cmd
+                   //                    |    |  |  use mem pipe         |         |        |      rf wen   |
+                   //                    |    |  |  |     alu fcn        |         |        |        |      |
+                   //                    |    |  |  |       |            |         |        |        |      |
+            // BitPat(uopRDCNTIDW)-> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_ZERO, immX  , REN_1, CSR_N)
+            BitPat(uopRDCNTVLW)-> List(BR_N , Y, N, N, cntFn.FN_VL   , OP1_X   , OP2_X   , immX  , REN_1, CSR_N)
+            BitPat(uopRDCNTVHW)-> List(BR_N , Y, N, N, cntFn.FN_VH   , OP1_X   , OP2_X   , immX  , REN_1, CSR_N)
+        )
+}
 
 class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
     val io = IO(new CoreBundle {
@@ -168,6 +184,7 @@ class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
     if (supportedUnits.mem)    dec_table ++= MemRRdDecode.table
     if (supportedUnits.muldiv) dec_table ++= MulDivRRdDecode.table
     if (supportedUnits.csr)    dec_table ++= CsrRRdDecode.table
+    if (supportedUnits.cnt)    dec_table ++= CntRRdDecode.table
     val rrd_cs = Wire(new RRdCtrlSigs).decode(io.rrd_uop.uopc, dec_table)
 
     // rrd_use_alupipe is unused

@@ -102,7 +102,6 @@ class ALUUnit(
     isAluUnit = true,
     isJmpUnit = isJmpUnit
 ) {
-
     val uop = io.req.bits.uop
 
     val imm = immGen(uop.immPacked, uop.ctrl.imm_sel)
@@ -218,11 +217,32 @@ class ALUUnit(
     }
 }
 
+class CntUnit(numStages: Int = 1) extends PipelinedFuncUnit (
+    numStages = numStages,
+) {
+    val counter = Module(new Counter)
+    counter.io.fn := io.req.bits.uop.ctrl.op_fc
+
+    val rData = Reg(Vec(numStages, UInt(xLen.W)))
+    rData(0) := counter.io.data
+    for (i <- 1 until numStages) {
+        rData(i) := rData(i - 1)
+    }
+
+    io.resp.bits.data := rData(numStages - 1)
+
+    require (numStages >= 1)
+    io.bypass(0).valid := io.req.valid
+    io.bypass(0).bits.data := counter.io.data
+    for (i <- 1 until numStages) {
+        io.bypass(i).valid := rValids(i - 1)
+        io.bypass(i).bits.data := rData(i - 1)
+    }
+}
+
 class PipelinedMulUnit(numStages: Int = 3) extends PipelinedFuncUnit (
     numStages = numStages,
 ) {
-
-
     val imult = Module(new MultStar)
 
     imult.io.req.valid := io.req.valid
@@ -313,8 +333,6 @@ abstract class IterativeFuncUnit extends FuncUnit (
 }
 
 class DivUnit extends IterativeFuncUnit {
-
-
     val div = Module(new SRT16Divider())
 
     div.io.req.valid := io.req.valid

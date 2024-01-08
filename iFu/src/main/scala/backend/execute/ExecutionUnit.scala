@@ -62,8 +62,8 @@ abstract class ExecutionUnit (
             jmp    = hasJmpUnit,
             mem    = hasMem,
             muldiv = hasMul || hasDiv,
-            csr    = hasCSR
-            //cnt    = hasCnt
+            csr    = hasCSR,
+            cnt    = hasCnt
             // val tlb: Boolean    = false
         )
     }
@@ -75,21 +75,23 @@ class ALUExeUnit(
     hasAlu     : Boolean = true,
     hasMul     : Boolean = false,
     hasDiv     : Boolean = false,
+    hasCnt     : Boolean = false,
     hasIfpu    : Boolean = false,
     hasMem     : Boolean = false,
     hasRocc    : Boolean = false
 ) extends ExecutionUnit(
     readsIrf         = true,
-    writesIrf        = hasAlu || hasMul || hasDiv,
+    writesIrf        = hasAlu || hasMul || hasDiv || hasCnt,
     writesMemIrf     = hasMem,
-    bypassable       = hasAlu,
-    alwaysBypassable = hasAlu && !(hasMem || hasJmpUnit || hasMul || hasDiv || hasCSR),
+    bypassable       = hasAlu || hasCnt,
+    alwaysBypassable = (hasAlu || hasCnt) && !(hasMem || hasJmpUnit || hasMul || hasDiv || hasCSR),
     hasMem           = hasMem,
     hasCSR           = hasCSR,
     hasJmpUnit       = hasJmpUnit,
     hasAlu           = hasAlu,
     hasMul           = hasMul,
     hasDiv           = hasDiv,
+    hasCnt           = hasCnt,
     numStages        = if (hasAlu && hasMul) 3 else if (hasAlu) 1 else 0
 ) {
 
@@ -100,6 +102,7 @@ class ALUExeUnit(
     io.fu_types := Mux(hasAlu.B, FU_ALU, 0.U)              |
                    Mux(hasMul.B, FU_MUL, 0.U)              |
                    Mux(!div_busy && hasDiv.B, FU_DIV, 0.U) |
+                   Mux(hasCnt.B, FU_CNT, 0.U)              |
                    Mux(hasCSR.B, FU_CSR, 0.U)              |
                    Mux(hasJmpUnit.B, FU_JMP, 0.U)          |
                    Mux(hasMem.B, FU_MEM, 0.U)
@@ -109,12 +112,12 @@ class ALUExeUnit(
     if (hasAlu) {
         alu = Module(new ALUUnit(
             isJmpUnit = hasJmpUnit,
-            numStages = numStages,
+            numStages = numStages
         ))
         alu.io.req.valid := (io.req.valid && (
-            io.req.bits.uop.fuCode === FU_ALU ||
-            io.req.bits.uop.fuCode === FU_JMP ||
-            io.req.bits.uop.fuCode === FU_CSR
+            io.req.bits.uop.fu_code_is(FU_ALU) ||
+            io.req.bits.uop.fu_code_is(FU_JMP) ||
+            io.req.bits.uop.fu_code_is(FU_CSR)
         ))
         alu.io.req.bits.uop      := io.req.bits.uop
         alu.io.req.bits.kill     := io.req.bits.kill
@@ -124,10 +127,34 @@ class ALUExeUnit(
         alu.io.brUpdate          := io.brupdate
         alu.io.resp.ready        := true.B
         io.bypass                := alu.io.bypass
-        io.brinfo                := alu.io.brInfo   
+        io.brinfo                := alu.io.brInfo
         if (hasJmpUnit) { alu.io.getFtqPC <> io.getFtqPc }
 
         iresp_fu_units += alu
+    }
+
+    // Counter Unit ---------------------------
+    var cnt: CntUnit = null
+    if (hasCnt) {
+        cnt = Module(new CntUnit(
+            numStages = numStages
+        ))
+        cnt.io.req <> DontCare
+        cnt.io.req.valid := io.req.valid && io.req.bits.uop.fu_code_is(FU_CNT)
+        cnt.io.req.bits.uop     := io.req.bits.uop
+        cnt.io.req.bits.kill    := io.req.bits.kill
+        cnt.io.req.bits.rs1Data := io.req.bits.rs1Data
+        cnt.io.req.bits.rs2Data := io.req.bits.rs2Data
+        cnt.io.brUpdate         := io.brupdate
+        cnt.io.resp.ready       := true.B
+
+        for (i <- 0 until numStages) {
+            when (cnt.io.bypass(i).valid) {
+                io.bypass(i) := cnt.io.bypass(i)
+            }
+        }
+
+        iresp_fu_units += cnt
     }
 
     // Pipelined, IMul Unit ------------------

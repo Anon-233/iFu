@@ -108,8 +108,8 @@ case class SupportedFuncs (
     val jmp: Boolean    = false,
     val mem: Boolean    = false,
     val muldiv: Boolean = false,
-    val csr: Boolean    = false
-    // val cnt: Boolean    = false
+    val csr: Boolean    = false,
+    val cnt: Boolean    = false
     // val tlb: Boolean    = false
 )
 
