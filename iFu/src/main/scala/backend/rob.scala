@@ -140,7 +140,9 @@ class Rob(val numWritePorts: Int) extends CoreModule {
             robVal(robTail)        := true.B
             robBsy(robTail)        := !(io.enq_uops(w).is_fence ||
                                         io.enq_uops(w).is_fencei ||
-                                        io.enq_uops(w).is_nop)
+                                        io.enq_uops(w).is_nop ||
+                                        io.enq_uops(w).excCause === SYS ||
+                                        io.enq_uops(w).excCause === BRK)
             robException(robTail)  := io.enq_uops(w).exception
             robUop(robTail)        := io.enq_uops(w)
             robPredicated(robTail) := false.B
