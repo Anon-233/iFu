@@ -222,7 +222,7 @@ class CSRFile extends CoreModule {
     .otherwise                            {io.read_data := 0.U(32.W)}
 
     csrRegNxt := csrReg
-    io.csr_pc := 0.U(32.W)
+    io.csr_pc := csrReg.era
     csrRegNxt.estat.is9_2 := io.ext_int
 
     when (io.exception) {
@@ -233,6 +233,7 @@ class CSRFile extends CoreModule {
         csrRegNxt.era            := io.in_pc
         csrRegNxt.estat.ecode    := io.com_xcpt.bits.cause(14,9)
         csrRegNxt.estat.esubcode := io.com_xcpt.bits.cause(8,0)
+
         when (
             io.com_xcpt.bits.cause === TLBR ||
             io.com_xcpt.bits.cause === PIL  ||
@@ -244,38 +245,33 @@ class CSRFile extends CoreModule {
             csrRegNxt.tlbehi.vppn := io.com_xcpt.bits.badvaddr(31, 13)
         }
 
-        when(io.com_xcpt.bits.cause === TLBR){
+        when (io.com_xcpt.bits.cause === TLBR) {
             csrRegNxt.crmd.da := 1.U(1.W)
             csrRegNxt.crmd.pg := 0.U(1.W)
             io.csr_pc := csrReg.tlbrentry
-        }.otherwise{
+        } .otherwise {
             io.csr_pc := csrReg.eentry
         }
 
-        when(io.com_xcpt.bits.vaddrWriteEnable){
+        when (io.com_xcpt.bits.vaddrWriteEnable) {
             csrRegNxt.badv := io.com_xcpt.bits.badvaddr
         }
-    }.elsewhen(io.cmd === CSR_E){
-        csrRegNxt.crmd.ie := csrReg.prmd.pie
+    } .elsewhen(io.cmd === CSR_E) {
+        csrRegNxt.crmd.ie  := csrReg.prmd.pie
         csrRegNxt.crmd.plv := csrReg.prmd.pplv
-        when(csrReg.estat.ecode === 0x3f.U(ecodeBits.W)){
+        when (csrReg.estat.ecode === 0x3f.U(ecodeBits.W)) { // 这里的 0x3f 有点硬编码了
             csrRegNxt.crmd.da := 0.U(1.W)
             csrRegNxt.crmd.pg := 1.U(1.W)
         }
-        when(~csrReg.llbctl(2)){
+        when(csrReg.llbctl(2) === 0.U(1.W)){
             csrRegNxt.llbctl(0) := 0.U(1.W)
         }
         csrRegNxt.llbctl(2) := 0.U(1.W)
-        io.csr_pc := csrReg.era
-    } /* .elsewhen(is_llw){
+    } /* .elsewhen(is_llw) {
         csrRegNxt.llbctl(0) := 1.U(1.W)
-        io.csr_pc := csrReg.era   //暂时一直输出csrReg.era
-    }.elsewhen(is_scw){
+    } .elsewhen(is_scw) {
         csrRegNxt.llbctl(0) := 0.U(1.W)
-        io.csr_pc := csrReg.era
-    } */ .otherwise {
-        io.csr_pc := csrReg.era
-    }
+    } */
 
     when (csrReg.tcfg.en.asBool) {
         when(csrReg.tval.timeval =/= 0.U) {

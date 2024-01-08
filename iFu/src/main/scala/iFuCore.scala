@@ -223,11 +223,11 @@ class iFuCore extends CoreModule {
         new_ghist.rasIdx := ifu.io.exe.getFtqPc(0).entry.rasIdx
         ifu.io.exe.redirect_ghist := new_ghist
         when (FlushTypes.useCsrEvec(flush_type)) {
-            ifu.io.exe.redirect_pc := Mux(
+            ifu.io.exe.redirect_pc := /* Mux(
                 flush_type === FlushTypes.eret,
                 RegNext(RegNext(csr.io.csr_pc)),
                 csr.io.csr_pc
-            )
+            ) */ csr.io.csr_pc
         } .otherwise {
             val flush_pc = (
                 AlignPCToBoundary(ifu.io.exe.getFtqPc(0).pc, iCacheLineBytes) +
