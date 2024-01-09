@@ -187,12 +187,12 @@ class iFuCore extends CoreModule {
     b2.targetOffset := oldest_mispredict.targetOffset
 
     val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftqIdx
-    ifu.io.exe.getFtqPc(1).ftqIdx := oldest_mispredict_ftq_idx
+    ifu.io.core.getFtqPc(1).ftqIdx := oldest_mispredict_ftq_idx
 
     assert(!((brUpdate.b1.mispredictMask =/= 0.U || brUpdate.b2.mispredict)
             && rob.io.commit.rollback), "Can't have a mispredict during rollback.")
 
-    ifu.io.exe.brupdate := brUpdate
+    ifu.io.core.brupdate := brUpdate
 
     for (exu <- exe_units) {
         exu.io.brupdate := brUpdate
@@ -211,47 +211,37 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     //-------------------------------------------------------------
 
-    // // Breakpoint info
-    // ifu.io.exe.status   := csr.io.status
-    // ifu.io.exe.bp       := csr.io.bp
-    // ifu.io.exe.mcontext := csr.io.mcontext
-    // ifu.io.exe.scontext := csr.io.scontext
-
-    ifu.io.exe.redirect_val := false.B
-    ifu.io.exe.redirect_flush := false.B
-    ifu.io.exe.flush_icache := (0 until coreWidth).map { i =>
+    ifu.io.core.redirect_val := false.B
+    ifu.io.core.redirect_flush := false.B
+    ifu.io.core.flush_icache := (0 until coreWidth).map { i =>
         (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_fencei)
     }.reduce(_||_)
 
     when (RegNext(rob.io.flush.valid)) {
-        ifu.io.exe.redirect_val := true.B
-        ifu.io.exe.redirect_flush := true.B
+        ifu.io.core.redirect_val := true.B
+        ifu.io.core.redirect_flush := true.B
         val flush_type = RegNext(rob.io.flush.bits.flush_typ)
         // Clear the global history when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
         val new_ghist = WireInit((0.U).asTypeOf(new GlobalHistory))
         new_ghist.currentSawBranchNotTaken := true.B
-        new_ghist.rasIdx := ifu.io.exe.getFtqPc(0).entry.rasIdx
-        ifu.io.exe.redirect_ghist := new_ghist
+        new_ghist.rasIdx := ifu.io.core.getFtqPc(0).entry.rasIdx
+        ifu.io.core.redirect_ghist := new_ghist
         when (FlushTypes.useCsrEvec(flush_type)) {
-            ifu.io.exe.redirect_pc := /* Mux(
-                flush_type === FlushTypes.eret,
-                RegNext(RegNext(csr.io.csr_pc)),
-                csr.io.csr_pc
-            ) */ csr.io.redirect_pc
+            ifu.io.core.redirect_pc := csr.io.redirect_pc
         } .otherwise {
             val flush_pc = (
-                AlignPCToBoundary(ifu.io.exe.getFtqPc(0).pc, iCacheLineBytes) +
+                AlignPCToBoundary(ifu.io.core.getFtqPc(0).pc, iCacheLineBytes) +
                 RegNext(rob.io.flush.bits.pc_lob)
             )
             val flush_pc_next = flush_pc + coreInstrBytes.U
-            ifu.io.exe.redirect_pc := Mux(
+            ifu.io.core.redirect_pc := Mux(
                 FlushTypes.useSamePC(flush_type),
                 flush_pc, flush_pc_next
             )
         }
-        ifu.io.exe.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
+        ifu.io.core.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
     } .elsewhen(brUpdate.b2.mispredict) {
-        val block_pc = AlignPCToBoundary(ifu.io.exe.getFtqPc(1).pc, iCacheLineBytes)
+        val block_pc = AlignPCToBoundary(ifu.io.core.getFtqPc(1).pc, iCacheLineBytes)
         val uop_maybe_pc = block_pc | brUpdate.b2.uop.pcLowBits
 
         val npc = uop_maybe_pc + coreInstrBytes.U
@@ -263,58 +253,52 @@ class iFuCore extends CoreModule {
 
         val mispredict_target = Mux(brUpdate.b2.pcSel === PC_PLUS4, npc, bj_addr)
 
-        ifu.io.exe.redirect_val := true.B
-        ifu.io.exe.redirect_flush := true.B
-        ifu.io.exe.redirect_pc := mispredict_target
-        ifu.io.exe.redirect_ftq_idx := brUpdate.b2.uop.ftqIdx
+        ifu.io.core.redirect_val := true.B
+        ifu.io.core.redirect_flush := true.B
+        ifu.io.core.redirect_pc := mispredict_target
+        ifu.io.core.redirect_ftq_idx := brUpdate.b2.uop.ftqIdx
         
         val use_same_ghist = (
             brUpdate.b2.cfiType === CFI_BR &&
             !brUpdate.b2.taken &&
             bankAlign(block_pc) === bankAlign(npc)
         )
-        val ftq_entry = ifu.io.exe.getFtqPc(1).entry
+        val ftq_entry = ifu.io.core.getFtqPc(1).entry
         val cfi_idx = (brUpdate.b2.uop.pcLowBits ^
             Mux(ftq_entry.startBank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)
         )(log2Ceil(fetchWidth) + 1, 2)
-        val ftq_ghist = ifu.io.exe.getFtqPc(1).gHist
+        val ftq_ghist = ifu.io.core.getFtqPc(1).gHist
         val next_ghist = ftq_ghist.update(
             ftq_entry.brMask.asUInt,
             brUpdate.b2.taken,
             brUpdate.b2.cfiType === CFI_BR,
             cfi_idx,
             true.B,
-            ifu.io.exe.getFtqPc(1).pc,
+            ifu.io.core.getFtqPc(1).pc,
             ftq_entry.cfiIsCall && ftq_entry.cfiIdx.bits === cfi_idx,
             ftq_entry.cfiIsCall && ftq_entry.cfiIdx.bits === cfi_idx
         )
 
-        ifu.io.exe.redirect_ghist := Mux(use_same_ghist, ftq_ghist, next_ghist)
-        ifu.io.exe.redirect_ghist.currentSawBranchNotTaken := use_same_ghist
+        ifu.io.core.redirect_ghist := Mux(use_same_ghist, ftq_ghist, next_ghist)
+        ifu.io.core.redirect_ghist.currentSawBranchNotTaken := use_same_ghist
     } .elsewhen (rob.io.flush_frontend || brUpdate.b1.mispredictMask =/= 0.U) {
-        ifu.io.exe.redirect_flush := true.B
-        ifu.io.exe.redirect_pc := DontCare
-        ifu.io.exe.redirect_ghist := DontCare
-        ifu.io.exe.redirect_ftq_idx := DontCare
+        ifu.io.core.redirect_flush := true.B
+        ifu.io.core.redirect_pc := DontCare
+        ifu.io.core.redirect_ghist := DontCare
+        ifu.io.core.redirect_ftq_idx := DontCare
     } .otherwise {
-        ifu.io.exe.redirect_pc := DontCare
-        ifu.io.exe.redirect_ghist := DontCare
-        ifu.io.exe.redirect_ftq_idx := DontCare
+        ifu.io.core.redirect_pc := DontCare
+        ifu.io.core.redirect_ghist := DontCare
+        ifu.io.core.redirect_ftq_idx := DontCare
     }
 
     val youngest_com_idx = (coreWidth - 1).U - PriorityEncoder(rob.io.commit.valids.reverse)
-    ifu.io.exe.commit.valid := rob.io.commit.valids.reduce(_|_) || rob.io.com_xcpt.valid
-    ifu.io.exe.commit.bits := Mux(
+    ifu.io.core.commit.valid := rob.io.commit.valids.reduce(_|_) || rob.io.com_xcpt.valid
+    ifu.io.core.commit.bits := Mux(
         rob.io.com_xcpt.valid,
         rob.io.com_xcpt.bits.ftq_idx,
         rob.io.commit.uops(youngest_com_idx).ftqIdx
     )
-
-    /*for (i <- 0 until memWidth) {
-        when (RegNext(lsu.io.core.exe(i).req.bits.sfence.valid)) {
-            ifu.io.exe.sfence := RegNext(lsu.io.core.exe(i).req.bits.sfence)
-        }
-    }*/
 
     val ftq_arb = Module(new Arbiter(UInt(log2Ceil(numFTQEntries).W), 3))
     val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
@@ -335,16 +319,15 @@ class iFuCore extends CoreModule {
     jmp_pc_req.valid := RegNext(iss_valids(jmp_unit_idx) && iss_uops(jmp_unit_idx).fuCode === FU_JMP)
     jmp_pc_req.bits := RegNext(iss_uops(jmp_unit_idx).ftqIdx)
 
-    ifu.io.exe.getFtqPc(0).ftqIdx := ftq_arb.io.out.bits
+    ifu.io.core.getFtqPc(0).ftqIdx := ftq_arb.io.out.bits
     ftq_arb.io.out.ready := true.B
 
-    // jmp_unit.io.getFtqPc <> ifu.io.exe.getFtqPc(0)
     jmp_unit.io.getFtqPc := DontCare
-    jmp_unit.io.getFtqPc.pc      := ifu.io.exe.getFtqPc(0).pc
-    jmp_unit.io.getFtqPc.entry   := ifu.io.exe.getFtqPc(0).entry
-    jmp_unit.io.getFtqPc.nextVal := ifu.io.exe.getFtqPc(0).nextVal
-    jmp_unit.io.getFtqPc.nextpc  := ifu.io.exe.getFtqPc(0).nextpc
-    rob.io.xcpt_fetch_pc := ifu.io.exe.getFtqPc(0).pc
+    jmp_unit.io.getFtqPc.pc      := ifu.io.core.getFtqPc(0).pc
+    jmp_unit.io.getFtqPc.entry   := ifu.io.core.getFtqPc(0).entry
+    jmp_unit.io.getFtqPc.nextVal := ifu.io.core.getFtqPc(0).nextVal
+    jmp_unit.io.getFtqPc.nextpc  := ifu.io.core.getFtqPc(0).nextpc
+    rob.io.xcpt_fetch_pc := ifu.io.core.getFtqPc(0).pc
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
@@ -354,15 +337,15 @@ class iFuCore extends CoreModule {
 
     val dec_finished_mask = RegInit(0.U(coreWidth.W))
 
-    ifu.io.exe.fetchPacket.ready := dec_ready
-    val dec_fbundle = ifu.io.exe.fetchPacket.bits
+    ifu.io.core.fetchPacket.ready := dec_ready
+    val dec_fbundle = ifu.io.core.fetchPacket.bits
 
     //-------------------------------------------------------------
     // Decoders
 
     for (w <- 0 until coreWidth) {
         dec_valids(w) :=
-            ifu.io.exe.fetchPacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
+            ifu.io.core.fetchPacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
         decode_units(w).io.enq.uop := dec_fbundle.uops(w).bits
         // decode_units(w).io.status := csr.io.status
         //decode_units(w).io.csr_decode <> csr.io.decode(w)
@@ -402,14 +385,14 @@ class iFuCore extends CoreModule {
             branch_mask_full(w) ||
             brUpdate.b1.mispredictMask =/= 0.U||
             brUpdate.b2.mispredict||
-            ifu.io.exe.redirect_flush)
+            ifu.io.core.redirect_flush)
     )
     val dec_stalls = dec_hazards.scanLeft(false.B)((s, h) => s || h).takeRight(coreWidth)
     dec_fire := (0 until coreWidth).map { w => dec_valids(w) && !dec_stalls(w) }
 
     dec_ready := dec_fire.last
 
-    when (dec_ready || ifu.io.exe.redirect_flush) {
+    when (dec_ready || ifu.io.core.redirect_flush) {
         dec_finished_mask := 0.U
     } .otherwise {
         dec_finished_mask := dec_fire.asUInt | dec_finished_mask
@@ -427,7 +410,7 @@ class iFuCore extends CoreModule {
 
     // Inputs
     for (rename <- rename_stages) {
-        rename.io.kill       := ifu.io.exe.redirect_flush
+        rename.io.kill       := ifu.io.core.redirect_flush
         rename.io.brupdate   := brUpdate
         rename.io.dec_fire   := dec_fire
         rename.io.dec_uops   := dec_uops
@@ -480,7 +463,7 @@ class iFuCore extends CoreModule {
         || dis_prior_slot_unique(w)
         || brUpdate.b1.mispredictMask =/= 0.U
         || brUpdate.b2.mispredict
-        || ifu.io.exe.redirect_flush)
+        || ifu.io.core.redirect_flush)
     }
 
     lsu.io.core.fence_dmem := (dis_valids zip wait_for_empty_pipeline).map { case (v, w) => v && w }.reduce(_||_)
@@ -509,11 +492,6 @@ class iFuCore extends CoreModule {
     rob.io.enq_uops          := dis_uops
     rob.io.enq_partial_stall := dis_stalls.last
     // rob.io.csr_stall         := csr.io.csr_stall
-
-    // when(RegNext(dis_fire.reduce(_||_) && dis_uops(PriorityEncoder(dis_fire)).is_sys_pc2epc)) {
-    //     ifu.io.exe.commit.valid := true.B
-    //     ifu.io.exe.commit.bits := RegNext(dis_uops(PriorityEncoder(dis_valids)).ftqIdx)
-    // }
 
     for (w <- 0 until coreWidth) {
         dis_uops(w).robIdx := Cat(

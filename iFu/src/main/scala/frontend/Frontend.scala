@@ -64,44 +64,33 @@ class FetchBundle extends CoreBundle {
     // val fsrc            = UInt(BSRC_SZ.W)
 }
 
-class FrontendToExeIO extends CoreBundle {  // from core to frontend instead of from frontend to core
+class FrontendToCoreIO extends CoreBundle {
     /*--------------------------*/
     val numFTQEntries   = frontendParams.numFTQEntries
     /*--------------------------*/
-    val fetchPacket = Flipped(new DecoupledIO(new FetchBufferResp))
+    val fetchPacket = new DecoupledIO(new FetchBufferResp)
 
     // 1 for xcpt/jalr/auipc/flush
-    val getFtqPc        = Flipped(Vec(2, new GetPCFromFtqIO))
+    val getFtqPc        = Vec(2, new GetPCFromFtqIO)
 
-    // do we need this?
-    // //Breakpoint info
-    // val status          = Output(new MStatus)
-    // val bp              = Output(Vec(nBreakpoints, new BP))
-    // val mcontext        = Output(UInt(mcontextWidth.W))
-    // val scontext        = Output(UInt(scontextWidth.W))
+    val brupdate        = Input(new BrUpdateInfo)
 
-    /*val sfence          = Valid(new SFenceReq)*/
+    // Redirects change the PC
+    val redirect_flush  = Input(Bool())
+    val redirect_val    = Input(Bool())
+    val redirect_pc     = Input(UInt())    //分支指令的结果
+    val redirect_ftq_idx= Input(UInt())
+    val redirect_ghist  = Input(new GlobalHistory)
 
-    val brupdate        = Output(new BrUpdateInfo)
-
-    //Redirects change the PC
-    val redirect_flush  = Output(Bool())
-    val redirect_val    = Output(Bool())
-    val redirect_pc     = Output(UInt())    //分支指令的结果
-    val redirect_ftq_idx= Output(UInt())
-    val redirect_ghist  = Output(new GlobalHistory)
-
-    val commit          = Valid(UInt(numFTQEntries.W))
-    val flush_icache    = Output(Bool())
+    val commit          = Flipped(Valid(UInt(numFTQEntries.W)))
+    val flush_icache    = Input(Bool())
 }
 
 class FrontendIO extends CoreBundle {
-    val exe = Flipped(new FrontendToExeIO)
+    val core = new FrontendToCoreIO
 
     val iresp = Input(new CBusResp)
     val ireq = Output(new CBusReq)
-    // val ptw = new TLBPTWIO   // do we need this?
-    // val errors = new ICacheErrors
 }
 
 /**TODO
@@ -134,7 +123,7 @@ class Frontend extends CoreModule {
     io.ireq            := icache.io.cbusReq
     icache.io.cbusResp := io.iresp
 
-    icache.io.invalidate := io.exe.flush_icache
+    icache.io.invalidate := io.core.flush_icache
 
     // --------------------------------------------------------
     // **** NextPC Select (F0) ****
@@ -379,14 +368,6 @@ class Frontend extends CoreModule {
     for(b <- 0 until nBanks){
         val bank_data = f3_data((b + 1) * bankWidth * coreInstrBits - 1, b * bankWidth * coreInstrBits)
         for(w <- 0 until bankWidth) {
-
-            // val bpu = Module(new BreakpointUnit(nBreakpoints))
-            // bpu.io.status   := io.exe.status
-            // bpu.io.bp := io.exe.bp
-            // bpu.io.ea := DontCare
-            // bpu.io.mcontext := io.exe.mcontext
-            // bpu.io.scontext := io.exe.scontext
-
             val i = (b * bankWidth) + w
             val pc = (f3_aligned_pc + (i << log2Ceil(coreInstrBytes)).U)
             val instr = bank_data(w * coreInstrBits + coreInstrBits - 1,w * coreInstrBits)
@@ -630,41 +611,30 @@ class Frontend extends CoreModule {
     // **** To Core (F5) ****
     // -------------------------------------------------------
 
-    io.exe.fetchPacket <> fb.io.deq
-    io.exe.getFtqPc    <> ftq.io.getFtqpc
+    io.core.fetchPacket <> fb.io.deq
+    io.core.getFtqPc    <> ftq.io.getFtqpc
 
-    ftq.io.deq            := io.exe.commit
-    ftq.io.brUpdate       := io.exe.brupdate
-    ftq.io.redirect.valid := io.exe.redirect_val
-    ftq.io.redirect.bits  := io.exe.redirect_ftq_idx
-    
+    ftq.io.deq            := io.core.commit
+    ftq.io.brUpdate       := io.core.brupdate
+    ftq.io.redirect.valid := io.core.redirect_val
+    ftq.io.redirect.bits  := io.core.redirect_ftq_idx
+
     fb.io.clear := false.B
 
-    /*when (io.exe.sfence.valid) {
-        fb.io.clear  := true.B
-        f4_clear     := true.B
-        f3_clear     := true.B
-        f2_clear     := true.B
-        f1_clear     := true.B
-
-        s0_valid     := false.B
-        s0_vpc       := io.exe.sfence.bits.addr
-        s0_is_replay := false.B
-        s0_is_sfence := true.B
-    } .else*/when(io.exe.redirect_flush) {
+    when (io.core.redirect_flush) {
         fb.io.clear := true.B
         f4_clear    := true.B
         f3_clear    := true.B
         f2_clear    := true.B
         f1_clear    := true.B
 
-        s0_valid := io.exe.redirect_val
-        s0_vpc := io.exe.redirect_pc
-        s0_ghist := io.exe.redirect_ghist
+        s0_valid := io.core.redirect_val
+        s0_vpc   := io.core.redirect_pc
+        s0_ghist := io.core.redirect_ghist
         // s0_tsrc := BSRC_C
         s0_is_replay := false.B
 
-        ftq.io.redirect.valid := io.exe.redirect_val
-        ftq.io.redirect.bits := io.exe.redirect_ftq_idx
+        ftq.io.redirect.valid := io.core.redirect_val
+        ftq.io.redirect.bits  := io.core.redirect_ftq_idx
     }
 }
