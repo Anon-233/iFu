@@ -87,12 +87,12 @@ class LLBCTL extends CoreBundle {
 
 class DMW extends CoreBundle{
     val vseg = UInt(3.W)
-    val r0_1 = UInt(1.W)
+    val r0_0 = UInt(1.W)
     val pseg = UInt(3.W)
-    val r0_2 = UInt(19.W)
+    val r0_1 = UInt(19.W)
     val mat  = UInt(2.W)
     val plv3 = UInt(1.W)
-    val r0_3 = UInt(2.W)
+    val r0_2 = UInt(2.W)
     val plv0 = UInt(1.W)
 }
 
