@@ -255,7 +255,7 @@ class DecodeUnit extends CoreModule {
     when (io.interrupt) {    //TODO: isSFB是否应该删掉
         xcpt_valid := true.B
         xcpt_cause := INT
-    } .elsewhen (uop.instr_misalign) {
+    } .elsewhen (uop.instr_misalign) {  //TODO:检测异常
         xcpt_valid := true.B
         xcpt_cause := ADEF
     } .elsewhen (inst === SYSCALL || inst === BREAK) {

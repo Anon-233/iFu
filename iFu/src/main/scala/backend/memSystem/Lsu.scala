@@ -456,10 +456,6 @@ class Lsu extends CoreModule {
     //TODO ma_ld和ma_st的条件判断需要更改
     val ma_ld = widthMap(w => will_fire_load_incoming(w) && /*exe_req(w).bits.mxcpt.valid*/false.B) // We get ma_ld in memaddrcalc
     val ma_st = widthMap(w => (will_fire_sta_incoming(w) || will_fire_stad_incoming(w)) && /*exe_req(w).bits.mxcpt.valid*/false.B) // We get ma_ld in memaddrcalc
-    val pf_ld = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).pf.ld && exe_tlb_uop(w).use_ldq)
-    val pf_st = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).pf.st && exe_tlb_uop(w).use_stq)
-    val ae_ld = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).ae.ld && exe_tlb_uop(w).use_ldq)
-    val ae_st = widthMap(w => dtlb.io.req(w).valid && dtlb.io.resp(w).ae.st && exe_tlb_uop(w).use_stq)
 
     // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
     val mem_xcpt_valids = RegNext(widthMap(w =>
