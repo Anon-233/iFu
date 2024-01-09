@@ -504,9 +504,10 @@ class Frontend extends CoreModule {
              */
             f3_fetch_bundle.shadowable_mask(i) := (
                 !(
-                    f3_fetch_bundle.exceptions.is_pif ||
-                    f3_fetch_bundle.exceptions.is_ppi ||
-                    f3_fetch_bundle.exceptions.is_adef
+                    f3_fetch_bundle.exceptions.is_pif  ||
+                    f3_fetch_bundle.exceptions.is_ppi  ||
+                    f3_fetch_bundle.exceptions.is_adef ||
+                    f3_fetch_bundle.exceptions.is_tlbr
                 ) &&
                 f3_bank_mask(b) && (brsigs.shadowable || !f3_mask(i))   // TODO: do we need f3_mask(i) here?
             )
@@ -592,9 +593,10 @@ class Frontend extends CoreModule {
             f2_clear     := true.B
             f1_clear     := true.B
             s0_valid     := !(
-                f3_fetch_bundle.exceptions.is_pif ||
-                f3_fetch_bundle.exceptions.is_ppi ||
-                f3_fetch_bundle.exceptions.is_adef
+                f3_fetch_bundle.exceptions.is_pif  ||
+                f3_fetch_bundle.exceptions.is_ppi  ||
+                f3_fetch_bundle.exceptions.is_adef ||
+                f3_fetch_bundle.exceptions.is_tlbr
             )
             s0_vpc       := f3_predicted_target
             s0_is_replay := false.B
@@ -648,9 +650,10 @@ class Frontend extends CoreModule {
         !f4.io.deq.bits.cfiIdx.valid &&
         !f4.io.enq.valid &&
         !(
-            f4.io.deq.bits.exceptions.is_pif ||
-            f4.io.deq.bits.exceptions.is_ppi ||
-            f4.io.deq.bits.exceptions.is_adef
+            f4.io.deq.bits.exceptions.is_pif  ||
+            f4.io.deq.bits.exceptions.is_ppi  ||
+            f4.io.deq.bits.exceptions.is_adef ||
+            f4.io.deq.bits.exceptions.is_tlbr
         )
     )
     when (f4_sfb_valid){
