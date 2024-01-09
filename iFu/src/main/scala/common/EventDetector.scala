@@ -25,7 +25,7 @@ class eventDetector extends CoreModule {
     when (io.exception) {
         io.debug_event.excpvalid  := true.B
         io.debug_event.isEret := !io.xcpt_uop.exception && io.xcpt_uop.uopc === uopERET
-        io.debug_event.intrNo := io.debug_csr_reg.asUInt(12, 2)
+        io.debug_event.intrNo := io.debug_csr_reg.estat.asUInt(12, 2)
         io.debug_event.ecode  := Cat(io.debug_csr_reg.estat.ecode, io.debug_csr_reg.estat.esubcode)
         io.debug_event.epc    := io.xcpt_uop.debug_pc
         io.debug_event.einst  := io.xcpt_uop.debug_inst
