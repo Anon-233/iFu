@@ -227,8 +227,12 @@ class ALUExeUnit(
         )
 
         if (hasAlu) {
-            io.iresp.bits.uop.csrAddr := immGen(alu.io.resp.bits.uop.immPacked, immCSR).asUInt
-            io.iresp.bits.uop.ctrl.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
+            io.iresp.bits.uop.csrAddr := immGen(
+                alu.io.resp.bits.uop.immPacked,
+                alu.io.resp.bits.uop.ctrl.imm_sel
+            ).asUInt
+            io.iresp.bits.uop.ctrl.csr_cmd :=
+                    alu.io.resp.bits.uop.ctrl.csr_cmd
             io.iresp.bits.rj := alu.io.resp.bits.rj
             io.iresp.bits.rd := alu.io.resp.bits.rd
         }

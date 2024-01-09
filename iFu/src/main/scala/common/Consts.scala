@@ -94,6 +94,8 @@ object Consts {
     val immS20 = 6.U(immSz.W) //Cat(Fill(10,inst(24)),inst(24,5),Fill(2,0.U))
     val immS26 = 7.U(immSz.W) // Cat(Fill(4,inst(9)),inst(9,0),inst(25,10),Fill(2,0.U))
     val immCSR = 8.U(immSz.W)
+    val immCID = 9.U(immSz.W)
+
 
     val BR_N   = 0.U(4.W) // Next
     val BR_NE  = 1.U(4.W) // Branch on NotEqual

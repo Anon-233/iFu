@@ -145,9 +145,9 @@ object CsrRRdDecode extends RRdDecodeConstants {
                    //                    |    |  |  use mem pipe         |         |        |      rf wen   |
                    //                    |    |  |  |     alu fcn        |         |        |        |      |
                    //                    |    |  |  |       |            |         |        |        |      |
-            BitPat(uopCSRWR)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_ZERO, immX  , REN_1, CSR_W),
-            BitPat(uopCSRRD)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_ZERO, OP2_ZERO, immX  , REN_1, CSR_R),
-            BitPat(uopCSRXCHG) -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_RS2 , immX  , REN_1, CSR_M),
+            BitPat(uopCSRWR)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_ZERO, immCSR, REN_1, CSR_W),
+            BitPat(uopCSRRD)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_ZERO, OP2_ZERO, immCSR, REN_1, CSR_R),
+            BitPat(uopCSRXCHG) -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_RS2 , immCSR, REN_1, CSR_M),
             BitPat(uopERET)    -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, CSR_E)
         )
 }
@@ -161,7 +161,7 @@ object CntRRdDecode extends RRdDecodeConstants {
                    //                    |    |  |  use mem pipe         |         |        |      rf wen   |
                    //                    |    |  |  |     alu fcn        |         |        |        |      |
                    //                    |    |  |  |       |            |         |        |        |      |
-            // BitPat(uopRDCNTIDW)-> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_ZERO, immX  , REN_1, CSR_N),
+            BitPat(uopRDCNTIDW)-> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_ZERO, OP2_ZERO, immCID, REN_1, CSR_R),
             BitPat(uopRDCNTVLW)-> List(BR_N , Y, N, N, cntFn.FN_VL   , OP1_X   , OP2_X   , immX  , REN_1, CSR_N),
             BitPat(uopRDCNTVHW)-> List(BR_N , Y, N, N, cntFn.FN_VH   , OP1_X   , OP2_X   , immX  , REN_1, CSR_N)
         )

@@ -136,15 +136,16 @@ object immGen
     def apply(immPacked: UInt, immType: UInt): SInt = {
         val imm = WireInit(0.U(32.W))
         imm := MuxLookup(immType, 0.U)(Seq(
-            immU5   -> Cat(Fill(27,0.U),immPacked(14,10)),
-            immU12  -> Cat(Fill(20,0.U),immPacked(21,10)),
+            immU5   -> Cat(0.U(27.W),immPacked(14,10)),
+            immU12  -> Cat(0.U(20.W),immPacked(21,10)),
             immS12  -> Cat(Fill(20,immPacked(21)),immPacked(21,10)),
-            immS14  -> Cat(Fill(16,immPacked(23)),immPacked(23,10),Fill(2,0.U)),
-            immS16  -> Cat(Fill(14,immPacked(25)),immPacked(25,10),Fill(2,0.U)),
-            immU20  -> Cat(immPacked(24,5),Fill(12,0.U)),
-            immS20  -> Cat(Fill(10,immPacked(24)),immPacked(24,5),Fill(2,0.U)),
-            immS26  -> Cat(Fill(4,immPacked(9)),immPacked(9,0),immPacked(25,10),Fill(2,0.U)),
-            immCSR  -> Cat(Fill(18,0.U),immPacked(23,10))
+            immS14  -> Cat(Fill(16,immPacked(23)),immPacked(23,10),0.U(2.W)),
+            immS16  -> Cat(Fill(14,immPacked(25)),immPacked(25,10),0.U(2.W)),
+            immU20  -> Cat(immPacked(24,5),0.U(12.W)),
+            immS20  -> Cat(Fill(10,immPacked(24)),immPacked(24,5),0.U(2.W)),
+            immS26  -> Cat(Fill(4,immPacked(9)),immPacked(9,0),immPacked(25,10),0.U(2.W)),
+            immCSR  -> Cat(0.U(18.W),immPacked(23,10)),
+            immCID  -> Cat(0.U(18.W), CSR_TID)
         ))
         imm.asSInt
     }
