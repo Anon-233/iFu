@@ -142,8 +142,8 @@ class Rob(val numWritePorts: Int) extends CoreModule {
             robBsy(robTail)        := !(io.enq_uops(w).is_fence ||
                                         io.enq_uops(w).is_fencei ||
                                         io.enq_uops(w).is_nop ||
-                                        io.enq_uops(w).excCause === SYS ||
-                                        io.enq_uops(w).excCause === BRK)
+                                        io.enq_uops(w).xcpt_cause === SYS ||
+                                        io.enq_uops(w).xcpt_cause === BRK)
             robException(robTail)  := io.enq_uops(w).exception
             robUop(robTail)        := io.enq_uops(w)
             robPredicated(robTail) := false.B
@@ -181,7 +181,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
         //---------------output:commit------------
         canCommit(w) := robVal(robHead) && !(robBsy(robHead)) /* && !io.csr_stall */
-        isXcpt2Commit(w) := (robUop(robHead).excCause === SYS) || (robUop(robHead).excCause === BRK)
+        isXcpt2Commit(w) := (robUop(robHead).xcpt_cause === SYS) || (robUop(robHead).xcpt_cause === BRK)
 
         io.commit.valids(w)      := willCommit(w)
         io.commit.arch_valids(w) := willCommit(w) && !robPredicated(comIdx)
@@ -279,7 +279,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     exceptionThrown := willThrowException
     val isMiniException = io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING
     io.com_xcpt.valid := exceptionThrown && !isMiniException
-    io.com_xcpt.bits.cause := rXcptUop.excCause
+    io.com_xcpt.bits.cause := rXcptUop.xcpt_cause
     io.com_xcpt.bits.vaddrWriteEnable := rXcptUop.vaddrWriteEnable
     io.com_xcpt.bits.uop := rXcptUop
 
@@ -331,7 +331,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
             when(!rXcptVal || IsOlder(newXcptUop.robIdx,rXcptUop.robIdx,robHeadIdx)){
                 rXcptVal := true.B
                 nextXcptUop := newXcptUop
-                nextXcptUop.excCause := io.lxcpt.bits.cause
+                nextXcptUop.xcpt_cause := io.lxcpt.bits.cause
                 rXcptBadvaddr := io.lxcpt.bits.badvaddr
             }
         } .elsewhen (!rXcptVal && enqXcpts.reduce(_|_)){

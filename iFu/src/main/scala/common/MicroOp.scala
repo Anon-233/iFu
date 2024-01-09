@@ -64,7 +64,7 @@ class MicroOp extends CoreBundle {
     val ppred_busy: Bool = Bool()
 
     val exception: Bool = Bool()
-    val excCause: UInt =  UInt(15.W)
+    val xcpt_cause: UInt = UInt(15.W)
     val vaddrWriteEnable: Bool = Bool()
     val instr_misalign : Bool = Bool()
     val ctrl = new CtrlSignals
