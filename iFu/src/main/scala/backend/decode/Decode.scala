@@ -286,16 +286,16 @@ class DecodeUnit extends CoreModule {
     uop.lrs1        := inst(9, 5)
     uop.lrs2        := inst(14, 10)
 
-    when(uop.uopc === uopJAL) {
+    when(cs.uopc === uopJAL) {
         uop.ldst := 1.U
     }
-    when(uop.uopc === uopRDTIMELW && inst(4,0) === 0.U){
+    when(cs.uopc === uopRDTIMELW && inst(4,0) === 0.U){
         uop.uopc := uopRDCNTIDW
         uop.fuCode := FU_CSR
         uop.ldst := inst(9, 5)
         uop.is_unique := true.B
         uop.flush_on_commit := true.B
-    } .elsewhen (uop.uopc === uopRDTIMELW){
+    } .elsewhen (cs.uopc === uopRDTIMELW){
         uop.uopc := uopRDCNTVLW
     }
     when(
@@ -304,11 +304,11 @@ class DecodeUnit extends CoreModule {
     ){
         uop.lrs2 := inst(4, 0)
     }
-    when(uop.uopc === uopCSRWR || uop.uopc === uopCSRXCHG) {
+    when(cs.uopc === uopCSRWR || cs.uopc === uopCSRXCHG) {
         uop.lrs1 := inst(4, 0)
         uop.lrs2 := inst(9, 5)
     }
-    uop.ldst_val   := cs.dst_type =/= RT_X && !(uop.ldst === 0.U && uop.dst_rtype === RT_FIX)
+    uop.ldst_val   := cs.dst_type =/= RT_X && uop.ldst =/= 0.U
     uop.dst_rtype  := cs.dst_type
     uop.lrs1_rtype := cs.rs1_type
     uop.lrs2_rtype := cs.rs2_type
@@ -350,8 +350,8 @@ class DecodeUnit extends CoreModule {
     uop.immPacked := inst(25, 0)
 
     uop.isBr    := cs.is_br
-    uop.isJal   := (uop.uopc === uopJAL)
-    uop.isJalr  := (uop.uopc === uopJIRL)
+    uop.isJal   := cs.uopc === uopJAL
+    uop.isJalr  := cs.uopc === uopJIRL
 
     io.deq.uop  := uop
 }
