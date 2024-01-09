@@ -51,7 +51,7 @@ class ITLB extends CoreModule {
     val is_pif  = false.B // TODO: detect this when connecting with TLBData
     val is_ppi  = false.B // TODO: detect this when connecting with TLBData
     val is_tlbr = false.B // TODO: detect this when connecting with TLBData
-    val is_adef = io.req.bits.vaddr(1, 0) === 0.U // pc must be aligned to 4
+    val is_adef = io.req.bits.vaddr(1, 0) =/= 0.U // pc must be aligned to 4
 
     io.resp.exceptions.valid := is_pif || is_ppi || is_adef || is_tlbr
     io.resp.exceptions.bits.is_pif  := is_pif
