@@ -41,8 +41,6 @@ class FuncUnitResp extends CoreBundle {
     val addr = UInt(xLen.W)
     val rj   = UInt(xLen.W)
     val rd   = UInt(xLen.W)
-    val mxcpt= Bool()// TODO
-    // val sfence = // TODO
 }
 
 class ExeUnitResp(val len: Int = 32) extends CoreBundle {

@@ -257,58 +257,13 @@ class MemAddrCalcUnit extends PipelinedFuncUnit(
     numStages = 0,
     isMemAddrCalcUnit = true
 ) {
-    val uop = io.req.bits.uop
-    val imm = immGen(uop.immPacked, uop.ctrl.imm_sel)
-    val addr = (io.req.bits.rs1Data.asSInt + imm).asUInt
-
+    val uop        = io.req.bits.uop
+    val offset     = immGen(uop.immPacked, uop.ctrl.imm_sel)
+    val addr       = (io.req.bits.rs1Data.asSInt + offset).asUInt
     val store_data = io.req.bits.rs2Data
-    val mxcpt = WireInit(false.B)
-    when(uop.mem_size === 1.U(2.W) && addr(0) =/= 0.U){
-        mxcpt := true.B
-    }.elsewhen(uop.mem_size === 2.U(2.W) && addr(1,0) =/= 0.U){
-        mxcpt := true.B
-    }
-    io.resp.bits.mxcpt := mxcpt
-    io.resp.bits.uop.vaddrWriteEnable := mxcpt
+
     io.resp.bits.addr := addr
     io.resp.bits.data := store_data
-    // TODO: CACOP?
-    // val size = io.req.bits.uop.mem_size
-    // val misaligned =
-    //     (size === 1.U && (addr(0) =/= 0.U)) ||
-    //     (size === 2.U && (addr(1,0) =/= 0.U)) ||
-    //     (size === 3.U && (addr(2,0) =/= 0.U))
-
-    // val bkptu = Module(new BreakpointUnit(nBreakpoints))
-    // bkptu.io.status   := io.status
-    // bkptu.io.bp       := io.bp
-    // bkptu.io.ea       := addr
-    // bkptu.io.mcontext := io.mcontext
-    // bkptu.io.scontext := io.scontext
-
-    // val ma_ld  = io.req.valid && io.req.bits.uop.uopc === uopLD && misaligned
-    // val ma_st  = io.req.valid && (io.req.bits.uop.uopc === uopSTA || io.req.bits.uop.uopc === uopAMO_AG) && misaligned
-    // val bp     = io.req.valid && ((io.req.bits.uop.uopc === uopLD  && bkptu.io.xcpt_ld) ||
-    //                                 (io.req.bits.uop.uopc === uopSTA && bkptu.io.xcpt_st))
-
-    // def checkExceptions(x: Seq[(Bool, UInt)]) = {
-    //     (x.map(_._1).reduce(_||_), PriorityMux(x))
-    // }
-    // val (xcpt_val, xcpt_cause) = checkExceptions(List(
-    //     (ma_ld,  (Causes.misaligned_load).U ),   // TODO: change the cause code
-    //     (ma_st,  (Causes.misaligned_store).U),
-    //     (dbg_bp, (CSR.debugTriggerCause).U  ),
-    //     (bp,     (Causes.breakpoint).U      )
-    // ))
-
-    // io.resp.bits.mxcpt.valid := xcpt_val
-    // io.resp.bits.mxcpt.bits  := xcpt_cause
-
-    // io.resp.bits.sfence.valid := io.req.valid && io.req.bits.uop.mem_cmd === M_SFENCE
-    // io.resp.bits.sfence.bits.rs1 := io.req.bits.uop.mem_size(0)
-    // io.resp.bits.sfence.bits.rs2 := io.req.bits.uop.mem_size(1)
-    // io.resp.bits.sfence.bits.addr := io.req.bits.rs1_data
-    // io.resp.bits.sfence.bits.asid := io.req.bits.rs2_data
 }
 
 abstract class IterativeFuncUnit extends FuncUnit (
