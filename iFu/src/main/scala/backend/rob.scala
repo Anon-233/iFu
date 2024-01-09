@@ -304,6 +304,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     //优化时序，延迟一个周期
     io.flush.valid := flushVal
+    io.flush.bits.uop := DontCare
     io.flush.bits.ftq_idx := flushUop.ftqIdx
     io.flush.bits.pc_lob := flushUop.pcLowBits
     //io.flush.bits.edge_inst := flushUop.edge_inst
