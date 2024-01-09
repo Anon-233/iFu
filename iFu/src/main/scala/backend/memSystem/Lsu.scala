@@ -581,7 +581,7 @@ class Lsu extends CoreModule {
         when(will_fire_load_incoming(w)) {
             val ldq_idx = ldq_incoming_idx(w)
             ldq(ldq_idx).bits.addr.valid := true.B
-            ldq(ldq_idx).bits.addr.bits := Mux(exe_tlb_xcpt(w), exe_tlb_vaddr(w), exe_tlb_paddr(w))
+            ldq(ldq_idx).bits.addr.bits := exe_tlb_paddr(w)
             ldq(ldq_idx).bits.uop.pdst := exe_tlb_uop(w).pdst
             ldq(ldq_idx).bits.addr_is_virtual := exe_tlb_xcpt(w)
             // ldq(ldq_idx).bits.addr_is_uncacheable := exe_tlb_uncacheable(w) && !exe_tlb_miss(w)
@@ -603,8 +603,8 @@ class Lsu extends CoreModule {
             // stq(stq_idx).bits.addr_is_virtual := exe_tlb_miss(w)
             val stq_idx = stq_incoming_idx(w)
             stq(stq_idx).bits.addr.valid := true.B
-            stq(stq_idx).bits.addr.bits  := exe_req(w).bits.addr
-            stq(stq_idx).bits.uop.pdst := exe_req(w).bits.uop.pdst
+            stq(stq_idx).bits.addr.bits  := exe_tlb_paddr(w)
+            stq(stq_idx).bits.uop.pdst := exe_tlb_uop(w).pdst
             stq(stq_idx).bits.addr_is_virtual := exe_tlb_xcpt(w)
 
             assert(!(will_fire_sta_incoming(w) && stq_incoming_e(w).bits.addr.valid),
