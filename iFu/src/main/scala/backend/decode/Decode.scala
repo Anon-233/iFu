@@ -10,7 +10,7 @@ import iFu.common._
 import iFu.util._
 import iFu.util.ImplicitCast.uintToBitPat
 
-abstract trait DecodeTable {
+trait DecodeTable {
     val DC1 = BitPat.dontCare(1)
     def decode_default: List[BitPat] =
     //
@@ -255,9 +255,9 @@ class DecodeUnit extends CoreModule {
     when (io.interrupt) {    //TODO: isSFB是否应该删掉
         xcpt_valid := true.B
         xcpt_cause := INT
-    } .elsewhen (uop.instr_misalign) {  //TODO:检测异常
+    } .elsewhen (io.enq.uop.xcpt_valid) {
         xcpt_valid := true.B
-        xcpt_cause := ADEF
+        xcpt_cause := io.enq.uop.xcpt_cause
     } .elsewhen (inst === SYSCALL || inst === BREAK) {
         when (inst === SYSCALL) {
             xcpt_valid := true.B

@@ -9,6 +9,7 @@ import iFu.util._
 import iFu.tlb._
 import iFu.backend.PreDecode
 import iFu.frontend.FrontendUtils._
+import iFu.common.CauseCode._
 
 //TODO 重命名GlobalHistory,如果之后RAS增加计数器，Histories的update函数需要更改，
 //TODO FetchBundle重命名为FetchBufferEntry
@@ -22,7 +23,7 @@ class FetchResp extends CoreBundle {
     val pc         = UInt(vaddrBits.W)
     val data       = UInt((fetchWidth * coreInstrBits).W)
     val mask       = UInt(fetchWidth.W)
-    val exceptions = new ITLBExceptions
+    val exception  = Valid(new ITLBException)
     val gHist      = new GlobalHistory
     // val fsrc    = UInt(BSRC_SZ.W)
 }
@@ -58,7 +59,7 @@ class FetchBundle extends CoreBundle {
 
     val gHist           = new GlobalHistory
 
-    val exceptions      = new ITLBExceptions
+    val exception       = Valid(new ITLBException)
 
     val bpdMeta         = Vec(nBanks, Vec(bankWidth, new PredictionMeta))
     // val fsrc            = UInt(BSRC_SZ.W)
@@ -113,12 +114,12 @@ class Frontend extends CoreModule {
     val io = IO(new FrontendIO)
 
     // Module definition
-    val bpd    = Module(new BranchPredictor())
-    val ras    = Module(new Ras)
-    val icache = Module(new ICache(frontendParams.iCacheParams))
-    val tlb    = Module(new ITLB)
-    val fb     = Module(new FetchBuffer)
-    val ftq    = Module(new FetchTargetQueue)
+    val bpd          = Module(new BranchPredictor())
+    val ras          = Module(new Ras)
+    val icache       = Module(new ICache(frontendParams.iCacheParams))
+    val tlb          = Module(new ITLB)
+    val fetch_buffer = Module(new FetchBuffer)
+    val ftq          = Module(new FetchTargetQueue)
 
     io.ireq            := icache.io.cbusReq
     icache.io.cbusResp := io.iresp
@@ -178,13 +179,13 @@ class Frontend extends CoreModule {
     // 因为此时tlb resp的值是被replay的值，而被replay的值来源之前的s2
 
     // TODO: TLB miss should call exception
-    val s1_tlb_miss = !s1_is_replay && tlb.io.resp.exceptions.bits.is_pif
+    val s1_tlb_xcpt = !s1_is_replay && tlb.io.resp.exception.valid
     val s1_tlb_resp = Mux(s1_is_replay, RegNext(s0_replay_tlb_resp), tlb.io.resp)
     val s1_ppc = Mux(s1_is_replay, RegNext(s0_replay_ppc), tlb.io.resp.paddr)
     val s1_bpd_resp = bpd.io.resp.f1
 
     icache.io.s1_paddr  := s1_ppc
-    icache.io.s1_kill   := tlb.io.resp.exceptions.bits.is_pif || f1_clear
+    icache.io.s1_kill   := tlb.io.resp.exception.valid || f1_clear
 
     val f1_mask = fetchMask(s1_vpc)
     val f1_redirects = (0 until fetchWidth).map{ i=>
@@ -210,8 +211,8 @@ class Frontend extends CoreModule {
     )
 
     // 当前s1寄存器有效 注意，s1阶段可能会replay
-    when (s1_valid && !s1_tlb_miss) {
-        s0_valid     := !s1_tlb_resp.exceptions.valid // 发生tlb异常时停止取指
+    when (s1_valid && !s1_tlb_xcpt) {
+        s0_valid     := !s1_tlb_resp.exception.valid // 发生tlb异常时停止取指
         // s0_tsrc      := BSRC_1
         s0_vpc       := f1_predicted_target
         s0_ghist     := f1_predicted_ghist
@@ -228,14 +229,14 @@ class Frontend extends CoreModule {
     val s2_ppc       = RegNext(s1_ppc)
     // val s2_tsrc      = RegNext(s1_tsrc)
     val s2_tlb_resp  = RegNext(s1_tlb_resp)
-    val s2_tlb_miss  = RegNext(s1_tlb_miss)
+    val s2_tlb_xcpt  = RegNext(s1_tlb_xcpt)
     val s2_is_replay = RegNext(s1_is_replay) && s2_valid
 
     val f2_clear     = WireInit(false.B)
     // val s2_fsrc      = WireInit(BSRC_1)
     val f3_ready     = Wire(Bool())
 
-    val s2_xcpt = s2_valid && s2_tlb_resp.exceptions.valid && !s2_is_replay
+    val s2_xcpt = s2_valid && s2_tlb_resp.exception.valid && !s2_is_replay
 
     icache.io.s2_kill := s2_xcpt
 
@@ -273,7 +274,7 @@ class Frontend extends CoreModule {
         (s2_valid && icache.io.resp.valid && !f3_ready)
     ) {
         // TODO: when exception happened, and f3 ready is false, then s0 valid is flase?????
-        s0_valid     := !s2_tlb_resp.exceptions.valid || s2_is_replay || s2_tlb_miss
+        s0_valid     := !s2_tlb_resp.exception.valid || s2_is_replay
         s0_vpc       := s2_vpc
         s0_is_replay := s2_valid && icache.io.resp.valid
         s0_ghist     := s2_ghist
@@ -285,7 +286,7 @@ class Frontend extends CoreModule {
         }
         when((s1_valid && (s1_vpc =/= f2_predicted_target || f2_correct_f1_ghist)) || !s1_valid){
             // TODO: same problem as above
-            s0_valid     := !(s2_tlb_resp.exceptions.valid && !s2_is_replay)
+            s0_valid     := !(s2_tlb_resp.exception.valid && !s2_is_replay)
             s0_vpc       := f2_predicted_target
             s0_is_replay := false.B
             s0_ghist     := f2_predicted_ghist
@@ -320,15 +321,14 @@ class Frontend extends CoreModule {
      *  1. s2指令有效
      *  2. icache返回结果有效，或者是tlb除了miss以外的异常。miss情况可能可以由ptw解决，所以暂时不入队
      */
-    // TODO 没有ptw，s2_tlb_miss或许不需要判定is_replay，并把s2_tlb_miss与ae，pf合在一起
     f3.io.enq.valid := (s2_valid && !f2_clear &&
-        (icache.io.resp.valid || (s2_tlb_resp.exceptions.valid && !s2_tlb_miss))
+        (icache.io.resp.valid || s2_tlb_resp.exception.valid)
     )
     f3.io.enq.bits.pc          := s2_vpc
     f3.io.enq.bits.data        := Mux(s2_xcpt, 0.U, icache.io.resp.bits.data)
     f3.io.enq.bits.gHist       := s2_ghist
     f3.io.enq.bits.mask        := fetchMask(s2_vpc)
-    f3.io.enq.bits.exceptions  := s2_tlb_resp.exceptions.bits
+    f3.io.enq.bits.exception   := s2_tlb_resp.exception.bits
     // f3.io.enq.bits.fsrc  := s2_fsrc
     // f3.io.enq.bits.tsrc := s2_tsrc
 
@@ -414,12 +414,7 @@ class Frontend extends CoreModule {
              * 是shadowable的或者该位置指令无效
              */
             f3_fetch_bundle.shadowable_mask(i) := (
-                !(
-                    f3_fetch_bundle.exceptions.is_pif  ||
-                    f3_fetch_bundle.exceptions.is_ppi  ||
-                    f3_fetch_bundle.exceptions.is_adef ||
-                    f3_fetch_bundle.exceptions.is_tlbr
-                ) &&
+                !f3_fetch_bundle.exception.valid &&
                 f3_bank_mask(b) && (brsigs.shadowable || !f3_mask(i))   // TODO: do we need f3_mask(i) here?
             )
             f3_fetch_bundle.sfb_dests(i) := offset_from_aligned_pc
@@ -445,7 +440,7 @@ class Frontend extends CoreModule {
     f3_fetch_bundle.brMask       := f3_br_mask.asUInt
     f3_fetch_bundle.pc            := f3_fetchResp.pc
     f3_fetch_bundle.ftqIdx       := 0.U    // TODO: DontCare?
-    f3_fetch_bundle.exceptions := f3_fetchResp.exceptions
+    f3_fetch_bundle.exception  := f3_fetchResp.exception
     // f3_fetch_bundle.fsrc          := f3_fetchResp.fsrc
     // f3_fetch_bundle.tsrc          := f3_fetchResp.tsrc
     f3_fetch_bundle.shadowed_mask := f3_shadowed_mask
@@ -500,12 +495,7 @@ class Frontend extends CoreModule {
         ) {
             f2_clear     := true.B
             f1_clear     := true.B
-            s0_valid     := !(
-                f3_fetch_bundle.exceptions.is_pif  ||
-                f3_fetch_bundle.exceptions.is_ppi  ||
-                f3_fetch_bundle.exceptions.is_adef ||
-                f3_fetch_bundle.exceptions.is_tlbr
-            )
+            s0_valid     := !f3_fetch_bundle.exception.valid
             s0_vpc       := f3_predicted_target
             s0_is_replay := false.B
             s0_ghist     := f3_predicted_ghist
@@ -557,12 +547,7 @@ class Frontend extends CoreModule {
         f4.io.deq.bits.sfbs.reduce(_||_) &&
         !f4.io.deq.bits.cfiIdx.valid &&
         !f4.io.enq.valid &&
-        !(
-            f4.io.deq.bits.exceptions.is_pif  ||
-            f4.io.deq.bits.exceptions.is_ppi  ||
-            f4.io.deq.bits.exceptions.is_adef ||
-            f4.io.deq.bits.exceptions.is_tlbr
-        )
+        !f4.io.deq.bits.exception.valid
     )
     when (f4_sfb_valid){
         f3_shadowed_mask := f4_sfb_mask(2 * fetchWidth - 1,fetchWidth).asBools
@@ -573,18 +558,18 @@ class Frontend extends CoreModule {
     f4_ready        := f4.io.enq.ready
     f4.io.enq.valid := f3.io.deq.valid && !f3_clear
     f4.io.enq.bits  := f3_fetch_bundle
-    f4.io.deq.ready := fb.io.enq.ready && ftq.io.enq.ready && !f4_delay
+    f4.io.deq.ready := fetch_buffer.io.enq.ready && ftq.io.enq.ready && !f4_delay
 
-    fb.io.enq.valid             := f4.io.deq.valid && ftq.io.enq.ready && !f4_delay
-    fb.io.enq.bits              := f4.io.deq.bits
-    fb.io.enq.bits.ftqIdx       := ftq.io.enqIdx
-    fb.io.enq.bits.sfbs         := Mux(f4_sfb_valid, UIntToOH(f4_sfb_idx), 0.U(fetchWidth.W)).asBools
-    fb.io.enq.bits.shadowed_mask := (
+    fetch_buffer.io.enq.valid             := f4.io.deq.valid && ftq.io.enq.ready && !f4_delay
+    fetch_buffer.io.enq.bits              := f4.io.deq.bits
+    fetch_buffer.io.enq.bits.ftqIdx       := ftq.io.enqIdx
+    fetch_buffer.io.enq.bits.sfbs         := Mux(f4_sfb_valid, UIntToOH(f4_sfb_idx), 0.U(fetchWidth.W)).asBools
+    fetch_buffer.io.enq.bits.shadowed_mask := (
         Mux(f4_sfb_valid, f4_sfb_mask(fetchWidth - 1,0), 0.U(fetchWidth.W)) |
         f4.io.deq.bits.shadowed_mask.asUInt
     ).asBools
 
-    ftq.io.enq.valid := f4.io.deq.valid && fb.io.enq.ready && !f4_delay
+    ftq.io.enq.valid := f4.io.deq.valid && fetch_buffer.io.enq.ready && !f4_delay
     ftq.io.enq.bits  := f4.io.deq.bits
 
     val bpd_update_arbiter = Module(new Arbiter(new BranchPredictionUpdate, 2))
@@ -608,7 +593,7 @@ class Frontend extends CoreModule {
     // **** To Core (F5) ****
     // -------------------------------------------------------
 
-    io.core.fetchPacket <> fb.io.deq
+    io.core.fetchPacket <> fetch_buffer.io.deq
     io.core.getFtqPc    <> ftq.io.getFtqpc
 
     ftq.io.deq            := io.core.commit
@@ -616,14 +601,14 @@ class Frontend extends CoreModule {
     ftq.io.redirect.valid := io.core.redirect_val
     ftq.io.redirect.bits  := io.core.redirect_ftq_idx
 
-    fb.io.clear := false.B
+    fetch_buffer.io.clear := false.B
 
     when (io.core.redirect_flush) {
-        fb.io.clear := true.B
-        f4_clear    := true.B
-        f3_clear    := true.B
-        f2_clear    := true.B
-        f1_clear    := true.B
+        fetch_buffer.io.clear := true.B
+        f4_clear              := true.B
+        f3_clear              := true.B
+        f2_clear              := true.B
+        f1_clear              := true.B
 
         s0_valid := io.core.redirect_val
         s0_vpc   := io.core.redirect_pc

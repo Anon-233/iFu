@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import iFu.common._
+import iFu.common.CauseCode._
 
 class ITLBCSRContext extends CoreBundle {
     //
@@ -14,16 +15,13 @@ class ITLBReq extends CoreBundle {
 }
 
 // PIF PPI ADEF TLBR
-class ITLBExceptions extends CoreBundle {
-    val is_pif  = Bool()
-    val is_ppi  = Bool()
-    val is_adef = Bool()
-    val is_tlbr = Bool()
+class ITLBException extends CoreBundle {
+    val xcpt_cause = UInt(causeCodeBits.W)
 }
 
 class ITLBResp extends CoreBundle {
     val paddr      = UInt(32.W)
-    val exceptions = Valid(new ITLBExceptions)
+    val exception = Valid(new ITLBException)
 }
 
 class ITLBIO extends CoreBundle {
@@ -47,16 +45,23 @@ class ITLB extends CoreModule {
 // -----------------------------------------
 
 // -----------------------------------------
-//        Exceptions Detection Logic
+//        Exception Detection Logic
     val is_pif  = false.B // TODO: detect this when connecting with TLBData
     val is_ppi  = false.B // TODO: detect this when connecting with TLBData
     val is_tlbr = false.B // TODO: detect this when connecting with TLBData
     val is_adef = io.req.bits.vaddr(1, 0) =/= 0.U // pc must be aligned to 4
 
-    io.resp.exceptions.valid := is_pif || is_ppi || is_adef || is_tlbr
-    io.resp.exceptions.bits.is_pif  := is_pif
-    io.resp.exceptions.bits.is_ppi  := is_ppi
-    io.resp.exceptions.bits.is_adef := is_adef
-    io.resp.exceptions.bits.is_tlbr := is_tlbr
+    io.resp.exception.valid := is_pif || is_ppi || is_adef || is_tlbr
+    when (is_pif) {
+        io.resp.exception.bits.xcpt_cause := PIF
+    } .elsewhen (is_ppi) {
+        io.resp.exception.bits.xcpt_cause := PPI
+    } .elsewhen (is_adef) {
+        io.resp.exception.bits.xcpt_cause := ADEF
+    } .elsewhen (is_tlbr) {
+        io.resp.exception.bits.xcpt_cause := TLBR
+    } .otherwise {
+        io.resp.exception.bits.xcpt_cause := 0.U
+    }
 // -----------------------------------------
 }
