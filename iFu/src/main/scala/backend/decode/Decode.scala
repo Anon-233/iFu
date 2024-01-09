@@ -48,7 +48,6 @@ class CtrlSigs extends Bundle {
     val is_sys_pc2epc   = Bool() //pc to epc（例外）
     val inst_unique     = Bool() //
     val flush_on_commit = Bool()
-    0000000000000000011000?????00000
     def decode(instr: UInt, table: Iterable[(BitPat, List[BitPat])]) = {
         val decoder = DecodeLogic(instr, XDecode.decode_default, table) //返回一个List[BitPat] 若匹配不到，则返回默认值
         val sigs = Seq(
