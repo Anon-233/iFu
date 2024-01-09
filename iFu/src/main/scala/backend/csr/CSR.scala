@@ -288,7 +288,7 @@ class CSRFile extends CoreModule {
             }
             is (CSR_TICLR) {
                 csrRegNxt.ticlr := 0.U
-                when (write_data(0)) {
+                when (write_data(0) === 1.U(1.W)) {
                     csrRegNxt.estat.is_11 := 0.U
                 }
             }
@@ -389,7 +389,7 @@ class CSRFile extends CoreModule {
             when (csrReg.tcfg.periodic.asBool) {
                 csrRegNxt.tval := Cat(csrReg.tcfg.initval, 0.U(2.W))
             } .otherwise {
-                csrRegNxt.tcfg.en := 1.U(1.W)
+                csrRegNxt.tval := -1.U(TIMER_LENGTH.W).asUInt
             }
             csrRegNxt.estat.is_11 := 1.U(1.W)   // set timer interrupt flag bit
         }
