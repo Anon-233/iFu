@@ -190,8 +190,8 @@ class Lsu extends CoreModule {
         io.core.dis_stq_idx(w) := st_enq_idx
 
         // enq
-        val dis_ld_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.use_ldq && !io.core.dis_uops(w).bits.exception
-        val dis_st_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.use_stq && !io.core.dis_uops(w).bits.exception
+        val dis_ld_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.use_ldq && !io.core.dis_uops(w).bits.xcpt_valid
+        val dis_st_val = io.core.dis_uops(w).valid && io.core.dis_uops(w).bits.use_stq && !io.core.dis_uops(w).bits.xcpt_valid
         when(dis_ld_val) {
             ldq(ld_enq_idx).valid := true.B
             ldq(ld_enq_idx).bits.uop := io.core.dis_uops(w).bits
@@ -353,7 +353,7 @@ class Lsu extends CoreModule {
         stq_commit_e.valid &&   // 该store指令有效
         !stq_commit_e.bits.uop.is_fence &&  // 不是fence指令
         !tlb_xcpt_valid &&  //  TODO
-        !stq_commit_e.bits.uop.exception && // TODO
+        !stq_commit_e.bits.uop.xcpt_valid && // TODO
         (stq_commit_e.bits.committed ||     // 被 ROB 提交
         (stq_commit_e.bits.uop.is_amo && // 是 AMO 指令
         stq_commit_e.bits.addr.valid && // 地址准备好了
@@ -508,9 +508,9 @@ class Lsu extends CoreModule {
             // Technically only faulting AMOs need this
             assert(tlb_xcpt_uops(w).use_ldq ^ tlb_xcpt_uops(w).use_stq)
             when(tlb_xcpt_uops(w).use_ldq) {
-                ldq(tlb_xcpt_uops(w).ldqIdx).bits.uop.exception := true.B
+                ldq(tlb_xcpt_uops(w).ldqIdx).bits.uop.xcpt_valid := true.B
             } .otherwise {
-                stq(tlb_xcpt_uops(w).stqIdx).bits.uop.exception := true.B
+                stq(tlb_xcpt_uops(w).stqIdx).bits.uop.xcpt_valid := true.B
             }
         }
     }

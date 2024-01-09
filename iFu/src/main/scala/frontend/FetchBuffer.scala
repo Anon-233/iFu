@@ -82,14 +82,6 @@ class FetchBuffer extends CoreModule {
             inUops(i).debug_inst := io.enq.bits.instrs(i)
             inUops(i).debug_pc    := pc
             inUops(i).taken     := io.enq.bits.cfiIdx.asUInt === i.U && io.enq.bits.cfiIdx.valid
-
-            // TODO: exception handling
-            /*
-            inUops(i).xcpt_pf_if     := io.enq.bits.xcpt_pf_if
-            inUops(i).xcpt_ae_if     := io.enq.bits.xcpt_ae_if
-            inUops(i).bp_debug_if    := io.enq.bits.bp_debug_if_oh(i)
-            inUops(i).bp_xcpt_if     := io.enq.bits.bp_xcpt_if_oh(i)
-            */
         }
     }
 

@@ -275,7 +275,7 @@ class DecodeUnit extends CoreModule {
     when(xcpt_valid && (xcpt_cause === ADEF || xcpt_cause === ALE)){
         uop.vaddrWriteEnable := true.B
     }
-    uop.exception  := xcpt_valid
+    uop.xcpt_valid := xcpt_valid
     uop.xcpt_cause := xcpt_cause
     //-------------------------------------------------------------
     uop.uopc        := cs.uopc

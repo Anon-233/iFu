@@ -63,7 +63,7 @@ class MicroOp extends CoreBundle {
     val prs2_busy: Bool  = Bool()
     val ppred_busy: Bool = Bool()
 
-    val exception: Bool = Bool()
+    val xcpt_valid: Bool = Bool()
     val xcpt_cause: UInt = UInt(15.W)
     val vaddrWriteEnable: Bool = Bool()
     val instr_misalign : Bool = Bool()
@@ -82,14 +82,9 @@ class MicroOp extends CoreBundle {
     val is_fencei: Bool = Bool()
     val is_amo: Bool    = Bool()
 
-    val xcpt_pf_if: Bool = Bool()
-    val xcpt_ae_if: Bool = Bool()
-    // val xcpt_ma_if: Bool = Bool()
-    // val bp_xcpt_if: Bool = Bool()
     val is_sys_pc2epc: Bool = Bool()
     val is_unique: Bool = Bool()
     val flush_on_commit: Bool = Bool()
-
 
     val debug_inst: UInt = UInt(coreInstrBits.W)
     val debug_pc : UInt = UInt(32.W)

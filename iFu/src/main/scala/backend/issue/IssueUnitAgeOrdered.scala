@@ -38,7 +38,7 @@ class IssueUnitAgeOrdered (
 
     val willBeValid = (0 until numIssueSlots).map(i => issueSlots(i).willBeValid) ++
                       (0 until dispatchWidth).map(i =>
-                        io.disUops(i).valid && !disUops(i).exception &&
+                        io.disUops(i).valid && !disUops(i).xcpt_valid &&
                         !disUops(i).is_fence && !disUops(i).is_fencei && !disUops(i).is_nop
                       )
 

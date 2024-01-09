@@ -445,9 +445,6 @@ class Frontend extends CoreModule {
     f3_fetch_bundle.brMask       := f3_br_mask.asUInt
     f3_fetch_bundle.pc            := f3_fetchResp.pc
     f3_fetch_bundle.ftqIdx       := 0.U    // TODO: DontCare?
-    // f3_fetch_bundle.xcpt_pf_if     := f3_fetchResp.xcpt.pf.inst
-    // f3_fetch_bundle.xcpt_ae_if     := f3_fetchResp.xcpt.ae.inst
-    // f3_fetch_bundle.instr_misalign := f3_fetchResp.pc(1,0) =/= 0.U(2.W)
     f3_fetch_bundle.exceptions := f3_fetchResp.exceptions
     // f3_fetch_bundle.fsrc          := f3_fetchResp.fsrc
     // f3_fetch_bundle.tsrc          := f3_fetchResp.tsrc

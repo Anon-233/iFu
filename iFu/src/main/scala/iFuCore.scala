@@ -374,7 +374,7 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     // Decode/Rename1 pipeline logic
 
-    dec_xcpts := dec_uops zip dec_valids map { case (u, v) => u.exception && v }
+    dec_xcpts := dec_uops zip dec_valids map { case (u, v) => u.xcpt_valid && v }
     val dec_xcpt_stall = dec_xcpts.reduce(_||_) && !xcpt_pc_req.ready
 
     val dec_hazards = (0 until coreWidth).map(w =>

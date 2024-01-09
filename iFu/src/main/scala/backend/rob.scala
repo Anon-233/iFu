@@ -144,7 +144,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
                                         io.enq_uops(w).is_nop ||
                                         io.enq_uops(w).xcpt_cause === SYS ||
                                         io.enq_uops(w).xcpt_cause === BRK)
-            robException(robTail)  := io.enq_uops(w).exception
+            robException(robTail)  := io.enq_uops(w).xcpt_valid
             robUop(robTail)        := io.enq_uops(w)
             robPredicated(robTail) := false.B
         } .elsewhen (io.enq_valids.reduce(_|_) && !robVal(robTail)) {
@@ -321,7 +321,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     nextXcptUop := rXcptUop
     val enqXcpts = Wire(Vec(coreWidth,Bool()))
     for(i <- 0 until coreWidth) {
-        enqXcpts(i) := io.enq_valids(i) && io.enq_uops(i).exception
+        enqXcpts(i) := io.enq_valids(i) && io.enq_uops(i).xcpt_valid
     }
 
     when(!(io.flush.valid || exceptionThrown) && robState =/= stateRollback){
