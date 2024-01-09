@@ -22,7 +22,7 @@ class eventDetector extends CoreModule {
     val xcpt_valids = Wire(Vec(coreWidth, Bool()))
     for (i <- 0 until coreWidth) {
         xcpt_valids(i) :=
-            io.commit.arch_valids(i) &&
+            /* io.commit.arch_valids(i) && */
             (io.commit.uops(i).exception || io.commit.uops(i).uopc === uopERET)
     }
     val xcpt_idx = PriorityEncoder(xcpt_valids)

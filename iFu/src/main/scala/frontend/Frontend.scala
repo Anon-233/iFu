@@ -409,7 +409,7 @@ class Frontend extends CoreModule {
     f3.io.enq.bits.data        := Mux(s2_xcpt, 0.U, icache.io.resp.bits.data)
     f3.io.enq.bits.gHist       := s2_ghist
     f3.io.enq.bits.mask        := fetchMask(s2_vpc)
-    f3.io.enq.bits.exceptions  := s2_tlb_resp.exceptions
+    f3.io.enq.bits.exceptions  := s2_tlb_resp.exceptions.bits
     // f3.io.enq.bits.fsrc  := s2_fsrc
     // f3.io.enq.bits.tsrc := s2_tsrc
 

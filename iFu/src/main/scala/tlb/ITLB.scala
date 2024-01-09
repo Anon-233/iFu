@@ -26,7 +26,7 @@ class ITLBResp extends CoreBundle {
 }
 
 class ITLBIO extends CoreBundle {
-    val kill = Bool()
+    val kill = Input(Bool())
     val ctx  = Input(new ITLBCSRContext)
     val req  = Flipped(Decoupled(new ITLBReq))
     val resp = Output(new ITLBResp)
