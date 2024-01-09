@@ -233,10 +233,10 @@ object Consts {
     val uopRDCNTIDW = 60.U(UOPC_SZ.W)
     val uopRDCNTVLW = 61.U(UOPC_SZ.W)
     val uopRDCNTVHW = 62.U(UOPC_SZ.W)
+    val uopRDTIMELW = 63.U(UOPC_SZ.W)
 
-    val uopMOV = 63.U(UOPC_SZ.W)
-    val uopBREA = 64.U(UOPC_SZ.W)
-
+    val uopMOV = 64.U(UOPC_SZ.W)
+    val uopBREA = 65.U(UOPC_SZ.W)
     def NullMicroOp: MicroOp = {
         val uop = Wire(new MicroOp)
         uop := DontCare

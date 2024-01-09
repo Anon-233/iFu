@@ -48,7 +48,7 @@ class CtrlSigs extends Bundle {
     val is_sys_pc2epc   = Bool() //pc to epc（例外）
     val inst_unique     = Bool() //
     val flush_on_commit = Bool()
-
+    0000000000000000011000?????00000
     def decode(instr: UInt, table: Iterable[(BitPat, List[BitPat])]) = {
         val decoder = DecodeLogic(instr, XDecode.decode_default, table) //返回一个List[BitPat] 若匹配不到，则返回默认值
         val sigs = Seq(
@@ -206,8 +206,9 @@ object CntDecode extends DecodeTable {
                //        |    |              |       |       |       |    rs2_type  |  |  |  |  |              |  |  |  |  |
                //        |    |              |       |       |       |       |      |  |  |  |  |  mem_cmd     |  |  |  |  |
                //        |    |              |       |       |       |       |      |  |  |  |  |     |        |  |  |  |  |
-       RDCNTIDW  -> List(Y, uopRDCNTIDW  , IQT_INT, FU_CSR, RT_FIX, RT_X  , RT_X  , N, N, N, N, N, /*M_X,*/    N, N, N, Y, Y),
-       RDCNTVLW  -> List(Y, uopRDCNTVLW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , N, N, N, N, N, /*M_X,*/    Y, N, N, N, N),
+       // RDCNTIDW  -> List(Y, uopRDCNTIDW  , IQT_INT, FU_CSR, RT_FIX, RT_X  , RT_X  , N, N, N, N, N, /*M_X,*/    N, N, N, Y, Y),
+       // RDCNTVLW  -> List(Y, uopRDCNTVLW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , N, N, N, N, N, /*M_X,*/    Y, N, N, N, N),
+       RDTIMELW  -> List(Y, uopRDTIMELW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , N ,N, N, N, N, /*M_X,*/    Y, N, N, N, N),
        RDCNTVHW  -> List(Y, uopRDCNTVHW  , IQT_INT, FU_CNT, RT_FIX, RT_X  , RT_X  , N, N, N, N, N, /*M_X,*/    Y, N, N, N, N)
    )
 }
@@ -288,8 +289,15 @@ class DecodeUnit extends CoreModule {
 
     when(uop.uopc === uopJAL) {
         uop.ldst := 1.U
-    } .elsewhen (uop.uopc === uopRDCNTIDW) {
+    }
+    when(uop.uopc === uopRDTIMELW && inst(4,0) === 0.U){
+        uop.uopc := uopRDCNTIDW
+        uop.fuCode := FU_CSR
         uop.ldst := inst(9, 5)
+        uop.is_unique := true.B
+        uop.flush_on_commit := true.B
+    } .elsewhen (uop.uopc === uopRDTIMELW){
+        uop.uopc := uopRDCNTVLW
     }
     when(
         (uop.uopc === uopBEQ || uop.uopc === uopBNE || uop.uopc === uopBGE || uop.uopc === uopBGEU || uop.uopc === uopBLT || uop.uopc === uopBLTU)
