@@ -6,7 +6,6 @@ import chisel3.util._
 import iFu.common.CauseCode.MINI_EXCEPTION_MEM_ORDERING
 import iFu.common._
 import iFu.common.Consts._
-import iFu.frontend.TLB
 import iFu.util._
 
 //TODO  memWidth为2，如果为1，需要wakeup不成功后增加一周期delay  Done
