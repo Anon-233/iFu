@@ -389,7 +389,7 @@ class CSRFile extends CoreModule {
             when (csrReg.tcfg.periodic.asBool) {
                 csrRegNxt.tval := Cat(csrReg.tcfg.initval, 0.U(2.W))
             } .otherwise {
-                csrRegNxt.tval := -1.U(TIMER_LENGTH.W).asUInt
+                csrRegNxt.tval := -1.S(TIMER_LENGTH.W).asUInt
             }
             csrRegNxt.estat.is_11 := 1.U(1.W)   // set timer interrupt flag bit
         }

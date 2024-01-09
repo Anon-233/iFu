@@ -703,7 +703,7 @@ class iFuCore extends CoreModule {
     csr.io.com_xcpt  := RegNext(rob.io.com_xcpt)
 
     csr.io.err_pc := (
-        AlignPCToBoundary(ifu.io.exe.getFtqPc(0).compc, iCacheLineBytes) +
+        AlignPCToBoundary(ifu.io.core.getFtqPc(0).compc, iCacheLineBytes) +
         RegNext(rob.io.com_xcpt.bits.pc_lob)
     )
        
