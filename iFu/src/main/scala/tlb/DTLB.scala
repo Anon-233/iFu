@@ -5,6 +5,7 @@ import chisel3.util._
 
 import iFu.common._
 import iFu.common.Consts._
+import iFu.common.CauseCode._
 //
 //第一步，
 
@@ -12,14 +13,8 @@ class DTLBCSRContext extends CoreBundle(){
     val plv = UInt(2.W)
 }
 
-class DTLBExceptions extends CoreBundle(){
-    val is_tlbr = Bool()
-    val is_pil  = Bool()
-    val is_pis  = Bool()
-    val is_pme  = Bool()
-    val is_ppi  = Bool()
-    val is_ale  = Bool()
-    val is_adem = Bool()
+class DTLBException extends CoreBundle(){
+    val xcpt_cause = UInt(15.W)
 }
 
 class DTLBReq extends CoreBundle(){
@@ -34,7 +29,7 @@ class DTLBReq extends CoreBundle(){
 }
 class DTLBResp extends CoreBundle(){
     val paddr = UInt(paddrBits.W)
-    val exceptions = Valid(new DTLBExceptions())
+    val exception = Valid(new DTLBException())
 }
 class DTLBIO extends CoreBundle(){
     val req = Flipped(Vec(memWidth, Decoupled(new DTLBReq)))
@@ -62,8 +57,8 @@ class DTLB extends CoreModule(){
             io.req(w).bits.vaddr(1, 0) =/= 0.U && io.req(w).bits.size === 2.U
         )
         {
-            io.resp(w).exceptions.valid         := true.B
-            io.resp(w).exceptions.bits.is_ale   := true.B
+            io.resp(w).exception.valid              := true.B
+            io.resp(w).exception.bits.xcpt_cause    := ALE
         }
 //        io.r_req(w).valid := true.B
 //        io.r_req(w).bits.addr := io.req(w).bits.vaddr
