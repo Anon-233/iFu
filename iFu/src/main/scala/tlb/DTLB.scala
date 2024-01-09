@@ -51,8 +51,9 @@ class DTLB extends CoreModule(){
 //        io.w_req.bits.cmd   := io.req(0).bits.cmd
 //    }
     for(w <- 0 until memWidth){
-        io.resp(w) := 0.U.asTypeOf(new DTLBResp)
-        io.req(w).ready := true.B
+        io.resp(w)          := 0.U.asTypeOf(new DTLBResp)
+        io.resp(w).paddr    := io.req(w).bits.vaddr
+        io.req(w).ready     := true.B
         when(io.req(w).bits.vaddr(0) && io.req(w).bits.size === 1.U ||
             io.req(w).bits.vaddr(1, 0) =/= 0.U && io.req(w).bits.size === 2.U
         )
