@@ -1,11 +1,12 @@
 package iFu.backend
 
-import backend.memSystem.DTlb
 import chisel3._
 import chisel3.util._
-import iFu.common.CauseCode.MINI_EXCEPTION_MEM_ORDERING
+
 import iFu.common._
 import iFu.common.Consts._
+import iFu.common.CauseCode._
+import iFu.tlb.DTLB
 import iFu.util._
 
 //TODO  memWidth为2，如果为1，需要wakeup不成功后增加一周期delay  Done
@@ -444,7 +445,7 @@ class Lsu extends CoreModule {
             will_fire_sta_incoming(w) || will_fire_sfence(w),
             exe_tlb_uop(w).mem_cmd, 0.U)
     )*/
-    val dtlb = Module(new DTlb)
+    val dtlb = Module(new DTLB)
     dtlb.io <> DontCare
     for (w <- 0 until memWidth) {
         dtlb.io.req(w).valid := exe_tlb_valid(w)
@@ -452,19 +453,23 @@ class Lsu extends CoreModule {
         dtlb.io.req(w).bits.size := exe_size(w)
     }
     // exceptions
-    //TODO ma_ld和ma_st的条件判断需要更改
-    val ma_ld = widthMap(w => will_fire_load_incoming(w) && /*exe_req(w).bits.mxcpt.valid*/false.B) // We get ma_ld in memaddrcalc
-    val ma_st = widthMap(w => (will_fire_sta_incoming(w) || will_fire_stad_incoming(w)) && /*exe_req(w).bits.mxcpt.valid*/false.B) // We get ma_ld in memaddrcalc
+    val ma_xcpt = widthMap(w => (
+            will_fire_load_incoming(w) ||
+            (will_fire_sta_incoming(w) ||
+                    will_fire_stad_incoming(w)
+                    )
+            ) &&
+            dtlb.io.resp(w).exceptions.valid &&
+            dtlb.io.resp(w).exceptions.bits.is_ale
+    )
 
     // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
     val mem_xcpt_valids = RegNext(widthMap(w =>
-        (ma_ld(w) || ma_st(w)) && !io.core.exception && !IsKilledByBranch(io.core.brupdate, exe_tlb_uop(w))
+        (ma_xcpt(w)) && !io.core.exception && !IsKilledByBranch(io.core.brupdate, exe_tlb_uop(w))
     ))
     val mem_xcpt_uops = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, exe_tlb_uop(w))))
     val mem_xcpt_causes = RegNext(widthMap(w =>
-        Mux(ma_ld(w), 1.U,
-        Mux(ma_st(w), 2.U,
-            3.U))
+        Mux(ma_xcpt(w), ALE,0.U)
     ))          //TODO causes需要改变
     val mem_xcpt_vaddrs = RegNext(exe_tlb_vaddr)
 
@@ -496,8 +501,8 @@ class Lsu extends CoreModule {
         xcpt_found = xcpt_found || mem_xcpt_valids(w)
         oldest_xcpt_rob_idx = Mux(is_older, mem_xcpt_uops(w).robIdx, oldest_xcpt_rob_idx)
     }
-
-     val exe_tlb_miss = widthMap(w => dtlb.io.req(w).valid && (dtlb.io.resp(w).miss || !dtlb.io.req(w).ready))
+    //TODO:可能不需要这里的miss
+     val exe_tlb_miss = widthMap(w => dtlb.io.req(w).valid && (dtlb.io.resp(w).exceptions.bits.is_tlbr || !dtlb.io.req(w).ready))
      /*val exe_tlb_paddr = widthMap(w => Cat(dtlb.io.resp(w).paddr(paddrBits - 1, corePgIdxBits),
                                            exe_tlb_vaddr(w)(corePgIdxBits - 1, 0)
      ))*/
