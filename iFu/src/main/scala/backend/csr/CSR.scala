@@ -136,8 +136,8 @@ class CSRFileIO extends CoreBundle {
     val exception = Input(Bool())
     val com_xcpt  = Input(Valid(new CommitExceptionSignals))
 
-    val err_pc  = Input(UInt(32.W))
-    val csr_pc = Output(UInt(32.W))
+    val err_pc      = Input(UInt(32.W))
+    val redirect_pc = Output(UInt(32.W))
 
     // val is_llw    = Input(Bool())
     // val is_scw    = Input(Bool())
@@ -315,6 +315,11 @@ class CSRFile extends CoreModule {
 // --------------------------------------------------------
 
 // --------------------------------------------------------
+// below code is for pc redirect
+    io.redirect_pc := csrReg.era
+// --------------------------------------------------------
+
+// --------------------------------------------------------
 // below code is for exception
     when (io.exception) {
         csrRegNxt.prmd.pplv      := csrReg.crmd.plv
@@ -339,9 +344,9 @@ class CSRFile extends CoreModule {
         when (io.com_xcpt.bits.cause === TLBR) {
             csrRegNxt.crmd.da := 1.U(1.W)
             csrRegNxt.crmd.pg := 0.U(1.W)
-            io.csr_pc := csrReg.tlbrentry
+            io.redirect_pc    := csrReg.tlbrentry
         } .otherwise {
-            io.csr_pc := csrReg.eentry
+            io.redirect_pc    := csrReg.eentry
         }
 
         when (io.com_xcpt.bits.vaddrWriteEnable) {
@@ -373,11 +378,6 @@ class CSRFile extends CoreModule {
     val swint = (csrReg.estat.is1_0 & csrReg.ecfg(1, 0)).asUInt.orR
 
     io.interrupt := (trint | exint | swint) & csrReg.crmd.ie
-// --------------------------------------------------------
-
-// --------------------------------------------------------
-// below code is for pc redirect
-    io.csr_pc := csrReg.era
 // --------------------------------------------------------
 
 // --------------------------------------------------------

@@ -237,7 +237,7 @@ class iFuCore extends CoreModule {
                 flush_type === FlushTypes.eret,
                 RegNext(RegNext(csr.io.csr_pc)),
                 csr.io.csr_pc
-            ) */ csr.io.csr_pc
+            ) */ csr.io.redirect_pc
         } .otherwise {
             val flush_pc = (
                 AlignPCToBoundary(ifu.io.exe.getFtqPc(0).pc, iCacheLineBytes) +
