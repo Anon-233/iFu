@@ -910,7 +910,8 @@ class iFuCore extends CoreModule {
     io.register    := lregOut
     
     // 为了和commit的指令以及csr对上周期，这里多等一下
-    eventDetector.io.commit := RegNext(rob.io.commit)
+    eventDetector.io.exception := RegNext(rob.io.com_xcpt.valid)
+    eventDetector.io.xcpt_uop := RegNext(rob.io.com_xcpt.bits.uop)
     eventDetector.io.debug_csr_reg := csr.io.debug_csr_reg
 
     for(w <- 0 until robParameters.retireWidth) {

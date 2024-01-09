@@ -125,5 +125,7 @@ class CommitExceptionSignals extends CoreBundle {
     val badvaddr = UInt(xLen.W)
     val vaddrWriteEnable = Bool()
 
+    val uop = new MicroOp()
+
     val flush_typ = FlushTypes()
 }

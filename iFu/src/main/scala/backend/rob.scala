@@ -281,6 +281,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     io.com_xcpt.valid := exceptionThrown && !isMiniException
     io.com_xcpt.bits.cause := rXcptUop.excCause
     io.com_xcpt.bits.vaddrWriteEnable := rXcptUop.vaddrWriteEnable
+    io.com_xcpt.bits.uop := rXcptUop
 
     io.com_xcpt.bits.badvaddr := Sext(rXcptBadvaddr, xLen)
     val insnSysPc2epc = robHeadVals.reduce(_||_) && PriorityMux(robHeadVals,io.commit.uops.map{u => u.is_sys_pc2epc})
