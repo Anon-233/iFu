@@ -133,20 +133,21 @@ class Frontend extends CoreModule {
 
     // note: s0 stage is not a real stage, so the below values are Wire instead of Reg
     // in fact, the s0 stage is hidden within the s1 stage
+    val s0_valid              = WireInit(false.B)
     val s0_vpc                = WireInit(0.U(vaddrBits.W))
     val s0_ghist              = WireInit((0.U).asTypeOf(new GlobalHistory))
     // val s0_tsrc               = WireInit(0.U(BSRC_SZ.W))
-    val s0_valid              = WireInit(false.B)
+
     val s0_is_replay          = WireInit(false.B)
-    /*val s0_is_sfence          = WireInit(false.B)*/
+    val s0_replay_ppc         = Wire(UInt(vaddrBits.W))
     val s0_replay_tlb_resp    = Wire(new ITLBResp)
     val s0_replay_bpd_resp    = Wire(new BranchPredictionBundle)
-    val s0_replay_ppc         = Wire(UInt(vaddrBits.W))
 
-    when (RegNext(reset.asBool) && !reset.asBool) { // the first cycle after reset
-        s0_valid    := true.B
-        s0_vpc      := resetPC.U(vaddrBits.W)
-        s0_ghist    := (0.U).asTypeOf(new GlobalHistory)    // TODO: cold boot
+    // the first cycle after reset, the frontend will fetch from resetPC
+    when (RegNext(reset.asBool) && !reset.asBool) {
+        s0_valid := true.B
+        s0_vpc   := resetPC.U(vaddrBits.W)
+        s0_ghist := (0.U).asTypeOf(new GlobalHistory)
         // s0_tsrc     := BSRC_C
     }
 
@@ -166,7 +167,6 @@ class Frontend extends CoreModule {
     val s1_valid     = RegNext(s0_valid, false.B)
     val s1_ghist     = RegNext(s0_ghist)
     val s1_is_replay = RegNext(s0_is_replay)
-    /*val s1_is_sfence = RegNext(s0_is_sfence)*/
     // val s1_tsrc      = RegNext(s0_tsrc) // TODO: maybe more simple
 
     val f1_clear     = WireInit(false.B)
@@ -212,7 +212,7 @@ class Frontend extends CoreModule {
 
     // 当前s1寄存器有效 注意，s1阶段可能会replay
     when (s1_valid && !s1_tlb_xcpt) {
-        s0_valid     := !s1_tlb_resp.exception.valid // 发生tlb异常时停止取指
+        s0_valid     := !s1_tlb_resp.exception.valid // 发生异常时停止取指
         // s0_tsrc      := BSRC_1
         s0_vpc       := f1_predicted_target
         s0_ghist     := f1_predicted_ghist
