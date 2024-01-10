@@ -12,9 +12,6 @@ import iFu.frontend.FrontendUtils._
 import iFu.common.CauseCode._
 
 //TODO 重命名GlobalHistory,如果之后RAS增加计数器，Histories的update函数需要更改，
-//TODO FetchBundle重命名为FetchBufferEntry
-//TODO 检查valid信号 569行
-//TODO HasFrontEndparameters的函数只适用与ICache
 
 class FetchResp extends CoreBundle {
     /*--------------------------*/
@@ -94,12 +91,6 @@ class FrontendIO extends CoreBundle {
     val ireq = Output(new CBusReq)
 }
 
-/**TODO
- * icache，ras，tlb,ptw的实例化
- * bpd的接口 .354 preds修改
- */
-//TODO Frontend.273 bpd，RAS,icache的接口
-
 class Frontend extends CoreModule {
     /*--------------------------*/
     val fetchWidth    = frontendParams.fetchWidth
@@ -175,10 +166,6 @@ class Frontend extends CoreModule {
     tlb.io.req.bits.vaddr := s1_vpc
     tlb.io.kill           := false.B
 
-    // 如果s1阶段将要进行replay，则不考虑tlb miss
-    // 因为此时tlb resp的值是被replay的值，而被replay的值来源之前的s2
-
-    // TODO: TLB miss should call exception
     val s1_tlb_xcpt = !s1_is_replay && tlb.io.resp.exception.valid
     val s1_tlb_resp = Mux(s1_is_replay, RegNext(s0_replay_tlb_resp), tlb.io.resp)
     val s1_ppc = Mux(s1_is_replay, RegNext(s0_replay_ppc), tlb.io.resp.paddr)
@@ -211,7 +198,7 @@ class Frontend extends CoreModule {
     )
 
     // 当前s1寄存器有效 注意，s1阶段可能会replay
-    when (s1_valid && !s1_tlb_xcpt) {
+    when (s1_valid) {
         s0_valid     := !s1_tlb_resp.exception.valid // 发生异常时停止取指
         // s0_tsrc      := BSRC_1
         s0_vpc       := f1_predicted_target
