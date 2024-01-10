@@ -59,7 +59,7 @@ class UBTBIO extends Bundle with HasUbtbParameters {
 class FaUBtbPredictior  extends Module with HasUbtbParameters {
     val io = IO(new UBTBIO)
 
-    val valid = RegInit(0.U((nWays * bankWidth).W))
+    val valid = RegInit(VecInit(Seq.fill(nWays * bankWidth)(false.B)))
     val meta  = Reg(Vec(nWays, Vec(bankWidth, new UBTBMeta)))
     val btb   = Reg(Vec(nWays, Vec(bankWidth, new UBTBEntry)))
 
@@ -149,8 +149,8 @@ class FaUBtbPredictior  extends Module with HasUbtbParameters {
             val s1_update_tag = fetchIdx(s1_update.bits.pc)
 
             valid(Cat(s1_update_way(w), w.U(log2Ceil(bankWidth).W))) := true.B
-            meta(s1_updateWay(w))(w).is_br := s1_update.bits.brMask(w)
-            meta(s1_updateWay(w))(w).tag   := s1_update_tag
+            meta(s1_update_way(w))(w).is_br := s1_update.bits.brMask(w)
+            meta(s1_update_way(w))(w).tag   := s1_update_tag
 
             when (s1_update_meta(w).hit) {
                 meta(s1_update_way(w))(w).state.update(wastaken)

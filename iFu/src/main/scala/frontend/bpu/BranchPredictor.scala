@@ -87,13 +87,13 @@ class BranchPredictor extends Module
 
     when (bank(io.resp.f1.pc) === 0.U) {
       for (i <- 0 until bankWidth) {
-        io.resp.f1.predInfos(i)           := 0.U.asTypeOf(new PredictionInfo)/*bankedPredictors(0).io.resp.f1(i)*/
-        io.resp.f1.predInfos(i+bankWidth) := 0.U.asTypeOf(new PredictionInfo)/*bankedPredictors(1).io.resp.f1(i)*/
+        io.resp.f1.predInfos(i)           := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(0).io.resp.f1(i)
+        io.resp.f1.predInfos(i+bankWidth) := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(1).io.resp.f1(i)
       }
     } .otherwise {
       for (i <- 0 until bankWidth) {
-        io.resp.f1.predInfos(i)           := 0.U.asTypeOf(new PredictionInfo)/*bankedPredictors(1).io.resp.f1(i)*/
-        io.resp.f1.predInfos(i+bankWidth) := 0.U.asTypeOf(new PredictionInfo)/*bankedPredictors(0).io.resp.f1(i)*/
+        io.resp.f1.predInfos(i)           := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(1).io.resp.f1(i)
+        io.resp.f1.predInfos(i+bankWidth) := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(0).io.resp.f1(i)
       }
     }
 
