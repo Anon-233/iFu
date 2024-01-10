@@ -122,24 +122,19 @@ class Frontend extends CoreModule {
     //      Send request to ICache
     // --------------------------------------------------------
 
-    // note: s0 stage is not a real stage, so the below values are Wire instead of Reg
-    // in fact, the s0 stage is hidden within the s1 stage
     val s0_valid              = WireInit(false.B)
     val s0_vpc                = WireInit(0.U(vaddrBits.W))
     val s0_ghist              = WireInit((0.U).asTypeOf(new GlobalHistory))
     // val s0_tsrc               = WireInit(0.U(BSRC_SZ.W))
 
     val s0_is_replay          = WireInit(false.B)
-    val s0_replay_ppc         = Wire(UInt(vaddrBits.W))
-    val s0_replay_tlb_resp    = Wire(new ITLBResp)
-    val s0_replay_bpd_resp    = Wire(new BranchPredictionBundle)
 
     // the first cycle after reset, the frontend will fetch from resetPC
     when (RegNext(reset.asBool) && !reset.asBool) {
         s0_valid := true.B
         s0_vpc   := resetPC.U(vaddrBits.W)
         s0_ghist := (0.U).asTypeOf(new GlobalHistory)
-        // s0_tsrc     := BSRC_C
+        // s0_tsrc  := BSRC_C
     }
 
     icache.io.req.valid     := s0_valid
@@ -158,38 +153,35 @@ class Frontend extends CoreModule {
     val s1_valid     = RegNext(s0_valid, false.B)
     val s1_ghist     = RegNext(s0_ghist)
     val s1_is_replay = RegNext(s0_is_replay)
-    // val s1_tsrc      = RegNext(s0_tsrc) // TODO: maybe more simple
+    // val s1_tsrc      = RegNext(s0_tsrc)
 
     val f1_clear     = WireInit(false.B)
 
     tlb.io.req.valid      := (s1_valid && !s1_is_replay && !f1_clear)
     tlb.io.req.bits.vaddr := s1_vpc
-    tlb.io.kill           := false.B
 
-    val s1_tlb_xcpt = !s1_is_replay && tlb.io.resp.exception.valid
-    val s1_tlb_resp = Mux(s1_is_replay, RegNext(s0_replay_tlb_resp), tlb.io.resp)
-    val s1_ppc = Mux(s1_is_replay, RegNext(s0_replay_ppc), tlb.io.resp.paddr)
-    val s1_bpd_resp = bpd.io.resp.f1
+    val f1_tlb_resp = Mux(s1_is_replay, RegNext(s2_tlb_resp), tlb.io.resp)
+    val f1_bpd_resp = bpd.io.resp.f1
 
-    icache.io.s1_paddr  := s1_ppc
+    icache.io.s1_paddr  := f1_tlb_resp.paddr
     icache.io.s1_kill   := tlb.io.resp.exception.valid || f1_clear
 
     val f1_mask = fetchMask(s1_vpc)
     val f1_redirects = (0 until fetchWidth).map{ i=>
-        s1_valid && f1_mask(i) && s1_bpd_resp.predInfos(i).predictedpc.valid &&
-        (s1_bpd_resp.predInfos(i).isJal ||
-        (s1_bpd_resp.predInfos(i).isBranch && s1_bpd_resp.predInfos(i).taken))
+        s1_valid && f1_mask(i) && f1_bpd_resp.predInfos(i).predictedpc.valid &&
+        (f1_bpd_resp.predInfos(i).isJal ||
+        (f1_bpd_resp.predInfos(i).isBranch && f1_bpd_resp.predInfos(i).taken))
     }
     val f1_do_redirect = f1_redirects.reduce(_||_)
     val f1_redirect_idx = PriorityEncoder(f1_redirects)
-    val f1_tgts = VecInit(s1_bpd_resp.predInfos.map(_.predictedpc.bits))
+    val f1_tgts = VecInit(f1_bpd_resp.predInfos.map(_.predictedpc.bits))
     val f1_predicted_target = Mux(f1_do_redirect, f1_tgts(f1_redirect_idx),
                                                   nextFetch(s1_vpc)
     )
     val f1_predicted_ghist = s1_ghist.update(
-        VecInit(s1_bpd_resp.predInfos.map(p => p.isBranch && p.predictedpc.valid)).asUInt & f1_mask,
-        s1_bpd_resp.predInfos(f1_redirect_idx).taken && f1_do_redirect,
-        s1_bpd_resp.predInfos(f1_redirect_idx).isBranch,
+        VecInit(f1_bpd_resp.predInfos.map(p => p.isBranch && p.predictedpc.valid)).asUInt & f1_mask,
+        f1_bpd_resp.predInfos(f1_redirect_idx).taken && f1_do_redirect,
+        f1_bpd_resp.predInfos(f1_redirect_idx).isBranch,
         f1_redirect_idx,
         f1_do_redirect,
         s1_vpc,
@@ -199,11 +191,10 @@ class Frontend extends CoreModule {
 
     // 当前s1寄存器有效 注意，s1阶段可能会replay
     when (s1_valid) {
-        s0_valid     := !s1_tlb_resp.exception.valid // 发生异常时停止取指
+        s0_valid     := !f1_tlb_resp.exception.valid // 发生异常时停止取指
         // s0_tsrc      := BSRC_1
         s0_vpc       := f1_predicted_target
         s0_ghist     := f1_predicted_ghist
-        s0_is_replay := false.B
     }
 
     // --------------------------------------------------------
@@ -213,10 +204,8 @@ class Frontend extends CoreModule {
     val s2_valid     = RegNext(s1_valid && !f1_clear, false.B)
     val s2_vpc       = RegNext(s1_vpc)
     val s2_ghist     = Reg(new GlobalHistory)
-    val s2_ppc       = RegNext(s1_ppc)
     // val s2_tsrc      = RegNext(s1_tsrc)
-    val s2_tlb_resp  = RegNext(s1_tlb_resp)
-    val s2_tlb_xcpt  = RegNext(s1_tlb_xcpt)
+    val s2_tlb_resp  = RegNext(f1_tlb_resp)
     val s2_is_replay = RegNext(s1_is_replay) && s2_valid
 
     val f2_clear     = WireInit(false.B)
@@ -275,16 +264,12 @@ class Frontend extends CoreModule {
             // TODO: same problem as above
             s0_valid     := !(s2_tlb_resp.exception.valid && !s2_is_replay)
             s0_vpc       := f2_predicted_target
-            s0_is_replay := false.B
             s0_ghist     := f2_predicted_ghist
             // s2_fsrc      := BSRC_2
             // s0_tsrc      := BSRC_2
             f1_clear     := true.B
         }
     }
-    s0_replay_bpd_resp := f2_bpd_resp
-    s0_replay_tlb_resp := s2_tlb_resp
-    s0_replay_ppc := s2_ppc
 
     // --------------------------------------------------------
     // **** F3 ****

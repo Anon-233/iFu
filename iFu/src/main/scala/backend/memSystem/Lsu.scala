@@ -15,7 +15,9 @@ import iFu.util._
 //TODO 删除release，observed等代码，load可以乱序   Done
 //TODO 增加TLB相关逻辑，包括异常检测，发送DCache请求时的地址,发送数据给tlb
 //TODO LSU会将vaddr的idx位发给DCache，TLB_MISS在s1_kill掉请求
-
+//TODO uncacheable:1.外设  2.地址转换
+//load:当为rob要提交的指令，且store为空的时候，发送该条指令
+//store:提交后发送，和正常store一致
 
 object AgePriorityEncoder {
     def apply(in: Seq[Bool], head: UInt): UInt = {
@@ -108,6 +110,8 @@ class LDQEntry extends CoreBundle with HasUop{
 
     val forward_std_val = Bool()
     val forward_stq_idx = UInt(stqAddrSz.W)
+
+    val is_uncacheable  = Bool()
 }
 
 class STQEntry extends CoreBundle with HasUop{
@@ -317,10 +321,10 @@ class Lsu extends CoreModule {
         !p2_block_load_mask(ldq_wakeup_idx) &&
         !store_needs_order &&
         !block_load_wakeup /*&&*/
-        /*(!ldq_wakeup_e.bits.addr_is_uncacheable ||*/
-        /*(io.core.commit_load_at_rob_head && //
+        (!ldq_wakeup_e.bits.is_uncacheable ||
+        (io.core.commit_load_at_rob_head && //
         ldq_head === ldq_wakeup_idx &&
-        ldq_wakeup_e.bits.st_dep_mask.asUInt === 0.U))*/
+        ldq_wakeup_e.bits.st_dep_mask.asUInt === 0.U))
     ))
     // dontTouch(ldq_wakeup_e)
     // -----------------------
@@ -495,14 +499,10 @@ class Lsu extends CoreModule {
         oldest_xcpt_rob_idx = Mux(is_older, tlb_xcpt_uops(w).robIdx, oldest_xcpt_rob_idx)
     }
     //TODO:可能不需要这里的miss,
-     val exe_tlb_xcpt = widthMap(w => dtlb.io.req(w).valid && (dtlb.io.resp(w).exception.valid || !dtlb.io.req(w).ready))
-     /*val exe_tlb_paddr = widthMap(w => Cat(dtlb.io.resp(w).paddr(paddrBits - 1, corePgIdxBits),
-                                           exe_tlb_vaddr(w)(corePgIdxBits - 1, 0)
-     ))*/
+    val exe_tlb_xcpt = widthMap(w => dtlb.io.req(w).valid && (dtlb.io.resp(w).exception.valid || !dtlb.io.req(w).ready))
     val exe_tlb_paddr = widthMap(w => dtlb.io.resp(w).paddr)
-    // val exe_tlb_uncacheable = widthMap(w => !(dtlb.io.resp(w).cacheable))
+    val exe_tlb_uncacheable = widthMap(w => !(dtlb.io.resp(w).is_uncacheable))
     for (w <- 0 until memWidth) {
-        // assert(exe_tlb_paddr(w) === dtlb.io.resp(w).paddr || exe_req(w).bits.sfence.valid, "[lsu] paddrs should match.")
         when(tlb_xcpt_valids(w)) {
             assert(RegNext(will_fire_load_incoming(w) || will_fire_stad_incoming(w) || will_fire_sta_incoming(w)))
             // Technically only faulting AMOs need this
@@ -544,12 +544,9 @@ class Lsu extends CoreModule {
         dcache.io.lsu.s1_kill(w) := false.B
 
         when(will_fire_load_incoming(w)) {
-             dmem_req(w).valid := !exe_tlb_xcpt(w) /*&& !exe_tlb_uncacheable(w)*/
+             dmem_req(w).valid := !exe_tlb_xcpt(w) && !dtlb.io.resp(w).is_uncacheable
              dmem_req(w).bits.addr := exe_tlb_paddr(w)
              dmem_req(w).bits.uop := exe_tlb_uop(w)
-//            dmem_req(w).valid := true.B
-//            dmem_req(w).bits.addr   := exe_req(w).bits.addr
-//            dmem_req(w).bits.uop    := exe_req(w).bits.uop
             s0_executing_loads(ldq_incoming_idx(w)) := dmem_req_fire(w)
             assert(!ldq_incoming_e(w).bits.executed)
         }.elsewhen(will_fire_store_commit(w)) {
@@ -584,7 +581,7 @@ class Lsu extends CoreModule {
             ldq(ldq_idx).bits.addr.bits := exe_tlb_paddr(w)
             ldq(ldq_idx).bits.uop.pdst := exe_tlb_uop(w).pdst
             ldq(ldq_idx).bits.addr_is_virtual := exe_tlb_xcpt(w)
-            // ldq(ldq_idx).bits.addr_is_uncacheable := exe_tlb_uncacheable(w) && !exe_tlb_miss(w)
+            ldq(ldq_idx).bits.is_uncacheable := exe_tlb_uncacheable(w)
 //            ldq(ldq_idx).bits.addr.valid := true.B
 //            ldq(ldq_idx).bits.addr.bits  := exe_req(w).bits.addr
 //            ldq(ldq_idx).bits.uop.pdst  := exe_req(w).bits.uop.pdst
@@ -636,7 +633,6 @@ class Lsu extends CoreModule {
     val fired_stad_incoming = widthMap(w => RegNext(will_fire_stad_incoming(w) && !exe_req_killed(w)))
     val fired_sta_incoming = widthMap(w => RegNext(will_fire_sta_incoming(w) && !exe_req_killed(w)))
     val fired_std_incoming = widthMap(w => RegNext(will_fire_std_incoming(w) && !exe_req_killed(w)))
-//    val fired_sfence = RegNext(will_fire_sfence)
     val fired_store_commit = RegNext(will_fire_store_commit)
     val fired_load_wakeup = widthMap(w => RegNext(will_fire_load_wakeup(w) && !IsKilledByBranch(io.core.brupdate, ldq_wakeup_e.bits.uop)))
 
@@ -655,7 +651,7 @@ class Lsu extends CoreModule {
     )
     val mem_tlb_xcpt             = RegNext(exe_tlb_xcpt)
     val mem_paddr = RegNext(widthMap(w => dmem_req(w).bits.addr))
-
+    val mem_tlb_uncacheable      = RegNext(exe_tlb_uncacheable)
     // Task 1: Clr ROB busy bit
     val clr_bsy_valid = RegInit(widthMap(w => false.B))
     val clr_bsy_rob_idx = Reg(Vec(memWidth, UInt(robParameters.robAddrSz.W)))
@@ -745,7 +741,10 @@ class Lsu extends CoreModule {
         Mux(fired_load_incoming(w) || fired_load_retry(w), !mem_tlb_uncacheable(w),
                                                            !ldq(lcam_ldq_idx(w)).bits.addr_is_uncacheable)
      ))*/
-    val can_forward = WireInit(widthMap(w => true.B))
+    val can_forward = WireInit(widthMap(w =>
+        Mux(fired_load_incoming(w),!mem_tlb_uncacheable(w),
+            !ldq(lcam_ldq_idx(w)).bits.is_uncacheable)
+    ))
 
     // Mask of stores which we conflict on address with
     val ldst_addr_matches = WireInit(widthMap(w => VecInit((0 until numStqEntries).map(x => false.B))))

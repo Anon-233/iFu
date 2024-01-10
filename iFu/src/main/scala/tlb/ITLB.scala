@@ -5,9 +5,11 @@ import chisel3.util._
 
 import iFu.common._
 import iFu.common.CauseCode._
+import iFu.backend.DMW
 
 class ITLBCSRContext extends CoreBundle {
-    //
+    val dmw0 = new DMW
+    val dmw1 = new DMW
 }
 
 class ITLBReq extends CoreBundle {
@@ -25,7 +27,6 @@ class ITLBResp extends CoreBundle {
 }
 
 class ITLBIO extends CoreBundle {
-    val kill = Input(Bool())
     val ctx  = Input(new ITLBCSRContext)
     val req  = Flipped(Decoupled(new ITLBReq))
     val resp = Output(new ITLBResp)

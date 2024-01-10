@@ -144,7 +144,7 @@ class CSRFileIO extends CoreBundle {
 
     val exevalid = Input(Bool())
     val cmd      = Input(UInt(CSR_SZ.W))
-    val addr     = Input(UInt(12.W))
+    val addr     = Input(UInt(14.W))
     val rdata    = Output(UInt(32.W))
     val rd       = Input(UInt(32.W))
     val rj       = Input(UInt(32.W))

@@ -131,7 +131,8 @@ class FaUBtbPredictior  extends Module with HasUbtbParameters {
         } 
     }
 
-    // update predictor state
+    // update predictor state\
+    val wastaken = WireInit(VecInit(Seq.fill(bankWidth)(false.B)))
     for (w <- 0 until bankWidth) {
         val branch_taken = (
             s1_update.valid && s1_update.bits.isCommitUpdate && (
@@ -145,7 +146,7 @@ class FaUBtbPredictior  extends Module with HasUbtbParameters {
         )
 
         when (branch_taken) {
-            val wastaken      = branch_taken || s1_update.bits.cfiIsJal
+            wastaken(w)       = branch_taken || s1_update.bits.cfiIsJal
             val s1_update_tag = fetchIdx(s1_update.bits.pc)
 
             valid(Cat(s1_update_way(w), w.U(log2Ceil(bankWidth).W))) := true.B
@@ -153,11 +154,33 @@ class FaUBtbPredictior  extends Module with HasUbtbParameters {
             meta(s1_update_way(w))(w).tag   := s1_update_tag
 
             when (s1_update_meta(w).hit) {
-                meta(s1_update_way(w))(w).state.update(wastaken)
+                meta(s1_update_way(w))(w).state.update(wastaken(w))
             } .otherwise {
-                meta(s1_update_way(w))(w).state.init(wastaken)
+                meta(s1_update_way(w))(w).state.init(wastaken(w))
             }
         }
+    }
+// ---------------------------------------------
+
+// ---------------------------------------------
+//      Performance Counter
+    val num_branchs = RegInit(0.U(64.W))
+    num_branchs := num_branchs + PopCount(io.s1targs.map(_.valid))
+    val num_mis_preds = RegInit(0.U(64.W))
+    num_mis_preds := num_mis_preds + PopCount(
+        wsatken zip (io.s1update.bits.meta.map(_.ubtbMeta)) zip (0 until bankWidth) map {
+            case (t, m, idx) => (
+                h && (meta(m.write_way)(idx).state.isTaken =/= t)
+            ).asBool
+        }
+    )
+    val num_updates = RegInit(0.U(64.W))
+    num_updates := num_updates + io.s1update.valid.asUInt
+
+    val start = RegInit(false.B)
+    when (num_branchs > 1.U) { start := true.B }
+    when (start && num_branchs(8, 0) === 0.U) {
+        printf("UBTB: %d %d %d\n", num_branchs, num_mis_preds, num_updates)
     }
 // ---------------------------------------------
 }
