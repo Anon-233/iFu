@@ -7,10 +7,10 @@ import iFu.common._
 class CntFuncCode {
     val SZ_CNT_FN = 4
     def FN_X    = BitPat("b????")
-    def FN_VL   = BitPat("b0000")
-    def FN_VH   = BitPat("b0001")
+    def FN_VL   = BitPat("b1000")
+    def FN_VH   = BitPat("b1001")
 
-    def isLsb(cmd: UInt) = cmd(0)
+    def isLsb(cmd: UInt) = !cmd(0)
 }
 
 object CntFuncCode {
