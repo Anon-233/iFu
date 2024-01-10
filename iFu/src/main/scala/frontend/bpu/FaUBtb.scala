@@ -146,7 +146,7 @@ class FaUBtbPredictior  extends Module with HasUbtbParameters {
         )
 
         when (branch_taken) {
-            wastaken(w)       = branch_taken || s1_update.bits.cfiIsJal
+            wastaken(w)      := branch_taken || s1_update.bits.cfiIsJal
             val s1_update_tag = fetchIdx(s1_update.bits.pc)
 
             valid(Cat(s1_update_way(w), w.U(log2Ceil(bankWidth).W))) := true.B
@@ -168,9 +168,10 @@ class FaUBtbPredictior  extends Module with HasUbtbParameters {
     num_branchs := num_branchs + PopCount(io.s1targs.map(_.valid))
     val num_mis_preds = RegInit(0.U(64.W))
     num_mis_preds := num_mis_preds + PopCount(
-        wsatken zip (io.s1update.bits.meta.map(_.ubtbMeta)) zip (0 until bankWidth) map {
-            case (t, m, idx) => (
-                h && (meta(m.write_way)(idx).state.isTaken =/= t)
+        wastaken zip (0 until bankWidth) map {
+            case (t, idx) => (
+                io.s1update.bits.meta(idx).ubtbMeta.hit &&
+                (meta(io.s1update.bits.meta(idx).ubtbMeta.write_way)(idx).state.isTaken =/= t)
             ).asBool
         }
     )

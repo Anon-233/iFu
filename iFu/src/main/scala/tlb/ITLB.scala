@@ -8,8 +8,8 @@ import iFu.common.CauseCode._
 import iFu.backend.DMW
 
 class ITLBCSRContext extends CoreBundle {
-    val dmw0 = new DMW
-    val dmw1 = new DMW
+    // val dmw0 = new DMW
+    // val dmw1 = new DMW
 }
 
 class ITLBReq extends CoreBundle {

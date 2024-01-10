@@ -128,6 +128,7 @@ class Frontend extends CoreModule {
     // val s0_tsrc               = WireInit(0.U(BSRC_SZ.W))
 
     val s0_is_replay          = WireInit(false.B)
+    val s0_replay_tlb_resp    = Wire(new ITLBResp)
 
     // the first cycle after reset, the frontend will fetch from resetPC
     when (RegNext(reset.asBool) && !reset.asBool) {
@@ -160,7 +161,7 @@ class Frontend extends CoreModule {
     tlb.io.req.valid      := (s1_valid && !s1_is_replay && !f1_clear)
     tlb.io.req.bits.vaddr := s1_vpc
 
-    val f1_tlb_resp = Mux(s1_is_replay, RegNext(s2_tlb_resp), tlb.io.resp)
+    val f1_tlb_resp: ITLBResp = Mux(s1_is_replay, RegNext(s0_replay_tlb_resp), tlb.io.resp)
     val f1_bpd_resp = bpd.io.resp.f1
 
     icache.io.s1_paddr  := f1_tlb_resp.paddr
@@ -270,6 +271,8 @@ class Frontend extends CoreModule {
             f1_clear     := true.B
         }
     }
+
+    s0_replay_tlb_resp := s2_tlb_resp
 
     // --------------------------------------------------------
     // **** F3 ****
