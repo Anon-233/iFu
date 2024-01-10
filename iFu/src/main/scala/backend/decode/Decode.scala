@@ -249,9 +249,11 @@ class DecodeUnit extends CoreModule {
 
     val inst = uop.instr
     val cs = Wire(new CtrlSigs).decode(inst, decode_table)
+
     val id_illegal_insn = !cs.legal
     val xcpt_valid = WireInit(false.B)
     val xcpt_cause = WireInit(0.U(15.W))
+
     when (io.interrupt) {    //TODO: isSFB是否应该删掉
         xcpt_valid := true.B
         xcpt_cause := INT
@@ -270,21 +272,37 @@ class DecodeUnit extends CoreModule {
         xcpt_cause := INE
         xcpt_valid := true.B
     }
-
+    /*uop.mem_cmd         := cs.mem_cmd*/
+    uop.mem_size := inst(23, 22)
+    uop.mem_signed := !inst(25)
+    uop.use_ldq := cs.uses_ldq
+    uop.use_stq := cs.uses_stq
+    uop.is_amo := cs.is_amo
+    uop.is_fence := cs.is_dbar
+    uop.is_fencei := cs.is_ibar
+    uop.is_sys_pc2epc := cs.is_sys_pc2epc
+    uop.is_unique := cs.inst_unique
+    uop.flush_on_commit := cs.flush_on_commit
+    uop.bypassable := cs.bypassable
+    uop.immPacked := inst(25, 0)
+    uop.isBr := cs.is_br
+    uop.isJal := cs.uopc === uopJAL
+    uop.isJalr := cs.uopc === uopJIRL
+    uop.uopc := cs.uopc
+    uop.iqType := cs.iq_type
+    uop.fuCode := cs.fu_code
+    uop.ldst := inst(4, 0)
+    uop.lrs1 := inst(9, 5)
+    uop.lrs2 := inst(14, 10)
     uop.vaddrWriteEnable := false.B
+
     when(xcpt_valid && (xcpt_cause === ADEF || xcpt_cause === ALE)){
         uop.vaddrWriteEnable := true.B
     }
     uop.xcpt_valid := xcpt_valid
     uop.xcpt_cause := xcpt_cause
     //-------------------------------------------------------------
-    uop.uopc        := cs.uopc
-    uop.iqType      := cs.iq_type
-    uop.fuCode      := cs.fu_code
 
-    uop.ldst        := inst(4, 0)
-    uop.lrs1        := inst(9, 5)
-    uop.lrs2        := inst(14, 10)
 
     when(cs.uopc === uopJAL) {
         uop.ldst := 1.U
@@ -333,25 +351,6 @@ class DecodeUnit extends CoreModule {
     when(uop.is_sfb_br){
         uop.fuCode := FU_JMP
     }
-
-    /*uop.mem_cmd         := cs.mem_cmd*/
-    uop.mem_size        := inst(23, 22)
-    uop.mem_signed      := !inst(25)
-    uop.use_ldq         := cs.uses_ldq
-    uop.use_stq         := cs.uses_stq
-    uop.is_amo          := cs.is_amo
-    uop.is_fence        := cs.is_dbar
-    uop.is_fencei       := cs.is_ibar
-    uop.is_sys_pc2epc   := cs.is_sys_pc2epc
-    uop.is_unique       := cs.inst_unique
-    uop.flush_on_commit := cs.flush_on_commit
-    uop.bypassable      := cs.bypassable
-
-    uop.immPacked := inst(25, 0)
-
-    uop.isBr    := cs.is_br
-    uop.isJal   := cs.uopc === uopJAL
-    uop.isJalr  := cs.uopc === uopJIRL
 
     io.deq.uop  := uop
 }
