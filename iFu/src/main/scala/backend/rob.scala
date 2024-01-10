@@ -25,7 +25,7 @@ class RobIO(val numWritePorts: Int) extends CoreBundle {
 
     // store stage
     val lsu_clr_bsy = Input(Vec(memWidth, Valid(UInt(robParameters.robAddrSz.W))))
-    val lxcpt       = Flipped(new ValidIO(new Exception))
+    val lsu_xcpt    = Flipped(new ValidIO(new Exception))
 
     // commit stage
     val commit = Output(new CommitSignals)
@@ -173,8 +173,8 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
         //----------------exception-----------------
 
-        when (io.lxcpt.valid && MatchBank(GetBankIdx(io.lxcpt.bits.uop.robIdx))) {
-            robException(GetRowIdx(io.lxcpt.bits.uop.robIdx)) := true.B
+        when (io.lsu_xcpt.valid && MatchBank(GetBankIdx(io.lsu_xcpt.bits.uop.robIdx))) {
+            robException(GetRowIdx(io.lsu_xcpt.bits.uop.robIdx)) := true.B
         }
         
         canThrowException(w) := robVal(robHead) && robException(robHead)
@@ -325,14 +325,15 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     }
 
     when(!(io.flush.valid || exceptionThrown) && robState =/= stateRollback){
-        when(io.lxcpt.valid){
-            val newXcptUop = io.lxcpt.bits.uop
+        when(io.lsu_xcpt.valid){
+            val newXcptUop = io.lsu_xcpt.bits.uop
 
             when(!rXcptVal || IsOlder(newXcptUop.robIdx,rXcptUop.robIdx,robHeadIdx)){
                 rXcptVal := true.B
                 nextXcptUop := newXcptUop
-                nextXcptUop.xcpt_cause := io.lxcpt.bits.cause
-                rXcptBadvaddr := io.lxcpt.bits.badvaddr
+                nextXcptUop.vaddrWriteEnable := true.B
+                nextXcptUop.xcpt_cause := io.lsu_xcpt.bits.cause
+                rXcptBadvaddr := io.lsu_xcpt.bits.badvaddr
             }
         } .elsewhen (!rXcptVal && enqXcpts.reduce(_|_)){
             val idx = enqXcpts.indexWhere{i: Bool => i}

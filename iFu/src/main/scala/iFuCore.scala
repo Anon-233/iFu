@@ -869,7 +869,7 @@ class iFuCore extends CoreModule {
 
     // LSU <> ROB
     rob.io.lsu_clr_bsy := lsu.io.core.clr_bsy
-    rob.io.lxcpt <> lsu.io.core.lxcpt
+    rob.io.lsu_xcpt <> lsu.io.core.lsu_xcpt
 
     assert(!(rob.io.com_xcpt.valid && !rob.io.flush.valid),
         "[core] exception occurred, but pipeline flush signal not set!")

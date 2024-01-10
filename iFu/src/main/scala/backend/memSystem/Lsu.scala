@@ -75,7 +75,7 @@ class LSUCoreIO extends CoreBundle {
 
     val fencei_rdy  = Output(Bool())
 
-    val lxcpt       = Output(Valid(new Exception))
+    val lsu_xcpt       = Output(Valid(new Exception))
 }
 
 class LSUIO extends CoreBundle {
@@ -921,8 +921,8 @@ class Lsu extends CoreModule {
     r_xcpt.cause := Mux(use_tlb_xcpt, tlb_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
     r_xcpt.badvaddr := tlb_xcpt_vaddr // TODO is there another register we can use instead?
 
-    io.core.lxcpt.valid := r_xcpt_valid && !io.core.exception && !IsKilledByBranch(io.core.brupdate, r_xcpt.uop)
-    io.core.lxcpt.bits := r_xcpt
+    io.core.lsu_xcpt.valid := r_xcpt_valid && !io.core.exception && !IsKilledByBranch(io.core.brupdate, r_xcpt.uop)
+    io.core.lsu_xcpt.bits := r_xcpt
 
     // Task 4: Speculatively wakeup loads 1 cycle before they come back
     for (w <- 0 until memWidth) {
