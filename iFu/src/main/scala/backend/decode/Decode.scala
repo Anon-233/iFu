@@ -308,10 +308,11 @@ class DecodeUnit extends CoreModule {
         uop.ldst := 1.U
     }
     when(cs.uopc === uopRDTIMELW && inst(4,0) === 0.U){
-        uop.uopc := uopRDCNTIDW
-        uop.fuCode := FU_CSR
-        uop.ldst := inst(9, 5)
-        uop.is_unique := true.B
+        uop.uopc            := uopRDCNTIDW
+        uop.fuCode          := FU_CSR
+        uop.ldst            := inst(9, 5)
+        uop.bypassable      := false.B
+        uop.is_unique       := true.B
         uop.flush_on_commit := true.B
     } .elsewhen (cs.uopc === uopRDTIMELW){
         uop.uopc := uopRDCNTVLW
