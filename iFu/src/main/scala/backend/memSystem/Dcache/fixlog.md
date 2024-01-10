@@ -106,6 +106,24 @@ iFuCore.sv逻辑中实际上对s2state === replay的情况下，取得writebackp
 
 1.10 
 MMIO:
-Dcache被保证：同一时间只可能有至多1条MMIO请求被执行。
+Dcache被保证：同一时间只可能有至多1条MMIO请求被送入。
 
-将这条指令直接送入MSHR，走MSHR的"mshrread"
+加入状态mmio:
+
+重构一下RPU，使得其能够在空闲的时候接受一个被包装好的MMIO请求，做完之后通过一个Decoupled等待，等外界s2的地方没有事情，
+作为自己提交该MMIO resp的周期，将resp传回去。
+
+对于lsu传入的MMIO请求，s2的时候，RPU空闲，直接做，RPU不空闲，按照"miss且不写入mshr"类似的逻辑请求lsu那边重发该条MMIO请求。
+
+CACOP:
+Dcache被保证，执行cacop的时候整个dcache没有任何其他正在运行的请求
+
+
+(现在我们需要的是，CACOP来的时候，isunique会大刷cache，并且执行一些未完成的lsu指令，但是我们接下来需要一种，能够执行未完成的
+lsu指令，但是不要刷dcache的信号，实现unique)
+
+
+加入状态cacop：
+
+
+在meta,data里面加入一些功能，用于处理cacop的取特定脏行写回的请求
