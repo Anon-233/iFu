@@ -5,7 +5,6 @@ import chisel3.util._
 import chisel3.util.random.LFSR
 
 import iFu.frontend.FrontendUtils._
-import scala.math.min
 
 class BTBEntry extends Bundle with HasBtbParameters {
     val offset   = SInt(offsetSz.W)
@@ -46,12 +45,12 @@ class BtbPredictor extends Module with HasBtbParameters {
 
 // ---------------------------------------------
 //      Reset Logic
-    val reset_en = RegInit(true.B)
-    val reset_idx   = RegInit(0.U(log2Ceil(nSets).W))
+    val reset_en  = RegInit(true.B)
+    val reset_idx = RegInit(0.U(log2Ceil(nSets).W))
     when (reset_en) {
         reset_idx := reset_idx + 1.U
     }
-    when (reset_idx === (nSets-1).U) {
+    when (reset_idx === (nSets - 1).U) {
         reset_en := false.B
     }
 // ---------------------------------------------
@@ -122,7 +121,6 @@ class BtbPredictor extends Module with HasBtbParameters {
 
 // ---------------------------------------------
 //      Update Logic
-
     val s1_update         = io.s1update
     val s1_update_cfi_idx = s1update.bits.cfiIdx.bits
     val s1_update_meta    = VecInit(s1_update.bits.meta.map(_.btbMeta))
@@ -207,4 +205,5 @@ class BtbPredictor extends Module with HasBtbParameters {
     when (s1_update_btb_mask =/= 0.U && need_extend) {
         ebtb.write(s1_update_idx, s1update.bits.target)
     }
+// ---------------------------------------------
 }

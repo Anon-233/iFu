@@ -2,116 +2,139 @@ package iFu.frontend
 
 import chisel3._
 import chisel3.util._
-import iFu.frontend.FrontendUtils._
+
 import iFu.util._
+import iFu.frontend.FrontendUtils._
 
-
-
-class BimPredictMeta extends Bundle with HasBimParameters{
-    val bim  = UInt(2.W)
+class BIMPredictMeta extends Bundle with HasBimParameters {
+    val bim = UInt(2.W)
 }
 
+class BIMIO extends Bundle with HasBimParameters {
+    val s0valid  = Input(Bool())
+    val s0pc     = Input(UInt(vaddrBits.W))
 
-class BimPredictor extends Module with HasBimParameters{
-    val io = IO(new Bundle{
-        val s0pc = Input(UInt(vaddrBits.W))
-        val s0valid = Input(Bool())
+    val s2taken  = Output(Vec(bankWidth, Bool()))
 
-        val s2taken = Output(Vec(bankWidth, Bool()))
+    val s3meta   = Output(Vec(bankWidth, new BIMPredictMeta))
 
-        val s3meta = Output(Vec(bankWidth,new BimPredictMeta))
+    val s1update = Input(Valid(new BankedUpdateInfo))
+}
 
-        val s1update = Input(Valid(new BankedUpdateInfo))
-    })
+class BimPredictor extends Module with HasBimParameters {
+    val io = IO(new BIMIO)
 
-    val clockcnt = RegInit((0.U)(10.W))
-    clockcnt := clockcnt + 1.U
+    val bim_ram = SyncReadMem(nSets, Vec(bankWidth, UInt(2.W)))
 
-    val s2meta = Wire(Vec(bankWidth,new BimPredictMeta))
-
-    val reseting =RegInit(true.B)
-    val resetIdx =RegInit(0.U(log2Ceil(nSets).W))
-
-    when(reseting){
-        resetIdx := resetIdx + 1.U
+// ---------------------------------------------
+//      Reset Logic
+    val reset_en  = RegInit(true.B)
+    val reset_idx = RegInit(0.U(log2Ceil(nSets).W))
+    when (reset_en) {
+        reset_idx := reset_idx + 1.U
     }
-
-    when(resetIdx === (nSets-1).U){ reseting := false.B}
-
-    val bimRam = SyncReadMem(nSets,Vec(bankWidth,UInt(2.W)))
-
-    val s0idx = fetchIdx(io.s0pc)
-    val s2valid = RegNext(RegNext(io.s0valid))
-
-    val s2rdata = RegNext(VecInit(bimRam.read(s0idx.asUInt,io.s0valid).map(_.asTypeOf(UInt(2.W)))))
-
-    for(w <- 0 until bankWidth){
-        io.s2taken(w) := s2valid && s2rdata(w)(1) && !reseting
-        s2meta(w).bim := s2rdata(w)
+    when (reset_idx === (nSets - 1).U) {
+        reset_en := false.B
     }
+// ---------------------------------------------
 
-    val s1update = io.s1update
-    val s1updatewData = Wire(Vec(bankWidth,UInt(2.W)))
-    val s1updateIdx = fetchIdx(io.s1update.bits.pc)
-    val s1updatewMask = Wire(Vec(bankWidth,Bool()))
-    val s1updateMeta = VecInit(io.s1update.bits.meta.map(_.bimMeta))
+// ---------------------------------------------
+//      Predict Logic
+    val s0_tag = fetchIdx(io.s0pc)
 
-    val wrBypassIdxs = Reg(Vec(nWrBypassEntries,UInt(log2Ceil(nSets).W)))
-    val wrBypass = Reg(Vec(nWrBypassEntries,Vec(bankWidth,UInt(2.W))))
-    val wrBypassEnqIdx = RegInit(0.U(log2Ceil(nWrBypassEntries).W))
+    // s0 send request, s1 get response, s2 use response
+    val s2_bim = RegNext(VecInit(bim_ram.read(s0_tag.asUInt,io.s0valid).map(_.asTypeOf(UInt(2.W)))))
 
-    val wrBypassHits = VecInit((0 until nWrBypassEntries) map { i =>
-        !reseting &&
-        wrBypassIdxs(i) === s1updateIdx(log2Ceil(nSets)-1,0)
+    val s2_valid = RegNext(RegNext(io.s0valid))
+
+    for (w <- 0 until bankWidth) {
+        val resp_valid = !reset_en && s2_valid
+        io.s2taken(w) := resp_valid && s2_bim(w)(1)
+    }
+// ---------------------------------------------
+
+// ---------------------------------------------
+//      Prepare Meta for Update
+    val s2_meta = Wire(Vec(bankWidth, new BIMPredictMeta))
+    for (w <- 0 until bankWidth) {
+        s2_meta(w).bim := s2_bim(w)
+    }
+    io.s3meta := RegNext(s2_meta)
+// ---------------------------------------------
+
+// ---------------------------------------------
+//      Update Logic
+    val s1_update = io.s1update
+    val s1_update_idx  = fetchIdx(io.s1update.bits.pc)
+
+    val s1_update_mask = Wire(Vec(bankWidth,Bool()))
+    val s1_update_meta = VecInit(s1_update.bits.meta.map(_.bimMeta))
+    val s1_update_data = Wire(Vec(bankWidth, UInt(2.W)))
+
+    // TODO: why we need this?
+    val wr_bypass_regs    = Reg(Vec(nWrBypassEntries, Vec(bankWidth, UInt(2.W))))
+    val wr_bypass_idxs    = Reg(Vec(nWrBypassEntries, UInt(log2Ceil(nSets).W)))
+    val wr_bypass_enq_idx = RegInit(0.U(log2Ceil(nWrBypassEntries).W))
+
+    val wr_bypass_hits = VecInit((0 until nWrBypassEntries) map { i =>
+        !reset_en &&
+        wr_bypass_idxs(i) === s1_update_idx(log2Ceil(nSets) - 1, 0)
     })
+    val wr_bypass_hit     = wr_bypass_hits.reduce(_||_)
+    val wr_bypass_hit_idx = PriorityEncoder(wr_bypass_hits)
 
-    val wrBypassHit = wrBypassHits.reduce(_||_)
-    val wrBypassHitIdx = PriorityEncoder(wrBypassHits)
+    for (w <- 0 until bankWidth) {
+        s1_update_mask(w) := false.B
+        s1_update_data(w) := 0.U
 
-    for(w <- 0 until bankWidth){
-        s1updatewMask(w) := false.B
-        s1updatewData(w) := DontCare
+        val update_pc  = s1_update.bits.pc + (w << 2).U
+        val update_idx = fetchIdx(update_pc)
 
-        val updatepc = io.s1update.bits.pc + (w << 2).U
-        val updateIdx = fetchIdx(updatepc)
-
-        when(s1update.bits.brMask(w)||
-            (s1update.bits.cfiIdx.valid && s1update.bits.cfiIdx.bits === w.U))
-        {
-            val wasTaken = (
-                s1update.bits.cfiIdx.valid &&
-                (s1update.bits.cfiIdx.bits === w.U) &&
+        when(
+            s1_update.bits.brMask(w) ||
+            (s1_update.bits.cfiIdx.valid && s1_update.bits.cfiIdx.bits === w.U)
+        ) {
+            val was_taken = (
+                (s1_update.bits.cfiIdx.valid) &&
+                (s1_update.bits.cfiIdx.bits === w.U) &&
                 (
-                    (s1update.bits.cfiIsBr) && (s1update.bits.cfiIsBr && s1update.bits.brMask(w) && s1update.bits.cfiTaken) ||
+                    (s1_update.bits.cfiIsBr && s1update.bits.brMask(w) && s1update.bits.cfiTaken) ||
                     s1update.bits.cfiIsJal
                 )
             )
-            val oldbimvalue = Mux(wrBypassHit ,
-                wrBypass(wrBypassHitIdx)(w),
-                s1updateMeta(w).asUInt
+            val old_bim = Mux(
+                wr_bypass_hit,
+                wr_bypass_regs(wr_bypass_hit_idx)(w),
+                s1_update_meta(w).asUInt
             )
 
-            s1updatewMask(w) := true.B
-            s1updatewData(w) := bimWrite(oldbimvalue.asUInt,wasTaken)
+            s1_update_mask(w) := true.B
+            s1_update_data(w) := bimWrite(old_bim, was_taken)
         }
     }
 
-    when(reseting){
-        bimRam.write(resetIdx,VecInit(Seq.fill(bankWidth){2.U}), (~(0.U(bankWidth.W))).asBools)
-    }.elsewhen(s1update.valid && s1update.bits.isCommitUpdate){
-        bimRam.write(s1updateIdx.asUInt,s1updatewData,s1updatewMask.asUInt.asBools)
+    when (reset_en) {
+        bim_ram.write(
+            reset_idx,
+            VecInit(Seq.fill(bankWidth){ 2.U(2.W) }),
+            (~(0.U(bankWidth.W))).asBools
+        )
+    } .elsewhen (s1update.valid && s1update.bits.isCommitUpdate) {
+        bim_ram.write(
+            s1_update_idx,
+            s1updatewData,
+            s1_update_mask.asBools
+        )
     }
 
-    when(s1updatewMask.reduce(_||_) && s1update.valid && s1update.bits.isCommitUpdate){
-        when (wrBypassHit){
+    when (s1_update_mask.reduce(_||_) && s1update.valid && s1update.bits.isCommitUpdate) {
+        when (wrBypassHit) {
             wrBypass(wrBypassHitIdx) := s1updatewData
-        }.otherwise{
-            wrBypass(wrBypassEnqIdx) := s1updatewData
-            wrBypassIdxs(wrBypassEnqIdx) := s1updateIdx
-            wrBypassEnqIdx := WrapInc(wrBypassEnqIdx,nWrBypassEntries)
+        } .otherwise {
+            wrBypass(wrBypassEnqIdx)     := s1updatewData
+            wr_bypass_idxs(wrBypassEnqIdx) := s1_update_idx
+            wrBypassEnqIdx := WrapInc(wrBypassEnqIdx, nWrBypassEntries)
         }
     }
-
-    io.s3meta := RegNext(s2meta)
-
+// ---------------------------------------------
 }
