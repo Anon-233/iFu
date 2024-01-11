@@ -83,6 +83,8 @@ class DcacheParameters {
 
     def isStore(req : DCacheReq): Bool = req.uop.use_stq
 
+    def isMMIO(req : DCacheReq): Bool = req.is_uncacheable
+
 }
 
 case class IssueParams(

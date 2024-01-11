@@ -70,7 +70,7 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
     val isMMIO = RegInit(false.B)
     // 这个是为了和rpujustDone信号周期同步，使用寄存器结构
     val mmioDone = RegInit(false.B)
-    val mmioReq = RegInit(0.U.asTypeOf(Valid(new DCacheReq)))
+    val mmioReq = RegInit(0.U.asTypeOf(new DCacheReq))
     
     val mmioPipeNumber = RegInit(0.U(1.W))
 
@@ -97,7 +97,7 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
 
     io.mmioDone := mmioDone
 
-    io.mmioDoneReq := Mux(mmioDone , mmioReq , 0.U.asTypeOf(Valid(new DCacheReq)))
+    io.mmioDoneReq := Mux(mmioDone , mmioReq , 0.U.asTypeOf(new DCacheReq))
     
 
     io.mmioPipeNumber := mmioPipeNumber
@@ -111,7 +111,6 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
             isFence := io.isFence
             isMMIO := io.isMMIO
             when(io.isMMIO){
-                state := mmio
                 state := Mux(io.mmioWrite , wb , fetch)
                 mmioReq := io.mmioReq
                 
@@ -163,7 +162,7 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
             state := Mux(io.cbusResp.isLast, Mux( isFence && isMMIO , ready ,fetch), wb)//写回完成，正常指令去fetch，是fence指令就直接回到ready
             offsetIdx := Mux(io.cbusResp.isLast, 0.U, offsetIdx + 1.U)
 
-            if(io.cbusResp.isLast){
+            when(io.cbusResp.isLast){
                 when(isMMIO){
                     mmioDone := true.B
                 }
