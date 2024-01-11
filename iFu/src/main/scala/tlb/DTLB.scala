@@ -28,8 +28,9 @@ class DTLBReq extends CoreBundle(){
 //    val cmd = Bits(TLB_CMD_SZ.W)
 }
 class DTLBResp extends CoreBundle(){
-    val paddr = UInt(paddrBits.W)
-    val exception = Valid(new DTLBException())
+    val paddr               = UInt(paddrBits.W)
+    val exception           = Valid(new DTLBException())
+    val is_uncacheable      = Bool()
 }
 class DTLBIO extends CoreBundle(){
     val req = Flipped(Vec(memWidth, Decoupled(new DTLBReq)))

@@ -320,7 +320,7 @@ class Lsu extends CoreModule {
         !p1_block_load_mask(ldq_wakeup_idx) &&
         !p2_block_load_mask(ldq_wakeup_idx) &&
         !store_needs_order &&
-        !block_load_wakeup /*&&*/
+        !block_load_wakeup &&
         (!ldq_wakeup_e.bits.is_uncacheable ||
         (io.core.commit_load_at_rob_head && //
         ldq_head === ldq_wakeup_idx &&
@@ -501,7 +501,7 @@ class Lsu extends CoreModule {
     //TODO:可能不需要这里的miss,
     val exe_tlb_xcpt = widthMap(w => dtlb.io.req(w).valid && (dtlb.io.resp(w).exception.valid || !dtlb.io.req(w).ready))
     val exe_tlb_paddr = widthMap(w => dtlb.io.resp(w).paddr)
-    val exe_tlb_uncacheable = widthMap(w => !(dtlb.io.resp(w).is_uncacheable))
+    val exe_tlb_uncacheable = widthMap(w => dtlb.io.resp(w).is_uncacheable)
     for (w <- 0 until memWidth) {
         when(tlb_xcpt_valids(w)) {
             assert(RegNext(will_fire_load_incoming(w) || will_fire_stad_incoming(w) || will_fire_sta_incoming(w)))
