@@ -52,11 +52,12 @@ class ExeUnitResp(val len: Int = 32) extends CoreBundle {
 }
 
 class DCacheReq extends CoreBundle {
-    val mask  = UInt(4.W)
-    val addr  = UInt(32.W)
-    val data  = Bits(xLen.W)
+    val mask            = UInt(4.W)
+    val addr            = UInt(32.W)
+    val data            = Bits(xLen.W)
 //    val is_hella = Bool() // Is this the hellacache req? If so this is not tracked in LDQ or STQ
-    val uop = new MicroOp()
+    val uop             = new MicroOp()
+    val is_uncacheable  = Bool()
 }
 
 class DCacheResp extends CoreBundle {

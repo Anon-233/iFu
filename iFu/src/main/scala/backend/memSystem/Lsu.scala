@@ -116,12 +116,13 @@ class LDQEntry extends CoreBundle with HasUop{
 
 class STQEntry extends CoreBundle with HasUop{
 //    val uop     = new MicroOp
-    val addr    = Valid(UInt(xLen.W))
+    val addr            = Valid(UInt(xLen.W))
     val addr_is_virtual = Bool()
-    val data    = Valid(UInt(xLen.W))
+    val data            = Valid(UInt(xLen.W))
+    val is_uncacheable  = Bool()
 
-    val committed   = Bool()
-    val succeeded   = Bool() // 访存成功
+    val committed       = Bool()
+    val succeeded       = Bool() // 访存成功
 }
 
 class Lsu extends CoreModule {
@@ -540,23 +541,23 @@ class Lsu extends CoreModule {
         dmem_req(w).bits.addr := 0.U
         dmem_req(w).bits.data := 0.U
         dmem_req(w).bits.mask := 0.U
-
+        dmem_req(w).bits.is_uncacheable := false.B
         dcache.io.lsu.s1_kill(w) := false.B
 
         when(will_fire_load_incoming(w)) {
-             dmem_req(w).valid := !exe_tlb_xcpt(w) && !dtlb.io.resp(w).is_uncacheable
-             dmem_req(w).bits.addr := exe_tlb_paddr(w)
-             dmem_req(w).bits.uop := exe_tlb_uop(w)
+            dmem_req(w).valid := !exe_tlb_xcpt(w) && !dtlb.io.resp(w).is_uncacheable
+            dmem_req(w).bits.addr := exe_tlb_paddr(w)
+            dmem_req(w).bits.uop := exe_tlb_uop(w)
             s0_executing_loads(ldq_incoming_idx(w)) := dmem_req_fire(w)
             assert(!ldq_incoming_e(w).bits.executed)
         }.elsewhen(will_fire_store_commit(w)) {
-            dmem_req(w).valid := true.B
-            dmem_req(w).bits.addr := stq_commit_e.bits.addr.bits
-            dmem_req(w).bits.data := stq_commit_e.bits.data.bits
-            dmem_req(w).bits.mask := storeMaskGen(stq_commit_e.bits.addr.bits(1,0),
+            dmem_req(w).valid               := true.B
+            dmem_req(w).bits.addr           := stq_commit_e.bits.addr.bits
+            dmem_req(w).bits.data           := stq_commit_e.bits.data.bits
+            dmem_req(w).bits.mask           := storeMaskGen(stq_commit_e.bits.addr.bits(1,0),
                 stq_commit_e.bits.uop.mem_size)
-
-            dmem_req(w).bits.uop := stq_commit_e.bits.uop
+            dmem_req(w).bits.uop            := stq_commit_e.bits.uop
+            dmem_req(w).bits.is_uncacheable := stq_commit_e.bits.is_uncacheable
 
             stq_execute_head := Mux(dmem_req_fire(w),
                 WrapInc(stq_execute_head, numStqEntries),
@@ -567,6 +568,7 @@ class Lsu extends CoreModule {
             dmem_req(w).valid := true.B
             dmem_req(w).bits.addr := ldq_wakeup_e.bits.addr.bits
             dmem_req(w).bits.uop := ldq_wakeup_e.bits.uop
+            dmem_req(w).bits.is_uncacheable := ldq_wakeup_e.bits.is_uncacheable
 
             s0_executing_loads(ldq_wakeup_idx) := dmem_req_fire(w)
 
@@ -603,6 +605,7 @@ class Lsu extends CoreModule {
             stq(stq_idx).bits.addr.bits  := exe_tlb_paddr(w)
             stq(stq_idx).bits.uop.pdst := exe_tlb_uop(w).pdst
             stq(stq_idx).bits.addr_is_virtual := exe_tlb_xcpt(w)
+            stq(stq_idx).bits.is_uncacheable := exe_tlb_uncacheable(w)
 
             assert(!(will_fire_sta_incoming(w) && stq_incoming_e(w).bits.addr.valid),
                 "[lsu] Incoming store is overwriting a valid address")
