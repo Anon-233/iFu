@@ -2,10 +2,10 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
-
 import iFu.common._
 import iFu.common.Consts._
 import iFu.common.CauseCode._
+import iFu.tlb.DTLBCSRContext
 
 class CRMD extends CoreBundle {
     val r0_0 = UInt(23.W)
@@ -150,10 +150,26 @@ class CSRFileIO extends CoreBundle {
     val rj       = Input(UInt(32.W))
 
     val debug_csr_reg = Output(new CSRReg)
+
+    val dtlb_csr_reg  = Output(new DTLBCSRContext)
 }
 
 class CSRFile extends CoreModule {
     val io = IO(new CSRFileIO)
+
+    io.dtlb_csr_reg.crmd_da := csrReg.crmd.da
+    io.dtlb_csr_reg.crmd_pg := csrReg.crmd.pg
+    io.dtlb_csr_reg.crmd_datm := csrReg.crmd.datm
+    io.dtlb_csr_reg.crmd_plv  := csrReg.crmd.plv
+    io.dtlb_csr_reg.dmw0_mat  := csrReg.dmw0.mat
+    io.dtlb_csr_reg.dmw1_mat  := csrReg.dmw1.mat
+    io.dtlb_csr_reg.dmw0_plv0  := csrReg.dmw0.plv0
+    io.dtlb_csr_reg.dmw0_plv3  := csrReg.dmw0.plv3
+    io.dtlb_csr_reg.dmw1_plv0  := csrReg.dmw1.plv0
+    io.dtlb_csr_reg.dmw1_plv3  := csrReg.dmw1.plv3
+    io.dtlb_csr_reg.dmw0_vseg  := csrReg.dmw0.vseg
+    io.dtlb_csr_reg.dmw1_vseg  := csrReg.dmw1.vseg
+
 
     val csrRst = WireInit(0.U.asTypeOf(new CSRReg))
     csrRst.crmd.da := 1.U(1.W);
