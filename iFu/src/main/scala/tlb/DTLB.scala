@@ -10,7 +10,20 @@ import iFu.common.CauseCode._
 //第一步，
 
 class DTLBCSRContext extends CoreBundle(){
-    val plv = UInt(2.W)
+    val crmd_da     = Bool()
+    val crmd_pg     = Bool()
+    val crmd_datm   = UInt(2.W)
+    val crmd_plv    = UInt(2.W)
+
+    val dmw0_plv0   = Bool()
+    val dmw0_plv3   = Bool()
+    val dmw0_mat    = UInt(2.W)
+    val dmw0_vseg   = UInt(3.W)
+
+    val dmw1_plv0   = Bool()
+    val dmw1_plv3   = Bool()
+    val dmw1_mat    = UInt(2.W)
+    val dmw1_vseg   = UInt(3.W)
 }
 
 class DTLBException extends CoreBundle(){
@@ -85,6 +98,33 @@ class DTLB extends CoreModule(){
 //                io.resp(w).exceptions.bits.is_pme   := true.B
 //            }
 //        }
+
+    }
+//    val data_uncache_en = Bool()
+//    data_uncache_en := (da_mode && (csr_datm === 0.U)) ||
+//        (dmw0_en && (csr_dmw0(`DMW_MAT) === 0.U)) ||
+//        (dmw1_en && (csr_dmw1(`DMW_MAT) === 0.U)) ||
+//        (data_addr_trans_en && (data_tlb_mat === 0.U))
+
+    //TODO disable_cache是一个寄存器,以及data_addr_trans_en的支持
+    val csr_reg = io.csr_context
+    val da_mode = csr_reg.crmd_da && !csr_reg.crmd_pg
+    val pg_mode = !csr_reg.crmd_da && csr_reg.crmd_pg
+    for (w <- 0 until memWidth){
+
+        val dmw0_en = ((csr_reg.dmw0_plv0 && csr_reg.crmd_plv === 0.U) ||
+          (csr_reg.dmw0_plv3 && csr_reg.crmd_plv === 3.U)) &&
+          (io.req(w).bits.vaddr(31, 29) === csr_reg.dmw0_vseg) &&
+          pg_mode
+        
+        val dmw1_en = ((csr_reg.dmw1_mat(0) && csr_reg.crmd_plv === 0.U) ||
+          (csr_reg.dmw1_plv3 && csr_reg.crmd_plv === 3.U)) &&
+          (io.req(w).bits.vaddr(31, 29) === csr_reg.dmw1_vseg) &&
+          pg_mode
+
+        io.resp(w).is_uncacheable := (da_mode && csr_reg.crmd_datm === 0.U) ||
+          (dmw0_en && (csr_reg.dmw0_mat === 0.U)) ||
+          (dmw1_en && (csr_reg.dmw1_mat === 0.U))
 
     }
 }

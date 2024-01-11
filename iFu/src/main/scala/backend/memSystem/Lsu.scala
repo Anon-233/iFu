@@ -2,11 +2,10 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
-
 import iFu.common._
 import iFu.common.Consts._
 import iFu.common.CauseCode._
-import iFu.tlb.DTLB
+import iFu.tlb.{DTLB, DTLBCSRContext}
 import iFu.util._
 
 //TODO  memWidth为2，如果为1，需要wakeup不成功后增加一周期delay  Done
@@ -80,10 +79,15 @@ class LSUCoreIO extends CoreBundle {
     val lsu_xcpt       = Output(Valid(new Exception))
 }
 
+class LSUCsrIO extends CoreBundle {
+    val csr_reg  = Input(new DTLBCSRContext)
+}
+
 class LSUIO extends CoreBundle {
     val core    = new LSUCoreIO
     val dreq = Output(new CBusReq)
     val dresp = Input(new CBusResp)
+    val csr = new LSUCsrIO
 }
 
 trait HasUop extends Bundle{
@@ -457,6 +461,7 @@ class Lsu extends CoreModule {
         dtlb.io.req(w).bits.vaddr := exe_tlb_vaddr(w)
         dtlb.io.req(w).bits.size := exe_size(w)
     }
+    dtlb.io.csr_context := io.csr.csr_reg
     // exceptions
 
     // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
@@ -569,12 +574,18 @@ class Lsu extends CoreModule {
             dmem_req(w).bits.addr := ldq_wakeup_e.bits.addr.bits
             dmem_req(w).bits.uop := ldq_wakeup_e.bits.uop
             dmem_req(w).bits.is_uncacheable := ldq_wakeup_e.bits.is_uncacheable
-
             s0_executing_loads(ldq_wakeup_idx) := dmem_req_fire(w)
+
+
 
             assert(!ldq_wakeup_e.bits.executed && !ldq_wakeup_e.bits.addr_is_virtual)
         }
-
+        when(dmem_req(memWidth-1).bits.is_uncacheable) {
+            for(w <- 0 until memWidth-1) {
+                dmem_req(w).valid       := false.B
+                can_fire_store_commit   := false.B
+            }
+        }
         //-------------------------------------------------------------
         // Write Addr into the LAQ/SAQ
         when(will_fire_load_incoming(w)) {
