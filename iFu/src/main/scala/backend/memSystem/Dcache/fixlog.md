@@ -107,11 +107,23 @@ iFuCore.sv逻辑中实际上对s2state === replay的情况下，取得writebackp
 1.10 
 MMIO:
 Dcache被保证：同一时间只可能有至多1条MMIO请求被送入。
+MMIO不要和其他的普通ld,st指令一起发进来，他是单独的享有一个周期，控制状态机。
 
 加入状态mmio:
 
 重构一下RPU，使得其能够在空闲的时候接受一个被包装好的MMIO请求，做完之后通过一个Decoupled等待，等外界s2的地方没有事情，
-作为自己提交该MMIO resp的周期，将resp传回去。
+作为自己提交该MMIO resp的周期(接管这个周期，改变状态nil->mmio)，将resp传回去。
+
+(这个想法不太好，需要让RPU也有一个等待功能，不如让RPU一做完)
+
+
+在做的过程中lsu会不会重发这个指令，成功送入RPU之后怎么发nack或resp？
+
+(希望：RPU处理该MMIO的时候，不要有该条MMIO的重发)
+
+这个store的MMIO要发storefailed吗，目前暂时当成是一条普通store指令？
+
+会不会出现正在做MMIO的时候（刚好做完准备发），又来了一条这个MMIO指令？
 
 对于lsu传入的MMIO请求，s2的时候，RPU空闲，直接做，RPU不空闲，按照"miss且不写入mshr"类似的逻辑请求lsu那边重发该条MMIO请求。
 
@@ -122,8 +134,33 @@ Dcache被保证，执行cacop的时候整个dcache没有任何其他正在运行
 (现在我们需要的是，CACOP来的时候，isunique会大刷cache，并且执行一些未完成的lsu指令，但是我们接下来需要一种，能够执行未完成的
 lsu指令，但是不要刷dcache的信号，实现unique)
 
+cacop在0号还是1号流水线传进来？
 
+<!-- 
 加入状态cacop：
 
 
 在meta,data里面加入一些功能，用于处理cacop的取特定脏行写回的请求
+
+
+dcache 需要的两个信号：不写回脏行的"ordered"信号，以及该请求是否为mmio的信号 -->
+
+不加入状态cacop，而是扩展fence状态定义，fence状态既包括force_order下面脏行写回，也包括没有force_order，而是需要执行cacop指令，因为他们的行为本质上都是去meta取一行进行可能的写回操作(对于cacop可能找不到，找不到就不往后写了)
+
+
+MetaReadreq(特别是fenceMetaRead)需要标识符:
+刷cache的脏行写回，这个模式按照自己维护的脏行位置读出来meta
+cacop初始化，这个模式fenceMetaRead按要求准备好idx和readPos，读出该行
+cacop地址直接索引，这个模式同上
+cacop查询索引，这个会使用正常的判断命中的的逻辑，读出来meta
+
+
+经过fenceMeta之后，从resp里面收集得到的rmeta,idx,pos，
+如果使用hit查找，并且根本没找到，直接kill掉。
+如果找到了，但是rmeta的valid为假或者dirty位为假，就直接kill掉，就不用去data读,也不需要通过总线写回了,直接汇报做完即可
+
+如果rmeta为真，那么就需要去data读，并且最终交给RPU，
+
+除了hit查找未找到的情况之外，做完这些在s2阶段，给fenceMetaClean指定上pos，idx，告诉meta将这个位置清零。然后汇报做完即可
+
+

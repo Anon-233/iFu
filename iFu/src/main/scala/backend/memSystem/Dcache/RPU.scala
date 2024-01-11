@@ -36,6 +36,15 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
 
         val isFence = Input(Bool())
 
+        val isMMIO = Input(Bool())
+        val mmioWrite = Input(Bool())
+        val mmioPipeNumberIn = Input(UInt(1.W))
+        val mmioReq = Input(new DCacheReq)
+
+        val mmioDone = Output(Bool())
+        val mmioPipeNumber = Output(UInt(1.W))
+        val mmioDoneReq = Output(new DCacheReq)
+
         val fetchingAddr = Output(UInt(32.W))
 
         // c线
@@ -58,6 +67,12 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
     val newAddr = RegInit(0.U(32.W))
     val newWay = RegInit(0.U(log2Ceil(nWays).W))
     val isFence = RegInit(false.B)
+    val isMMIO = RegInit(false.B)
+    // 这个是为了和rpujustDone信号周期同步，使用寄存器结构
+    val mmioDone = RegInit(false.B)
+    val mmioReq = RegInit(0.U.asTypeOf(Valid(new DCacheReq)))
+    
+    val mmioPipeNumber = RegInit(0.U(1.W))
 
 
 
@@ -65,7 +80,7 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
     io.cbusReq.valid := state === fetch || state === wb
     io.cbusReq.isStore := state === wb
     io.cbusReq.mask := Mux(state === wb , 0xf.U , 0x0.U)
-    io.cbusReq.axiLen := MLEN16
+    io.cbusReq.axiLen := Mux(isMMIO , MLEN1 , MLEN16)
     io.cbusReq.axiBurstType := AXI_BURST_INCR
     io.cbusReq.size := MSIZE4
     io.cbusReq.addr := 0.U
@@ -80,6 +95,13 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
 
     io.fetchingAddr := fetchAddr
 
+    io.mmioDone := mmioDone
+
+    io.mmioDoneReq := Mux(mmioDone , mmioReq , 0.U.asTypeOf(Valid(new DCacheReq)))
+    
+
+    io.mmioPipeNumber := mmioPipeNumber
+
 
     when(state === ready){
         when(io.needReplace){
@@ -87,7 +109,16 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
             fetchAddr := io.fetchAddr
             replaceWay := io.replaceWay
             isFence := io.isFence
-            when(io.replaceMetaLine.valid && io.replaceMetaLine.dirty){
+            isMMIO := io.isMMIO
+            when(io.isMMIO){
+                state := mmio
+                state := Mux(io.mmioWrite , wb , fetch)
+                mmioReq := io.mmioReq
+                
+                // 以mmio的req内信息为准
+                mmioPipeNumber := io.mmioPipeNumberIn
+
+            }.elsewhen(io.replaceMetaLine.valid && io.replaceMetaLine.dirty){
 
                 state := wb
                 dataLineBuffer := io.replaceDataLine
@@ -109,12 +140,19 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
             offsetIdx := Mux(io.cbusResp.isLast, 0.U, offsetIdx + 1.U)
 
             when(io.cbusResp.isLast){
-                metaLineBuffer.valid := true.B
-                metaLineBuffer.dirty := false.B
-                metaLineBuffer.tag := getTag(fetchAddr)
-                metaLineBuffer.age := 0.U
-                newAddr := fetchAddr
-                newWay := replaceWay
+                when(isMMIO){
+                    // mmio不需要造meta
+                    mmioDone := true.B
+                    
+                }.otherwise{
+                    metaLineBuffer.valid := true.B
+                    metaLineBuffer.dirty := false.B
+                    metaLineBuffer.tag := getTag(fetchAddr)
+                    metaLineBuffer.age := 0.U
+                    newAddr := fetchAddr
+                    newWay := replaceWay
+                }
+                
             }
         }
 
@@ -122,8 +160,16 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
         io.cbusReq.addr := replaceAddr
         io.cbusReq.data := dataLineBuffer(offsetIdx)
         when(io.cbusResp.ready){
-            state := Mux(io.cbusResp.isLast, Mux( isFence , ready ,fetch), wb)//写回完成，正常指令去fetch，是fence指令就直接回到ready
+            state := Mux(io.cbusResp.isLast, Mux( isFence && isMMIO , ready ,fetch), wb)//写回完成，正常指令去fetch，是fence指令就直接回到ready
             offsetIdx := Mux(io.cbusResp.isLast, 0.U, offsetIdx + 1.U)
+
+            if(io.cbusResp.isLast){
+                when(isMMIO){
+                    mmioDone := true.B
+                }
+            }
+
+
         }
     }
 

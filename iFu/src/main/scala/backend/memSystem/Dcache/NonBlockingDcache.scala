@@ -126,7 +126,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     }
 
 
-    val replay :: wb ::  mshrread :: lsu  :: prefetch :: nil :: fence :: Nil = Enum(7)
+    val replay :: wb ::  mshrread :: lsu  :: prefetch  :: fence  :: mmioreq :: mmioresp :: nil :: Nil = Enum(9)
 
 
 
@@ -139,6 +139,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     RPU.io.fetchAddr := 0.U
     RPU.io.replaceWay := 0.U
     RPU.io.isFence := false.B
+    RPU.io.isMMIO := false.B
+    RPU.io.mmioWrite := false.B
+
     io.cbusReq := RPU.io.cbusReq
     RPU.io.cbusResp := io.cbusResp
 
@@ -209,13 +212,33 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
 
     val rpuJustDone = Wire(Bool())
+
     val mshrReadValid = Wire(Bool())
     val mshrReplayValid =Wire(Bool())
+
     val fenceValid = Wire(Bool())
+
     val prefetchValid = Wire(Bool())
+
+    val cacopValid = Wire(Bool())
+
+    val lsuNormalValid = Wire(Bool())
+    val lsuMMIOValid = Wire(Bool())
+
     val rpuWBsuccess = WireInit(false.B)
 
+    // 判断输入的有没有mmio请求
+    val hasMMIO = WireInit(false.B)
+    
+    lsuNormalValid := io.lsu.req.valid && !hasMMIO
+    lsuMMIOValid := io.lsu.req.valid && hasMMIO
+
+
     rpuJustDone := RPU.io.ready && RegNext(!RPU.io.ready)
+
+    val rpuMMIODone = rpuJustDone && RPU.io.mmioDone
+    val rpuNormalDone = rpuJustDone && !rpuMMIODone
+
     // 存储mshr的信息
     val mshrs = Module(new MSHRFile)
     mshrs.io.req.valid := false.B
@@ -237,11 +260,13 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     mshrReplayValid := mshrs.io.replay.valid
 
     // lsu还在发force_order并且dcache行里面还有dirty，就进行fence操作
-    fenceValid := io.lsu.force_order && fenceMetaRead.resp.bits.hasDirty
+    fenceValid := (io.lsu.force_order && fenceMetaRead.resp.bits.hasDirty) /* || (!io.lsu.force_order && io.lsu.req(?).is_cacop) */
     //清掉里面所有的load指令
     mshrs.io.fenceClear := fenceValid
     // 只要meta没有dirty，就可以回应fence，不需要管流水线和mshr状态（如果里面有没做完的指令，lsu肯定非空，unique仍然会停留在dispatch）
     io.lsu.ordered := !fenceMetaRead.resp.bits.hasDirty /* true.B */
+
+    // TODO:   cacopValid := //
 
     // TODO prefetch
 
@@ -279,22 +304,25 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s0replayPipeNumber = mshrs.io.pipeNumberOut
 
     for(w <- 0 until memWidth){
-        s0req(w)  := Mux(rpuJustDone, dontCareReq,
-            Mux(mshrReplayValid , (mshrs.io.replay.bits),
-                Mux(mshrReadValid, dontCareReq,
-                    Mux(io.lsu.req.valid, io.lsu.req.bits(w).bits,//两个bits
-                        Mux(prefetchValid, dontCareReq, dontCareReq)))))
+        s0req(w)  := Mux(rpuNormalDone,       dontCareReq,
+                     Mux(rpuMMIODone,        RPU.io.mmioDoneReq,
+                     Mux(mshrReplayValid , (mshrs.io.replay.bits),
+                     Mux(mshrReadValid,     dontCareReq,
+                     Mux(io.lsu.req.valid,  io.lsu.req.bits(w).bits,//两个bits
+                     Mux(prefetchValid,     dontCareReq, dontCareReq))))))
     }
 
 
 
-    var s0state =   Mux(rpuJustDone,        wb,
+    var s0state =   Mux(rpuNormalDone,        wb,
+                    Mux(rpuMMIODone,         mmioresp,
                     Mux(mshrReplayValid,    replay,
                     Mux(mshrReadValid,      mshrread,
-                    Mux(io.lsu.req.valid,   lsu,
+                    Mux(lsuNormalValid,     lsu,
                     Mux(fenceValid ,        fence,
+                    Mux(lsuMMIOValid,       mmioreq,
                     Mux(prefetchValid,      prefetch,
-                                            nil))))))
+                                            nil))))))))
 
     val s0kill = Wire(Vec( memWidth , Bool()))
     
@@ -309,6 +337,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s0newwbIdx = (getIdx(RPU.io.newAddr))
     val s0newBolckAddr = getBlockAddr(RPU.io.newAddr)
     val s0newAlloceWay = (RPU.io.newWay)
+    val s0mmioPipeNumber = (RPU.io.mmioPipeNumber)
 
     //告诉mshr去激活(将表1的fetching转成ready)
     mshrs.io.fetchingBlockAddr := s0newBolckAddr
@@ -383,6 +412,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // rpuMetaWrite.req.bits.replacePos := DontCare
         // rpuDataWrite.req.bits.tag := DontCare 
 
+    }.elsewhen(s0state === mmioresp || s0state === mmioreq){
+        // mmioresp:s0不干活，等着后面s2交还给lsu
+        // 
     }.elsewhen(s0state === fence){
         for( w<- 0 until memWidth){
             lsuMetaRead(w).req.valid := false.B
@@ -416,6 +448,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s1newwbIdx = RegNext(s0newwbIdx)
     val s1newBlockAddr = RegNext(s0newBolckAddr)
     val s1newAlloceWay = RegNext(s0newAlloceWay)
+    val s1mmioPipeNumber = RegNext(s0mmioPipeNumber)
 
     // mshr的read请求所需信息
     val s1fetchAddr = RegNext(s0fetchAddr)
@@ -513,6 +546,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // wb是kill不掉的,因为要提交，要写回
         // 不用管读出什么meta,只要写回data就行
         
+    }.elsewhen(s1state === mmioresp || s1state === mmioreq){
+        // mmioresp:s1不干活，等着后面s2交还给lsu
+        // mmioreq:s1不干活，等着后面发请求给RPU
     }.elsewhen(s1state === fence){
         when(!fenceMetaRead.resp.bits.hasDirty) {
             //没有Dirty就不做了
@@ -532,7 +568,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
 
     val s2state = RegNext(s1state)
-    val s2valid = RegNext(s1valid                                      &&
+    val s2valid = RegNext(s1valid &&
       !(io.lsu.exception && s1req(0).uop.use_ldq),
         init=false.B)
 
@@ -562,6 +598,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s2newwbIdx = RegNext(s1newwbIdx)
     val s2newBlockAddr = RegNext(s1newBlockAddr)
     val s2newAlloceWay = RegNext(s1newAlloceWay)
+    val s2mmioPipeNumber = RegNext(s1mmioPipeNumber)
 
 
 
@@ -760,7 +797,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         }
 
     }.elsewhen(s2state ===fence && s2valid && RPU.io.ready){
-        RPU.io.needReplace := s2state === fence && s2valid
+        RPU.io.needReplace := true.B
         RPU.io.replaceMetaLine := s2replacedMetaLine
         RPU.io.replaceDataLine := s2replacedDataLine
         RPU.io.replaceAddr := s2replaceAddr
@@ -771,10 +808,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // 这个是用于RPU，fecth完了想要写回的路，不会fetch，不会写回fetch到的什么meta和data，因此也不需要 
         // RPU.io.replaceWay := s2replacePos
 
-        RPU.io.isFence := s2state === fence
+        RPU.io.isFence := true.B
         //成功进入s2state fence并且RPU空闲的话，告诉metaRPU已经拿到了这个dirty，让他清空
-        fenceMetaClean.req.valid := s2state === fence && RPU.io.ready
-        fenceDataClean.req.valid := s2state === fence && RPU.io.ready
+        fenceMetaClean.req.valid := true.B
+        fenceDataClean.req.valid := true.B
         
         // fence 不需要告诉mshr这个fetchaddr,因为他不会去fetch
         // // 同时告诉mshr这个fetchaddr,用于感知fetching状态转换
@@ -786,7 +823,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             sendNack(w) := false.B
         }
 
-    }.elsewhen(s2state === wb){
+    }.elsewhen(s2state === wb && s2valid){
         // wb到此已经做好了
 
         // data,meta写操作
@@ -805,6 +842,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
         rpuWBsuccess := true.B
 
+
         // resp和nack都不发
         for (w <- 0 until memWidth) {
             sendResp(w) := false.B
@@ -812,6 +850,49 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         }
 
 
+    }.elsewhen(s2state === mmioreq && s2valid){
+        // 
+        val pipeline = Mux(s2req(1).uop.xxx , 1.U(1.W) , 0.U(1.W))
+        val mmioreq = s2req(pipeline)
+
+        RPU.io.needReplace := true.B
+        RPU.io.isMMIO := true.B
+        RPU.io.mmioWrite := mmioreq.isWrite
+        RPU.io.replaceMetaLine := DontCare
+        RPU.io.replaceDataLine := VecInit(Seq.fill(nRowWords)(mmioreq.data))
+        // 读和写是同一个地址,一次MMIO只会有一种操作
+        RPU.io.replaceAddr := mmioreq.addr
+        RPU.io.fetchAddr := mmioreq.addr
+
+        RPU.io.replaceWay := DontCare
+        RPU.io.isFence := false.B
+
+        
+        
+
+
+    }.elsewhen(s2states === mmioresp && s2valid){
+        
+        // 装载newDataLine的0号数据作为可能的读操作的resp的data
+        for(w <- 0 until memWidth){
+            io.lsu.resp(w).bits.data := s2newDataLine(0)
+        }
+
+        // 选择路号做回复
+        when(s2mmioPipeNumber === 0.U(1.W)){
+            sendResp(0) := true.B
+            sendNack(0) := false.B
+            sendResp(1) := false.B
+            sendNack(1) := false.B
+            
+        }.elsewhen(s2mmioPipeNumber === 1.U(1.W)){
+            sendResp(0) := false.B
+            sendNack(0) := false.B
+            sendResp(1) := true.B
+            sendNack(1) := false.B
+        }
+
+            
     }.elsewhen(s2state === prefetch){
         // TODO
         for (w <- 0 until memWidth) {

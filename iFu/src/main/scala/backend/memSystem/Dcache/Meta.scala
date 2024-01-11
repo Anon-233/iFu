@@ -26,6 +26,9 @@ class MetaReq extends CoreBundle with HasDcacheParameters{
     val wmeta = new MetaLine
     // 将要写入的路
     val writePos = UInt(log2Ceil(nWays).W)
+
+    // cache的操作类型
+    // val cacop_type = UInt(3.W)
 }
 
 class MetaResp extends CoreBundle with HasDcacheParameters{
