@@ -122,10 +122,16 @@ MMIO不要和其他的普通ld,st指令一起发进来，他是单独的享有�
 (希望：RPU处理该MMIO的时候，不要有该条MMIO的重发)
 
 这个store的MMIO要发storefailed吗，目前暂时当成是一条普通store指令？
+store强有序性
 
 会不会出现正在做MMIO的时候（刚好做完准备发），又来了一条这个MMIO指令？
+（会做完的凑巧碰上重发的，反复写回同一个地址会不会有问题？）
 
 对于lsu传入的MMIO请求，s2的时候，RPU空闲，直接做，RPU不空闲，按照"miss且不写入mshr"类似的逻辑请求lsu那边重发该条MMIO请求。
+
+去重:
+当一条MMIO请求被执行完，需要无效化前面的load和store，
+
 
 CACOP:
 Dcache被保证，执行cacop的时候整个dcache没有任何其他正在运行的请求
@@ -164,3 +170,7 @@ cacop查询索引，这个会使用正常的判断命中的的逻辑，读出来
 除了hit查找未找到的情况之外，做完这些在s2阶段，给fenceMetaClean指定上pos，idx，告诉meta将这个位置清零。然后汇报做完即可
 
 
+
+
+1.11
+（或许应该写一下真正两通路的dcache,mshr改成两通路的queue）

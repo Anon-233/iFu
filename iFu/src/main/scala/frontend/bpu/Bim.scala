@@ -98,8 +98,8 @@ class BimPredictor extends Module with HasBimParameters {
                 (s1_update.bits.cfiIdx.valid) &&
                 (s1_update.bits.cfiIdx.bits === w.U) &&
                 (
-                    (s1_update.bits.cfiIsBr && s1update.bits.brMask(w) && s1update.bits.cfiTaken) ||
-                    s1update.bits.cfiIsJal
+                    (s1_update.bits.cfiIsBr && s1_update.bits.brMask(w) && s1_update.bits.cfiTaken) ||
+                    s1_update.bits.cfiIsJal
                 )
             )
             val old_bim = Mux(
@@ -119,21 +119,21 @@ class BimPredictor extends Module with HasBimParameters {
             VecInit(Seq.fill(bankWidth){ 2.U(2.W) }),
             (~(0.U(bankWidth.W))).asBools
         )
-    } .elsewhen (s1update.valid && s1update.bits.isCommitUpdate) {
+    } .elsewhen (s1_update.valid && s1_update.bits.isCommitUpdate) {
         bim_ram.write(
             s1_update_idx,
-            s1updatewData,
-            s1_update_mask.asBools
+            s1_update_data,
+            s1_update_mask.asUInt.asBools
         )
     }
 
-    when (s1_update_mask.reduce(_||_) && s1update.valid && s1update.bits.isCommitUpdate) {
-        when (wrBypassHit) {
-            wrBypass(wrBypassHitIdx) := s1updatewData
+    when (s1_update_mask.reduce(_||_) && s1_update.valid && s1_update.bits.isCommitUpdate) {
+        when (wr_bypass_hit) {
+            wr_bypass_regs(wr_bypass_hit_idx) := s1_update_data
         } .otherwise {
-            wrBypass(wrBypassEnqIdx)     := s1updatewData
-            wr_bypass_idxs(wrBypassEnqIdx) := s1_update_idx
-            wrBypassEnqIdx := WrapInc(wrBypassEnqIdx, nWrBypassEntries)
+            wr_bypass_regs(wr_bypass_enq_idx)     := s1_update_data
+            wr_bypass_idxs(wr_bypass_enq_idx) := s1_update_idx
+            wr_bypass_enq_idx := WrapInc(wr_bypass_enq_idx, nWrBypassEntries)
         }
     }
 // ---------------------------------------------

@@ -88,6 +88,8 @@ trait HasDcacheParameters extends HasCoreParameters{
     def getBlockAddr(vaddr: UInt): UInt = dcacheParameters.getBlockAddr(vaddr)
     def isStore(req : DCacheReq): Bool  = dcacheParameters.isStore(req)
 
+    def isMMIO(req : DCacheReq): Bool  = dcacheParameters.isMMIO(req)
+
 }
 
 
@@ -144,6 +146,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     io.cbusReq := RPU.io.cbusReq
     RPU.io.cbusResp := io.cbusResp
+
+    RPU.io.mmioReq := 0.U.asTypeOf(new DCacheReq)
+    RPU.io.mmioPipeNumberIn := 0.U
 
 
     // 存储meta信息
@@ -220,7 +225,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     val prefetchValid = Wire(Bool())
 
-    val cacopValid = Wire(Bool())
+    // val cacopValid = Wire(Bool())
 
     val lsuNormalValid = Wire(Bool())
     val lsuMMIOValid = Wire(Bool())
@@ -228,11 +233,14 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val rpuWBsuccess = WireInit(false.B)
 
     // 判断输入的有没有mmio请求
-    val hasMMIO = WireInit(false.B)
+    val hasMMIO = io.lsu.req.bits.map( req =>
+        req.valid && isMMIO(req.bits)
+    ).reduce(_||_)
+
+    val doingmmioResp = WireInit(false.B)
     
     lsuNormalValid := io.lsu.req.valid && !hasMMIO
-    lsuMMIOValid := io.lsu.req.valid && hasMMIO
-
+    
 
     rpuJustDone := RPU.io.ready && RegNext(!RPU.io.ready)
 
@@ -249,7 +257,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     mshrs.io.replayDone := false.B
     mshrs.io.fetchingBlockAddr := 0.U
 
-    
     
 
     // 只有流水线里面没有正在执行的fetch请求,才能发起新的fetch请求
@@ -273,7 +280,13 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     prefetchValid := false.B
 
     // 如果当周期检测到有非lsu请求的话，就将它置零，下周期lsu发送不过来，同时再去执行非lsu请求
-    io.lsu.req.ready := !(rpuJustDone || mshrReplayValid || mshrReadValid || prefetchValid)
+    io.lsu.req.ready := !(rpuJustDone || 
+                          mshrReplayValid ||
+                          mshrReadValid || 
+                          prefetchValid ||
+                          (hasMMIO && doingmmioResp) ||//lsu准备进mmio，但是里面有mmioresp状态
+                          RPU.io.mmioDoneReq//一个mmio刚做完，下周期归它
+                          )
 
     // 检查全局，如果此时流水线的s0和s1阶段状态为lsu并且有store，就将其kill掉变成nil
     val s2StoreFailed = WireInit(false.B)
@@ -341,7 +354,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     //告诉mshr去激活(将表1的fetching转成ready)
     mshrs.io.fetchingBlockAddr := s0newBolckAddr
-
+    
     // wb成功，告诉mshr
     mshrs.io.fetchReady := rpuWBsuccess
 
@@ -356,7 +369,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s0replayIdx = (getIdx(mshrs.io.replay.bits.addr))
 
     // TODO prefetch
-
+    
 
     // s0阶段接入mshr对meta的read请求,接入lsu(replay)对meta的read请求,接入rpu对meta的write请求
 
@@ -465,7 +478,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     for(w <- 0 until memWidth){    //lsu的s1kill指的就是s1
         s1kill(w) := io.lsu.s1_kill(w) ||   //store失败，发回nack返回当前流水线， //store replay成功，告诉lsu一个nack去找下一个位置 //mshr里面有store，就不要让下一条进来
-                    RegNext(s0kill(w)  || ((s2StoreFailed /*|| s2StoreReplay || s2StoreDone*/) && isStore(s0req(w))) )
+                    RegNext(s0kill(w)  ||
+                    ( isStore(s0req(w)) && s2StoreFailed) ||
+                    ( isMMIO(s0req(w))  && rpuMMIODone)) 
     }
     // 如果miss，记录下将要去替换的Pos
     val s1missAllocPos = WireInit(0.U.asTypeOf(Vec(memWidth , UInt(log2Ceil(nWays).W))))
@@ -481,7 +496,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     when(s1state === lsu  && s1valid ){
         for(w <- 0 until memWidth){
-            when((s2StoreFailed && isStore(s1req(w))) || IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)){
+            when(( isMMIO(s0req(w))  && rpuMMIODone)||(s2StoreFailed && isStore(s1req(w))) || IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)){
                 s1kill(w) := true.B
             }.otherwise{
                 when(lsuMetaRead(w).resp.valid){
@@ -574,7 +589,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     val s2kill = Wire(Vec(memWidth , Bool()))
     for(w <- 0 until memWidth){
-        s2kill(w) := RegNext(s1kill(w) ||( isStore(s1req(w)) && (s2StoreFailed /*|| s2StoreReplay || s2StoreDone*/))
+        s2kill(w) := RegNext(s1kill(w) ||
+                            ( isStore(s1req(w)) && s2StoreFailed) ||
+                            ( isMMIO(s1req(w))  && rpuMMIODone)
                             )
     }
     val s2hit = RegNext(s1hit)
@@ -852,26 +869,65 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     }.elsewhen(s2state === mmioreq && s2valid){
         // 
-        val pipeline = Mux(s2req(1).uop.xxx , 1.U(1.W) , 0.U(1.W))
+        val pipeline = Mux(s2req(1).is_uncacheable , 1.U(1.W) , 0.U(1.W))
         val mmioreq = s2req(pipeline)
 
-        RPU.io.needReplace := true.B
-        RPU.io.isMMIO := true.B
-        RPU.io.mmioWrite := mmioreq.isWrite
-        RPU.io.replaceMetaLine := DontCare
-        RPU.io.replaceDataLine := VecInit(Seq.fill(nRowWords)(mmioreq.data))
-        // 读和写是同一个地址,一次MMIO只会有一种操作
-        RPU.io.replaceAddr := mmioreq.addr
-        RPU.io.fetchAddr := mmioreq.addr
+        when(s2kill(pipeline)){
+            // kill掉的指令，不返回
+            sendResp(pipeline) := false.B
+            sendNack(pipeline) := false.B
 
-        RPU.io.replaceWay := DontCare
-        RPU.io.isFence := false.B
+            // 没kill的话，根据总线busy判断
+        }.elsewhen(RPU.io.ready){
+            // RPU空闲的话，传入本次mmio的信息
+            RPU.io.needReplace := true.B
+            RPU.io.isMMIO := true.B
+            RPU.io.mmioWrite := isStore(mmioreq)
+            RPU.io.replaceMetaLine := DontCare
+            RPU.io.replaceDataLine := VecInit(Seq.fill(nRowWords)(mmioreq.data))
+            // 读和写是同一个地址,一次MMIO只会有一种操作
+            RPU.io.replaceAddr := mmioreq.addr
+            RPU.io.fetchAddr := mmioreq.addr
 
-        
-        
+            // 存入请求本身和对应的流水线号
+            RPU.io.mmioReq := mmioreq
+            RPU.io.mmioPipeNumberIn := pipeline
+
+            RPU.io.replaceWay := DontCare
+            RPU.io.isFence := false.B
+
+            // 什么都不往回发
+            // 特别的，mmio指令是store，要发回nack，拉高storeFailed清掉接下来所有可能的store
+            // 因为重发一定还是这个mmio，它失败了，后面的一定不执行，当前传入的mmio请求不做完，RPUbusy，
+            // 它一定失败，因此看这个总线繁忙就可以限制掉这件事情。
+            // MMload一定前后无连着什么MMIO操作，因此不用特别判断。
+            when (isStore(mmioreq)) {
+                sendResp(pipeline) := false.B
+                sendNack(pipeline) := true.B
+                s2StoreFailed := true.B
+            }.otherwise {
+                sendResp(pipeline) := false.B
+                sendNack(pipeline) := false.B
+            }
 
 
-    }.elsewhen(s2states === mmioresp && s2valid){
+        }.otherwise{
+            // RPU不空闲的话，一定找对应的流水线号重发,另一个肯定什么都不往回发
+            when(pipeline === 0.U(1.W)){
+                sendResp(0) := false.B
+                sendNack(0) := true.B
+                sendResp(1) := false.B
+                sendNack(1) := false.B
+            
+            }.elsewhen(pipeline === 1.U(1.W)){
+                sendResp(0) := false.B
+                sendNack(0) := false.B
+                sendResp(1) := false.B
+                sendNack(1) := true.B
+            }
+        }
+
+    }.elsewhen(s2state === mmioresp && s2valid){
         
         // 装载newDataLine的0号数据作为可能的读操作的resp的data
         for(w <- 0 until memWidth){
@@ -928,6 +984,19 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     mshrReadValid := mshrs.io.newFetchAddr.valid &&
       !(s1state === mshrread && s1valid)     &&
       !(s2state === mshrread && s2valid)
+
+
+    // 流水线里面有mmioresp的时候，下一个请求不要进来(可能是重的)
+    lsuMMIOValid := (io.lsu.req.valid && hasMMIO) &&
+      !(s1state === mmioresp && s1valid) &&
+      !(s2state === mmioresp && s2valid) 
+
+    
+    doingmmioResp := (s2state === mmioresp && s2valid) ||
+                    (s1state === mmioresp && s1valid)
+
+    
+    
 
     // TODO lr/sc
     // TODO enable continuous hit store forwarding(DONE)

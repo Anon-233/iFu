@@ -107,29 +107,29 @@ class BtbPredictor extends Module with HasBtbParameters {
 //      Prepare Meta for Update
     val repl_way_update_en = s1_valid && !s1_hits.reduce(_||_)
     val repl_way = LFSR(16, repl_way_update_en)(log2Ceil(nWays) - 1, 0)
-    val s1_meta = Wire(Vec(bankWidth, new BTBPredictMeta))
+    val s1_pred_meta = Wire(Vec(bankWidth, new BTBPredictMeta))
     for (w <- 0 until bankWidth) {
-        s1_meta(w).hit := s1_hits(w)
-        s1_meta(w).write_way := Mux(
+        s1_pred_meta(w).hit := s1_hits(w)
+        s1_pred_meta(w).write_way := Mux(
             s1_hits(w),
             s1_hit_ways(w),
             repl_way
         )
     }
-    io.s3meta := RegNext(RegNext(s1_meta))
+    io.s3meta := RegNext(RegNext(s1_pred_meta))
 // ---------------------------------------------
 
 // ---------------------------------------------
 //      Update Logic
     val s1_update         = io.s1update
-    val s1_update_cfi_idx = s1update.bits.cfiIdx.bits
+    val s1_update_cfi_idx = s1_update.bits.cfiIdx.bits
     val s1_update_meta    = VecInit(s1_update.bits.meta.map(_.btbMeta))
 
     val max_offset = (~(0.U)((offsetSz - 1).W)).asSInt
     val min_offset = Cat(1.U(1.W), (0.U)((offsetSz - 1).W)).asSInt
     val new_offset = (
         s1_update.bits.target.asSInt -
-        (s1update.bits.pc.asSInt + (s1update.bits.cfiIdx.bits << 2).asSInt)
+        (s1_update.bits.pc.asSInt + (s1_update.bits.cfiIdx.bits << 2).asSInt)
     )
     // handle offset > 2^13
     val need_extend = (new_offset > max_offset) || (new_offset < min_offset)
@@ -150,7 +150,7 @@ class BtbPredictor extends Module with HasBtbParameters {
     val s1_update_meta_mask = (
         (s1_update_btb_mask | s1_update.bits.brMask) &
         (Fill(bankWidth, s1_update.valid && s1_update.bits.isCommitUpdate)) |
-        (Fill(bankWidth, s1_update.valid) & s1update.bits.btbMispredicts)
+        (Fill(bankWidth, s1_update.valid) & s1_update.bits.btbMispredicts)
     )
 
     val s1_update_btb_data = Wire(new BTBEntry)
@@ -186,8 +186,8 @@ class BtbPredictor extends Module with HasBtbParameters {
         } .elsewhen (s1_update_meta(w).write_way === w.U && s1_update_meta(w).hit) {
             valid(w).write(
                 s1_update_idx,
-                s1_update_btb_mask.asBools,
-                s1_update_btb_mask.asBools
+                VecInit(Seq.fill(bankWidth){ true.B }),
+                s1_update_btb_mask.asUInt.asBools
             )
             meta(w).write(
                 s1_update_idx,
@@ -196,14 +196,14 @@ class BtbPredictor extends Module with HasBtbParameters {
             )
             btb(w).write(
                 s1_update_idx,
-                VecInit(Seq.fill(bankWidth){s1updateWBtbData}),
+                VecInit(Seq.fill(bankWidth){ s1_update_btb_data }),
                 s1_update_btb_mask.asBools
             )
         }
     }
 
     when (s1_update_btb_mask =/= 0.U && need_extend) {
-        ebtb.write(s1_update_idx, s1update.bits.target)
+        ebtb.write(s1_update_idx, s1_update.bits.target)
     }
 // ---------------------------------------------
 }
