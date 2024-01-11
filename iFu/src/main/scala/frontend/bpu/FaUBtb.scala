@@ -56,7 +56,7 @@ class UBTBIO extends Bundle with HasUbtbParameters {
     val s1update = Input(Valid(new BankedUpdateInfo))
 }
 
-class FaUBtbPredictior  extends Module with HasUbtbParameters {
+class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
     val io = IO(new UBTBIO)
 
     val valid = RegInit(VecInit(Seq.fill(nWays * bankWidth)(false.B)))
@@ -181,7 +181,7 @@ class FaUBtbPredictior  extends Module with HasUbtbParameters {
     val start = RegInit(false.B)
     when (num_branchs > 1.U) { start := true.B }
     when (start && num_branchs(8, 0) === 0.U) {
-        printf("UBTB: %d %d %d\n", num_branchs, num_mis_preds, num_updates)
+        printf("UBTB %d: %d %d %d\n", ubtb_id, num_branchs, num_mis_preds, num_updates)
     }
 // ---------------------------------------------
 }

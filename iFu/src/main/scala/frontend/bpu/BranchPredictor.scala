@@ -34,7 +34,7 @@ class BranchPredictor extends Module
   })
 
   // val bankedPredictors = Seq(nBanks, Module(new BankedPredictor))
-  val bankedPredictors = (0 until nBanks).map( i => Module(new BankedPredictor))
+  val bankedPredictors = (0 until nBanks).map( i => Module(new BankedPredictor(i)))
 
 
 

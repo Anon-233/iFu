@@ -171,7 +171,7 @@ class BankedPredictorResponse extends Bundle with HasBPUParameters
     val f3 = (Vec(bankWidth, new PredictionInfo))
 }
 
-class BankedPredictor extends Module with HasBPUParameters
+class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
 {
     val io  = IO(new Bundle{
         val f0valid = Input(Bool())
@@ -215,7 +215,7 @@ class BankedPredictor extends Module with HasBPUParameters
     val s1update = RegNext(s0update)
 
     // 5个预测器
-    val faubtb = Module(new FaUBtbPredictior)
+    val faubtb = Module(new FaUBtbPredictior(bank_id))
     val bim = Module(new BimPredictor)
     val btb = Module(new BtbPredictor)
     val tage = Module(new TagePredictor)
