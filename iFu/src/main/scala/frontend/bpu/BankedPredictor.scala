@@ -64,7 +64,7 @@ class PredictionInfo extends Bundle with HasBPUParameters{
 
 class PredictionMeta extends Bundle with HasBPUParameters{
     val bimMeta = Output(new BimPredictMeta)
-    val btbMeta = Output(new BtbPredictMeta)
+    val btbMeta = Output(new BTBPredictMeta)
     val tageMeta = Output(new TagePredictMeta)
     val ubtbMeta = Output(new UBTBPredictMeta)
     val loopMeta = Output(new LoopPredictMeta)

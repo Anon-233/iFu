@@ -82,9 +82,9 @@ class FaUBtbPredictior  extends Module with HasUbtbParameters {
         io.s1targs(w).bits  := (
             (io.s1pc | (w << 2).U).asSInt + btb(s1_hit_ways(w))(w).offset
         ).asUInt
-        io.s1br(w) := resp_valid && entry_meta.is_br
+        io.s1br(w)  := resp_valid &&  entry_meta.is_br
         io.s1jal(w) := resp_valid && !entry_meta.is_br
-        // taken: 
+        // taken:
         //     1. br and we predict taken
         //     2. jal
         io.s1taken(w) := entry_meta.state.isTaken || !entry_meta.is_br
