@@ -569,12 +569,18 @@ class Lsu extends CoreModule {
             dmem_req(w).bits.addr := ldq_wakeup_e.bits.addr.bits
             dmem_req(w).bits.uop := ldq_wakeup_e.bits.uop
             dmem_req(w).bits.is_uncacheable := ldq_wakeup_e.bits.is_uncacheable
-
             s0_executing_loads(ldq_wakeup_idx) := dmem_req_fire(w)
+
+
 
             assert(!ldq_wakeup_e.bits.executed && !ldq_wakeup_e.bits.addr_is_virtual)
         }
-
+        when(dmem_req(memWidth-1).bits.is_uncacheable) {
+            for(w <- 0 until memWidth-1) {
+                dmem_req(w).valid       := false.B
+                can_fire_store_commit   := false.B
+            }
+        }
         //-------------------------------------------------------------
         // Write Addr into the LAQ/SAQ
         when(will_fire_load_incoming(w)) {
