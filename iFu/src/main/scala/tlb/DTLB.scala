@@ -9,7 +9,7 @@ import iFu.common.CauseCode._
 //
 //第一步，
 
-class DTLBCSRContext extends CoreBundle(){
+class DTLBCsrContext extends CoreBundle(){
     val crmd_da     = Bool()
     val crmd_pg     = Bool()
     val crmd_datm   = UInt(2.W)
@@ -46,19 +46,21 @@ class DTLBResp extends CoreBundle(){
     val is_uncacheable      = Bool()
 }
 class DTLBIO extends CoreBundle(){
-    val req = Flipped(Vec(memWidth, Decoupled(new DTLBReq)))
-    val resp = Output(Vec(memWidth, new DTLBResp))
-//    val r_req = Output(Vec(memWidth, Valid(new RReq)))
-//    val r_resp = Input(Vec(memWidth, Valid(new RResp)))
-//    val w_req = Output(Valid(new WReq))
+    val req         = Vec(memWidth, Flipped(Decoupled(new DTLBReq)))
+    val resp        = Vec(memWidth, new DTLBResp)
+    val r_req       = Vec(memWidth, Decoupled(new TLBDataRReq))
+    val r_resp      = Vec(memWidth, Flipped(Valid(new TLBDataRResp)))
+    val w_req       = Decoupled(new TLBDataWReq)
 //    val w_resp = Input(Valid(new WResp))
-    val csr_context = Input(new DTLBCSRContext)
+    val dtlb_csr_context = Input(new DTLBCsrContext)
+    val tlb_data_context = Input(new TLBDataCsrContext)
     val kill = Input(Bool())
 
 }
 
 class DTLB extends CoreModule(){
     val io = IO(new DTLBIO)
+    io <> DontCare  //TODO 删除
 //    when(io.req(0).bits.is_tlb_inst){
 //        io.w_req.valid      := true.B
 //        io.w_req.bits.vaddr := io.req(0).bits.vaddr
@@ -68,13 +70,16 @@ class DTLB extends CoreModule(){
         io.resp(w)          := 0.U.asTypeOf(new DTLBResp)
         io.resp(w).paddr    := io.req(w).bits.vaddr
         io.req(w).ready     := true.B
-        when(io.req(w).bits.vaddr(0) && io.req(w).bits.size === 1.U ||
-            io.req(w).bits.vaddr(1, 0) =/= 0.U && io.req(w).bits.size === 2.U
-        )
-        {
-            io.resp(w).exception.valid              := true.B
-            io.resp(w).exception.bits.xcpt_cause    := ALE
+        when(io.req(w).valid) {
+            when(
+                (io.req(w).bits.vaddr(0) && io.req(w).bits.size === 1.U) ||
+                        (io.req(w).bits.vaddr(1, 0) =/= 0.U && io.req(w).bits.size === 2.U)
+            ) {
+                io.resp(w).exception.valid := true.B
+                io.resp(w).exception.bits.xcpt_cause := ALE
+            }/*.elsewhen(*/
         }
+
 //        io.r_req(w).valid := true.B
 //        io.r_req(w).bits.addr := io.req(w).bits.vaddr
 
@@ -106,25 +111,31 @@ class DTLB extends CoreModule(){
 //        (dmw1_en && (csr_dmw1(`DMW_MAT) === 0.U)) ||
 //        (data_addr_trans_en && (data_tlb_mat === 0.U))
 
+//    for(w <- 0 until memWidth) {
+//        io.r_req(w).valid := io.req(w).valid
+//        io.r_req(w).bits.vaddr := io.req(w).bits.vaddr
+//        io.r_req(w).bits.cmd :=
+//    }
+
     //TODO disable_cache是一个寄存器,以及data_addr_trans_en的支持
-    val csr_reg = io.csr_context
-    val da_mode = csr_reg.crmd_da && !csr_reg.crmd_pg
-    val pg_mode = !csr_reg.crmd_da && csr_reg.crmd_pg
+    val csr_regs = io.dtlb_csr_context
+    val da_mode = csr_regs.crmd_da && !csr_regs.crmd_pg
+    val pg_mode = !csr_regs.crmd_da && csr_regs.crmd_pg
     for (w <- 0 until memWidth){
 
-        val dmw0_en = ((csr_reg.dmw0_plv0 && csr_reg.crmd_plv === 0.U) ||
-          (csr_reg.dmw0_plv3 && csr_reg.crmd_plv === 3.U)) &&
-          (io.req(w).bits.vaddr(31, 29) === csr_reg.dmw0_vseg) &&
-          pg_mode
-        
-        val dmw1_en = ((csr_reg.dmw1_mat(0) && csr_reg.crmd_plv === 0.U) ||
-          (csr_reg.dmw1_plv3 && csr_reg.crmd_plv === 3.U)) &&
-          (io.req(w).bits.vaddr(31, 29) === csr_reg.dmw1_vseg) &&
+        val dmw0_en = ((csr_regs.dmw0_plv0 && csr_regs.crmd_plv === 0.U) ||
+          (csr_regs.dmw0_plv3 && csr_regs.crmd_plv === 3.U)) &&
+          (io.req(w).bits.vaddr(31, 29) === csr_regs.dmw0_vseg) &&
           pg_mode
 
-        io.resp(w).is_uncacheable := (da_mode && csr_reg.crmd_datm === 0.U) ||
-          (dmw0_en && (csr_reg.dmw0_mat === 0.U)) ||
-          (dmw1_en && (csr_reg.dmw1_mat === 0.U))
+        val dmw1_en = ((csr_regs.dmw1_mat(0) && csr_regs.crmd_plv === 0.U) ||
+          (csr_regs.dmw1_plv3 && csr_regs.crmd_plv === 3.U)) &&
+          (io.req(w).bits.vaddr(31, 29) === csr_regs.dmw1_vseg) &&
+          pg_mode
+
+        io.resp(w).is_uncacheable := (da_mode && csr_regs.crmd_datm === 0.U) ||
+          (dmw0_en && (csr_regs.dmw0_mat === 0.U)) ||
+          (dmw1_en && (csr_regs.dmw1_mat === 0.U))
 
     }
 }

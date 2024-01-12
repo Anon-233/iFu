@@ -259,6 +259,7 @@ object Consts {
         uop
     }
 
+    val TLB_NUM: Int = 32
     val TLB_INDEX_LENGTH: Int = 5
     val TLBIDX_r: Int = 16 - TLB_INDEX_LENGTH
     val TLBIDX_INDEX: Int = TLB_INDEX_LENGTH

@@ -5,7 +5,7 @@ import chisel3.util._
 import iFu.common._
 import iFu.common.Consts._
 import iFu.common.CauseCode._
-import iFu.tlb.{DTLB, DTLBCSRContext}
+import iFu.tlb._
 import iFu.util._
 
 //TODO  memWidth为2，如果为1，需要wakeup不成功后增加一周期delay  Done
@@ -35,7 +35,11 @@ class LSUExeIO extends CoreBundle {
     val iresp   = new DecoupledIO(new ExeUnitResp)
 }
 
-
+class LSUTLBDataIO extends CoreBundle {
+    val r_req   = Vec(memWidth, Decoupled(new TLBDataRReq))
+    val r_resp  = Vec(memWidth, Flipped(Valid(new TLBDataRResp)))
+    val w_req   = new DecoupledIO(new TLBDataWReq)
+}
 /**
  * 输入dispatch阶段的uop，commit的信息，rob，brupdate
  * 输出ldq，stq的索引，是否full，给rob的clear信号
@@ -77,10 +81,12 @@ class LSUCoreIO extends CoreBundle {
     val fencei_rdy  = Output(Bool())
 
     val lsu_xcpt       = Output(Valid(new Exception))
+
+    val tlb_data    = new LSUTLBDataIO
 }
 
 class LSUCsrIO extends CoreBundle {
-    val csr_reg  = Input(new DTLBCSRContext)
+    val dtlb_csr_reg        = Input(new DTLBCsrContext)
 }
 
 class LSUIO extends CoreBundle {
@@ -462,7 +468,6 @@ class Lsu extends CoreModule {
         dtlb.io.req(w).bits.vaddr := exe_tlb_vaddr(w)
         dtlb.io.req(w).bits.size := exe_size(w)
     }
-    dtlb.io.csr_context := io.csr.csr_reg
     // exceptions
 
     // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
@@ -1196,6 +1201,12 @@ class Lsu extends CoreModule {
             ldq(i).bits.uop      := NullMicroOp //debug 调试
         }
     }
+
+    dtlb.io.dtlb_csr_context := io.csr.dtlb_csr_reg
+    dtlb.io.r_resp           := io.core.tlb_data.r_resp
+
+    io.core.tlb_data.r_req   <> dtlb.io.r_req
+    io.core.tlb_data.w_req   <> dtlb.io.w_req
 
     //-------------------------------------------------------------
     // Live Store Mask

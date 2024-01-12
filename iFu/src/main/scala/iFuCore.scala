@@ -2,12 +2,12 @@ package iFu
 
 import chisel3._
 import chisel3.util._
-
 import iFu.common._
 import iFu.common.Consts._
 import iFu.frontend._
 import iFu.frontend.FrontendUtils.bankAlign
 import iFu.backend._
+import iFu.tlb.{TLBData, TLBDataManager}
 import iFu.util._
 
 class debugCommit extends CoreBundle{
@@ -107,13 +107,22 @@ class iFuCore extends CoreModule {
         xLen
     ))
 
-    val lsu = Module(new Lsu)
-    val rob = Module(new Rob(numWritePorts))
-    val csr = Module(new CSRFile)
+    val lsu         = Module(new Lsu)
+    val rob         = Module(new Rob(numWritePorts))
+    val csr         = Module(new CSRFile)
+    val tlb_data    = Module(new TLBDataManager)
 
-    lsu.io.csr.csr_reg := csr.io.dtlb_csr_reg
+    tlb_data.io.csr_context         := csr.io.tlb_data_csr_reg
+//    tlb_data.io.r_req(0)
+    tlb_data.io.r_req(0)            <> DontCare //TODO 删除
+    tlb_data.io.r_req(1)            <> lsu.io.core.tlb_data.r_req(0)
+    tlb_data.io.r_req(2)            <> lsu.io.core.tlb_data.r_req(1)
+    tlb_data.io.w_req               <> lsu.io.core.tlb_data.w_req
 
-    io.csr_register := csr.io.debug_csr_reg
+    lsu.io.core.tlb_data.r_resp(0)       <> tlb_data.io.r_resp(1)
+    lsu.io.core.tlb_data.r_resp(1)       <> tlb_data.io.r_resp(2)
+    lsu.io.csr.dtlb_csr_reg         := csr.io.dtlb_csr_reg
+    io.csr_register                 := csr.io.debug_csr_reg
 
 /*-----------------------------*/
 

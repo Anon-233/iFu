@@ -2,10 +2,11 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
+
 import iFu.common._
 import iFu.common.Consts._
 import iFu.common.CauseCode._
-import iFu.tlb.DTLBCSRContext
+import iFu.tlb._
 
 class CRMD extends CoreBundle {
     val r0_0 = UInt(23.W)
@@ -151,7 +152,8 @@ class CSRFileIO extends CoreBundle {
 
     val debug_csr_reg = Output(new CSRReg)
 
-    val dtlb_csr_reg  = Output(new DTLBCSRContext)
+    val dtlb_csr_reg  = Output(new DTLBCsrContext)
+    val tlb_data_csr_reg = Output(new TLBDataCsrContext)
 }
 
 class CSRFile extends CoreModule {
@@ -164,18 +166,7 @@ class CSRFile extends CoreModule {
     val csrRegNxt = Wire(new CSRReg)
     val csrReg    = RegNext(csrRegNxt, init = csrRst)
 
-    io.dtlb_csr_reg.crmd_da := csrReg.crmd.da
-    io.dtlb_csr_reg.crmd_pg := csrReg.crmd.pg
-    io.dtlb_csr_reg.crmd_datm := csrReg.crmd.datm
-    io.dtlb_csr_reg.crmd_plv  := csrReg.crmd.plv
-    io.dtlb_csr_reg.dmw0_mat  := csrReg.dmw0.mat
-    io.dtlb_csr_reg.dmw1_mat  := csrReg.dmw1.mat
-    io.dtlb_csr_reg.dmw0_plv0  := csrReg.dmw0.plv0
-    io.dtlb_csr_reg.dmw0_plv3  := csrReg.dmw0.plv3
-    io.dtlb_csr_reg.dmw1_plv0  := csrReg.dmw1.plv0
-    io.dtlb_csr_reg.dmw1_plv3  := csrReg.dmw1.plv3
-    io.dtlb_csr_reg.dmw0_vseg  := csrReg.dmw0.vseg
-    io.dtlb_csr_reg.dmw1_vseg  := csrReg.dmw1.vseg
+
 
 // --------------------------------------------------------
 // below code is for read
@@ -409,10 +400,44 @@ class CSRFile extends CoreModule {
             csrRegNxt.estat.is_11 := 1.U(1.W)   // set timer interrupt flag bit
         }
     }
+    io.dtlb_csr_reg.crmd_da := csrReg.crmd.da
+    io.dtlb_csr_reg.crmd_pg := csrReg.crmd.pg
+    io.dtlb_csr_reg.crmd_datm := csrReg.crmd.datm
+    io.dtlb_csr_reg.crmd_plv := csrReg.crmd.plv
+    io.dtlb_csr_reg.dmw0_mat := csrReg.dmw0.mat
+    io.dtlb_csr_reg.dmw1_mat := csrReg.dmw1.mat
+    io.dtlb_csr_reg.dmw0_plv0 := csrReg.dmw0.plv0
+    io.dtlb_csr_reg.dmw0_plv3 := csrReg.dmw0.plv3
+    io.dtlb_csr_reg.dmw1_plv0 := csrReg.dmw1.plv0
+    io.dtlb_csr_reg.dmw1_plv3 := csrReg.dmw1.plv3
+    io.dtlb_csr_reg.dmw0_vseg := csrReg.dmw0.vseg
+    io.dtlb_csr_reg.dmw1_vseg := csrReg.dmw1.vseg
+
+    io.tlb_data_csr_reg.asid_asid    := csrReg.asid.asid
+    io.tlb_data_csr_reg.tlbidx_index := csrReg.tlbidx.index
+    io.tlb_data_csr_reg.tlbidx_ps    := csrReg.tlbidx.ps
+    io.tlb_data_csr_reg.tlbidx_ne    := csrReg.tlbidx.ne
+    io.tlb_data_csr_reg.tlbehi_vppn  := csrReg.tlbehi.vppn
+    io.tlb_data_csr_reg.tlbelo0_v    := csrReg.tlbelo0.v
+    io.tlb_data_csr_reg.tlbelo0_d    := csrReg.tlbelo0.d
+    io.tlb_data_csr_reg.tlbelo0_plv  := csrReg.tlbelo0.plv
+    io.tlb_data_csr_reg.tlbelo0_mat  := csrReg.tlbelo0.mat
+    io.tlb_data_csr_reg.tlbelo0_g    := csrReg.tlbelo0.g
+    io.tlb_data_csr_reg.tlbelo0_ppn  := csrReg.tlbelo0.ppn
+    io.tlb_data_csr_reg.tlbelo1_v    := csrReg.tlbelo1.v
+    io.tlb_data_csr_reg.tlbelo1_d    := csrReg.tlbelo1.d
+    io.tlb_data_csr_reg.tlbelo1_plv  := csrReg.tlbelo1.plv
+    io.tlb_data_csr_reg.tlbelo1_mat  := csrReg.tlbelo1.mat
+    io.tlb_data_csr_reg.tlbelo1_g    := csrReg.tlbelo1.g
+    io.tlb_data_csr_reg.tlbelo1_ppn  := csrReg.tlbelo1.ppn
+
+
 // --------------------------------------------------------
 
 // --------------------------------------------------------
 // below code is for debug output
     io.debug_csr_reg := csrRegNxt
 // --------------------------------------------------------
+
+
 }
