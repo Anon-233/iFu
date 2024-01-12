@@ -925,6 +925,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 sendResp(1) := false.B
                 sendNack(1) := true.B
             }
+            
+            // 特别的，mmio指令是store，要发回nack，拉高storeFailed清掉接下来所有可能的store
+            when (isStore(mmioreq)) {
+                s2StoreFailed := true.B
+            }
+
         }
 
     }.elsewhen(s2state === mmioresp && s2valid){
@@ -932,7 +938,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // 装载newDataLine的0号数据作为可能的读操作的resp的data
         for(w <- 0 until memWidth){
             io.lsu.resp(w).bits.data := s2newDataLine(0)
+            io.lsu.resp(w).bits.uop := s2req(w).uop
         }
+
+
 
         // 选择路号做回复
         when(s2mmioPipeNumber === 0.U(1.W)){
@@ -998,9 +1007,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     
     
 
-    // TODO lr/sc
+
     // TODO enable continuous hit store forwarding(DONE)
     // TODO simplify the IO channel of DCacheData and DCacheMeta(DONE)
 
     // TODO mmio
+    // TODO lr/sc
 }

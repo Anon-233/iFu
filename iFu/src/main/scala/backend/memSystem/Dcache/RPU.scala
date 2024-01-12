@@ -95,6 +95,11 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
 
     io.fetchingAddr := fetchAddr
 
+    // 刚做完的那个周期高亮，下一个周期就不高亮了 
+    when(mmioDone === true.B){
+        mmioDone := false.B
+    }
+
     io.mmioDone := mmioDone
 
     io.mmioDoneReq := Mux(mmioDone , mmioReq , 0.U.asTypeOf(new DCacheReq))
