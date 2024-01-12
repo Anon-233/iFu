@@ -363,11 +363,12 @@ class Lsu extends CoreModule {
         !stq_commit_e.bits.uop.is_fence &&  // 不是fence指令
         !tlb_xcpt_valid &&  //  TODO
         !stq_commit_e.bits.uop.xcpt_valid && // TODO
+                !stq_commit_e.bits.succeeded &&
         (stq_commit_e.bits.committed ||     // 被 ROB 提交
         (stq_commit_e.bits.uop.is_amo && // 是 AMO 指令
         stq_commit_e.bits.addr.valid && // 地址准备好了
         !stq_commit_e.bits.addr_is_virtual &&   // TLB 没有miss
-        stq_commit_e.bits.data.valid))    // 数据准备好了
+        stq_commit_e.bits.data.valid))   // 数据准备好了
 
 
     ))
