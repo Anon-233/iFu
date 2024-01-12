@@ -111,8 +111,8 @@ class iFuCore extends CoreModule {
     val rob = Module(new Rob(numWritePorts))
     val csr = Module(new CSRFile)
 
-    lsu.io.csr.csr_reg := csr.io.dtlb_csr_reg
-
+    lsu.io.csr.dtlb_csr_reg         := csr.io.dtlb_csr_reg
+    lsu.io.csr.tlb_data_csr_reg     := csr.io.tlb_data_csr_reg
     io.csr_register := csr.io.debug_csr_reg
 
 /*-----------------------------*/

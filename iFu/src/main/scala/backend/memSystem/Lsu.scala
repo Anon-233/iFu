@@ -5,7 +5,7 @@ import chisel3.util._
 import iFu.common._
 import iFu.common.Consts._
 import iFu.common.CauseCode._
-import iFu.tlb.{DTLB, DTLBCSRContext}
+import iFu.tlb._
 import iFu.util._
 
 //TODO  memWidth为2，如果为1，需要wakeup不成功后增加一周期delay  Done
@@ -80,7 +80,8 @@ class LSUCoreIO extends CoreBundle {
 }
 
 class LSUCsrIO extends CoreBundle {
-    val csr_reg  = Input(new DTLBCSRContext)
+    val dtlb_csr_reg        = Input(new DTLBCsrContext)
+    val tlb_data_csr_reg    = Input(new TLBDataCsrContext)
 }
 
 class LSUIO extends CoreBundle {
@@ -462,7 +463,6 @@ class Lsu extends CoreModule {
         dtlb.io.req(w).bits.vaddr := exe_tlb_vaddr(w)
         dtlb.io.req(w).bits.size := exe_size(w)
     }
-    dtlb.io.csr_context := io.csr.csr_reg
     // exceptions
 
     // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
@@ -1196,6 +1196,10 @@ class Lsu extends CoreModule {
             ldq(i).bits.uop      := NullMicroOp //debug 调试
         }
     }
+
+    dtlb.io.dtlb_csr_context := io.csr.dtlb_csr_reg
+    dtlb.io.tlb_data_context := io.csr.tlb_data_csr_reg
+
 
     //-------------------------------------------------------------
     // Live Store Mask
