@@ -73,18 +73,18 @@ class TLBEntry extends CoreBundle {
     val data = new TLBData
 }
 
-class TLBRReq extends CoreBundle {
+class TLBDataRReq extends CoreBundle {
     val vaddr       = UInt(vaddrBits.W)
     val cmd         = UInt(TLB_R_CMD_SZ.W)
     val index       = UInt(log2Ceil(TLB_NUM).W) // 当is_tlb_rd为真时，需要index
 }
 
-class TLBRResp extends CoreBundle {
+class TLBDataRResp extends CoreBundle {
     val data = new TLBData
     val hit_idx = UInt(log2Ceil(TLB_NUM).W)
 }
 
-class TLBWReq extends CoreBundle {
+class TLBDataWReq extends CoreBundle {
     val rj_0_9  = UInt(10.W)    // 存放无效操作所需的ASID信息
     val rk      = UInt(32.W)    // 存放无效操作所需的虚拟地址信息
     val data    = new TLBSingleData
@@ -94,14 +94,14 @@ class TLBWReq extends CoreBundle {
 
 class TLBDataManagerIO extends CoreBundle {
     val csr_context = Input(new TLBDataCsrContext)
-    val r_req   = Flipped(Vec(memWidth + 1, Decoupled(new TLBRReq)))
-    val r_resp  = Vec(memWidth + 1, Valid(new TLBRResp))
-    val w_req   = Flipped(Decoupled(new TLBWReq))
+    val r_req   = Vec(memWidth + 1, Flipped(Decoupled(new TLBDataRReq)))
+    val r_resp  = Vec(memWidth + 1, Valid(new TLBDataRResp))
+    val w_req   = Flipped(Decoupled(new TLBDataWReq))
 }
 
 class TLBDataManager extends CoreModule {
     val io = IO(new TLBDataManagerIO)
-
+    io <> DontCare //TODO 删除
     val tlb_entries = Reg(Vec(TLB_NUM, Valid(new TLBEntry)))
     val random_counter = RegInit(0.U(log2Ceil(TLB_NUM).W))
     random_counter := random_counter + 1.U
@@ -109,7 +109,7 @@ class TLBDataManager extends CoreModule {
     val write_pos = Mux(is_full, random_counter, tlb_entries.indexWhere(_.valid === false.B))
     val csr_regs = io.csr_context
     for(i <- 0 until memWidth + 1) {
-        io.r_resp(i) := 0.U
+        io.r_resp(i) := 0.U.asTypeOf(Valid(new TLBDataRResp))
         for (j <- 0 until TLB_NUM) {
             when(tlb_entries(j).valid && io.r_req(i).valid){
                 when((
@@ -139,7 +139,7 @@ class TLBDataManager extends CoreModule {
     when(io.w_req.valid){
         when(io.w_req.bits.cmd === TLB_WR || io.w_req.bits.cmd === TLB_FILL) {
             val write_meta = Wire(new TLBMeta)
-            val write_index = csr_regs.tlbidx_index
+            val write_index = WireInit(csr_regs.tlbidx_index)
             when(io.w_req.bits.cmd === TLB_FILL) {
                 write_index := write_pos
             }

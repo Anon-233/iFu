@@ -35,7 +35,11 @@ class LSUExeIO extends CoreBundle {
     val iresp   = new DecoupledIO(new ExeUnitResp)
 }
 
-
+class LSUTLBDataIO extends CoreBundle {
+    val r_req   = Vec(memWidth, Decoupled(new TLBDataRReq))
+    val r_resp  = Vec(memWidth, Flipped(Valid(new TLBDataRResp)))
+    val w_req   = new DecoupledIO(new TLBDataWReq)
+}
 /**
  * 输入dispatch阶段的uop，commit的信息，rob，brupdate
  * 输出ldq，stq的索引，是否full，给rob的clear信号
@@ -77,11 +81,12 @@ class LSUCoreIO extends CoreBundle {
     val fencei_rdy  = Output(Bool())
 
     val lsu_xcpt       = Output(Valid(new Exception))
+
+    val tlb_data    = new LSUTLBDataIO
 }
 
 class LSUCsrIO extends CoreBundle {
     val dtlb_csr_reg        = Input(new DTLBCsrContext)
-    val tlb_data_csr_reg    = Input(new TLBDataCsrContext)
 }
 
 class LSUIO extends CoreBundle {
@@ -1198,8 +1203,10 @@ class Lsu extends CoreModule {
     }
 
     dtlb.io.dtlb_csr_context := io.csr.dtlb_csr_reg
-    dtlb.io.tlb_data_context := io.csr.tlb_data_csr_reg
+    dtlb.io.r_resp           := io.core.tlb_data.r_resp
 
+    io.core.tlb_data.r_req   <> dtlb.io.r_req
+    io.core.tlb_data.w_req   <> dtlb.io.w_req
 
     //-------------------------------------------------------------
     // Live Store Mask
