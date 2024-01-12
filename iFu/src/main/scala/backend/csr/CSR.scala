@@ -157,6 +157,13 @@ class CSRFileIO extends CoreBundle {
 class CSRFile extends CoreModule {
     val io = IO(new CSRFileIO)
 
+    val csrRst = WireInit(0.U.asTypeOf(new CSRReg))
+    csrRst.crmd.da := 1.U(1.W);
+    csrRst.asid.asidbits := 0xa.U(8.W)
+
+    val csrRegNxt = Wire(new CSRReg)
+    val csrReg    = RegNext(csrRegNxt, init = csrRst)
+
     io.dtlb_csr_reg.crmd_da := csrReg.crmd.da
     io.dtlb_csr_reg.crmd_pg := csrReg.crmd.pg
     io.dtlb_csr_reg.crmd_datm := csrReg.crmd.datm
@@ -169,14 +176,6 @@ class CSRFile extends CoreModule {
     io.dtlb_csr_reg.dmw1_plv3  := csrReg.dmw1.plv3
     io.dtlb_csr_reg.dmw0_vseg  := csrReg.dmw0.vseg
     io.dtlb_csr_reg.dmw1_vseg  := csrReg.dmw1.vseg
-
-
-    val csrRst = WireInit(0.U.asTypeOf(new CSRReg))
-    csrRst.crmd.da := 1.U(1.W);
-    csrRst.asid.asidbits := 0xa.U(8.W)
-
-    val csrRegNxt = Wire(new CSRReg)
-    val csrReg    = RegNext(csrRegNxt, init = csrRst)
 
 // --------------------------------------------------------
 // below code is for read

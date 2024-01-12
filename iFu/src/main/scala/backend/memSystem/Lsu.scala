@@ -583,7 +583,7 @@ class Lsu extends CoreModule {
         when(dmem_req(memWidth-1).bits.is_uncacheable) {
             for(w <- 0 until memWidth-1) {
                 dmem_req(w).valid       := false.B
-                can_fire_store_commit   := false.B
+                can_fire_store_commit(w):= false.B
             }
         }
         //-------------------------------------------------------------

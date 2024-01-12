@@ -94,6 +94,7 @@ class MSHR extends CoreModule with HasDcacheParameters {
     // 数据存储
     val mshr = RegInit(0.U.asTypeOf(new MSHRdata))
     dontTouch(mshr)
+    dontTouch(io)
 
     // 告诉外界是否存了一个store指令
     io.hasStore := isStore(mshr.req) && mshr.valid
@@ -113,7 +114,7 @@ class MSHR extends CoreModule with HasDcacheParameters {
     io.replayReq.bits := mshr.req
 
     //分支预测调整 或reset
-    when (io.reset || IsKilledByBranch(io.brupdate, mshr.req.uop)) {
+    when (io.reset || IsKilledByBranch(io.brupdate, mshr.req.uop.brMask)) {
         mshr.valid := false.B
         mshr := 0.U.asTypeOf(new MSHRdata)
     }
@@ -263,7 +264,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
             
         })
 
-
+    dontTouch(io)
     //io := DontCare
     io.addr  := 0.U.asTypeOf(UInt(paddrBits.W))
     val firstMSHRs = VecInit((Seq.fill(nFirstMSHRs)(Module(new MSHR))).map(_.io))

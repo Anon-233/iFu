@@ -181,7 +181,7 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
     val start = RegInit(false.B)
     when (num_branchs > 1.U) { start := true.B }
     when (start && num_branchs(8, 0) === 0.U) {
-        printf("UBTB %d: %d %d %d\n", ubtb_id, num_branchs, num_mis_preds, num_updates)
+        printf("UBTB %d: %d %d %d\n", ubtb_id.U, num_branchs, num_mis_preds, num_updates)
     }
 // ---------------------------------------------
 }

@@ -71,12 +71,6 @@ class DcacheParameters {
     val nFirstMSHRs = 4
     val nSecondMSHRs = 8
 
-    def IsKilledByBranch (brupdate: BrUpdateInfo, uop: MicroOp): Bool = {
-        return maskMatch(brupdate.b1.mispredictMask, uop.brMask)
-    }
-
-    def maskMatch(msk1: UInt, msk2: UInt): Bool = (msk1 & msk2) =/= 0.U
-
     def getIdx(vaddr: UInt): UInt = vaddr(nOffsetBits + nIdxBits - 1, nOffsetBits)
     def getTag(vaddr: UInt): UInt = vaddr(vaddrBits - 1, vaddrBits - nTagBits)
     def getBlockAddr(vaddr: UInt): UInt = vaddr(vaddrBits - 1, nOffsetBits)

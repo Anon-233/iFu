@@ -23,6 +23,7 @@ class Missarbiter extends CoreModule with HasDcacheParameters {
 
   })
 
+  dontTouch(io)
   //先以传入的为初值
   io.sendResp := 0.U.asTypeOf(Vec(memWidth , Bool()))
   io.sendNack := 0.U.asTypeOf(Vec(memWidth , Bool()))

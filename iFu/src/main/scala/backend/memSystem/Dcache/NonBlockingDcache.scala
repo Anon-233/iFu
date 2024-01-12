@@ -285,7 +285,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                           mshrReadValid || 
                           prefetchValid ||
                           (hasMMIO && doingmmioResp) ||//lsu准备进mmio，但是里面有mmioresp状态
-                          RPU.io.mmioDoneReq//一个mmio刚做完，下周期归它
+                          RPU.io.mmioDone//一个mmio刚做完，下周期归它
                           )
 
     // 检查全局，如果此时流水线的s0和s1阶段状态为lsu并且有store，就将其kill掉变成nil
