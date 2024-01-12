@@ -244,9 +244,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     rpuJustDone := RPU.io.ready && RegNext(!RPU.io.ready)
 
-    val rpuMMIODone = rpuJustDone && RPU.io.mmioDone
-    val rpuNormalDone = rpuJustDone && !rpuMMIODone
-
+    val rpuMMIODone = RPU.io.mmioDone
+    val rpuNormalDone = rpuJustDone && !doingmmioResp
+                    
     // 存储mshr的信息
     val mshrs = Module(new MSHRFile)
     mshrs.io.req.valid := false.B
@@ -280,7 +280,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     prefetchValid := false.B
 
     // 如果当周期检测到有非lsu请求的话，就将它置零，下周期lsu发送不过来，同时再去执行非lsu请求
-    io.lsu.req.ready := !(rpuJustDone || 
+    io.lsu.req.ready := !(rpuNormalDone || 
                           mshrReplayValid ||
                           mshrReadValid || 
                           prefetchValid ||
@@ -304,12 +304,13 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
 
 
-    val s0valid = Mux((rpuJustDone), true.B,
+    val s0valid = Mux((rpuNormalDone), true.B,
+        Mux( rpuMMIODone    , true.B,
         Mux((mshrReplayValid), true.B,
             Mux((mshrReadValid), true.B,
                 Mux(io.lsu.req.valid, true.B,
                     Mux((fenceValid), true.B,
-                        Mux( prefetchValid ,true.B, false.B))))))
+                        Mux( prefetchValid ,true.B, false.B)))))))
 
     val dontCareReq = 0.U.asTypeOf(new DCacheReq)
 
@@ -479,8 +480,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     for(w <- 0 until memWidth){    //lsu的s1kill指的就是s1
         s1kill(w) := io.lsu.s1_kill(w) ||   //store失败，发回nack返回当前流水线， //store replay成功，告诉lsu一个nack去找下一个位置 //mshr里面有store，就不要让下一条进来
                     RegNext(s0kill(w)  ||
-                    ( isStore(s0req(w)) && s2StoreFailed) ||
-                    ( isMMIO(s0req(w))  && rpuMMIODone)) 
+                    ( isStore(s0req(w)) && s2StoreFailed)
+                    ) 
     }
     // 如果miss，记录下将要去替换的Pos
     val s1missAllocPos = WireInit(0.U.asTypeOf(Vec(memWidth , UInt(log2Ceil(nWays).W))))
@@ -496,7 +497,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     when(s1state === lsu  && s1valid ){
         for(w <- 0 until memWidth){
-            when(( isMMIO(s0req(w))  && rpuMMIODone)||(s2StoreFailed && isStore(s1req(w))) || IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)){
+            when((s2StoreFailed && isStore(s1req(w))) || IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)){
                 s1kill(w) := true.B
             }.otherwise{
                 when(lsuMetaRead(w).resp.valid){
@@ -590,8 +591,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s2kill = Wire(Vec(memWidth , Bool()))
     for(w <- 0 until memWidth){
         s2kill(w) := RegNext(s1kill(w) ||
-                            ( isStore(s1req(w)) && s2StoreFailed) ||
-                            ( isMMIO(s1req(w))  && rpuMMIODone)
+                            ( isStore(s1req(w)) && s2StoreFailed)
                             )
     }
     val s2hit = RegNext(s1hit)
@@ -645,6 +645,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     missArbiter.io.alive := s2kill.map(x => ~x)
     missArbiter.io.mshrisFull := mshrs.io.full
     missArbiter.io.missAllocPos := s2missAllocPos
+    missArbiter.io.mshrstqIdx := mshrs.io.recentStqIdx
+    missArbiter.io.mshrhasStore := mshrs.io.hasStore
 
     val s2replacedMetaLine = RegNext(s1replacedMetaLine)
     // val s2replacedDataLine = mshrDataRead.resp.bits.rdata
@@ -897,14 +899,16 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             RPU.io.isFence := false.B
 
             // 什么都不往回发
-            // 特别的，mmio指令是store，要发回nack，拉高storeFailed清掉接下来所有可能的store
+            // 对于store指令，拉高storeFailed清掉接下来所有可能的store
             // 因为重发一定还是这个mmio，它失败了，后面的一定不执行，当前传入的mmio请求不做完，RPUbusy，
             // 它一定失败，因此看这个总线繁忙就可以限制掉这件事情。
             // MMload一定前后无连着什么MMIO操作，因此不用特别判断。
             when (isStore(mmioreq)) {
+                
                 sendResp(pipeline) := false.B
-                sendNack(pipeline) := true.B
-                s2StoreFailed := true.B
+                // 自己一定能写入，不用发nack
+                // s2StoreFailed := true.B 自己一定能写入,不用发StoreFailed
+                sendNack(pipeline) := false.B
             }.otherwise {
                 sendResp(pipeline) := false.B
                 sendNack(pipeline) := false.B
@@ -926,9 +930,14 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 sendNack(1) := true.B
             }
             
-            // 特别的，mmio指令是store，要发回nack，拉高storeFailed清掉接下来所有可能的store
+            // 特别的，mmio指令是store，拉高storeFailed清掉接下来所有可能的store
+            // 并且要特别看一下里面是不是正在执行的是自己的store，如果是就不要发nack！
+            // 否则会导致execute_head掉的太后面
             when (isStore(mmioreq)) {
                 s2StoreFailed := true.B
+                when(RPU.io.doingMMIO && RPU.io.mmiostqIdx === mmioreq.uop.stqIdx){
+                    sendNack(0) := false.B
+                }
             }
 
         }

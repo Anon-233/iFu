@@ -173,4 +173,60 @@ cacop查询索引，这个会使用正常的判断命中的的逻辑，读出来
 
 
 1.11
-（或许应该写一下真正两通路的dcache,mshr改成两通路的queue）
+（或许应该写一下真正两通路的dcache,mshr改成两通路的queue
+    稍等
+）
+
+
+1.12 
+
+对于强序非缓存的处理：
+不允许做完之后s0开始发，s1，s2开始做任何其他mmio请求
+不允许s0开始发之后的两个周期，有mmio进来，必须及时更新到下一个mmio请求传进来
+
+mmioresp的时候，从s0开始，此时的s1、s2的mmio请求不允许提前完成，故在RPU里面设置
+```scala
+io.ready := state === ready && !mmioDone && RegNext(!mmioDone)
+```
+直到这个resp真的resp，才算ready
+
+(或者是做一个mmioDone的时候kill掉流水线目前有的所有mmio请求，然后重新发，这样就不用管ready了)
+
+mmioresp的时候,他后面两个周期的不允许mmio请求进来
+<!-- 故在nonblockingdcache里面设置kill机制，只要有mmioresp正在做，就检测kill掉相关的请求，回去重发
+ TIP:检查发现这里不能重发,kill的时候没有nack信号的
+ -->
+现在允许了,因为直接延后两周期RPU.ready,来了也是miss,启动重发机制
+
+```scala
+doingmmioResp := (s2state === mmioresp && s2valid) ||
+                    (s1state === mmioresp && s1valid)
+```
+
+s0关于wb和mmioresp的区分
+如果这样改完，rpujustdone的时候会有两种情况
+1. 触发了延迟RPUjustdone。此时一个mmioresp做到了s2,doingmmioresp还为真，这个时候肯定是延迟设置导致的rpujustdone，要去除这种情况
+```scala
+val rpuNormalDone = rpuJustDone && !doingmmioResp
+```
+2. rpuMMIOdone的时候就可以s0转换为mmioresp状态了
+```scala
+val rpuMMIODone = RPU.io.mmioDone
+```
+
+**目前mmiodone的时候，rpujustdone一定是两周期之后才拉高,因此不用担心mmioresp和wb的优先级逻辑**
+
+之前rpujustdone作为直接的信号判断一些s0valid,以及s0req,s0state之类的信号，现在均需要改成处理过的rpuNormalDone和rpuMMIODone
+
+xcpt的时候kill掉mshr全部ld请求？
+
+branchMiss的时候kill掉全部iskilledbybranch的请求？
+
+
+当前RPU里面加装了一个寄存器存正在mmio的指令，相当于一个大小为1的"mshr"，现在将这个mshr和原来的mshr都做了判定
+即如果当前一个store指令miss了
+    如果mshr里面有一个store指令，看看是不是自己， 不是自己，自己存不进去，发nack
+    如果mshr没有store指令，尝试写，不满的情况自己可以写进去不发nack，满了发nack
+如果一个mmio遇到RPUbusy，看RPU寄存器里面有没有自己，如果有，别发回nack，只有不是自己才发回nack。
+
+(这个之前哪怕自己在寄存器里面，他也发回nack)

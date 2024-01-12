@@ -44,6 +44,8 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
         val mmioDone = Output(Bool())
         val mmioPipeNumber = Output(UInt(1.W))
         val mmioDoneReq = Output(new DCacheReq)
+        val mmiostqIdx = Output(UInt(lsuParameters.stqAddrSz.W))
+        val doingMMIO = Output(Bool())
 
         val fetchingAddr = Output(UInt(32.W))
 
@@ -86,8 +88,8 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
     io.cbusReq.addr := 0.U
     io.cbusReq.data := 0.U
 
-
-    io.ready := state === ready
+    // 因为一个mmio做完之后从s0开始，此时s1和s2活着的总线请求不要提供服务，防止mmio乱序
+    io.ready := state === ready && !mmioDone && RegNext(!mmioDone)
     io.newMetaLine := metaLineBuffer
     io.newDataLine := dataLineBuffer
     io.newAddr := newAddr
@@ -98,9 +100,14 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
     // 刚做完的那个周期高亮，下一个周期就不高亮了 
     when(mmioDone === true.B){
         mmioDone := false.B
+        mmioReq := 0.U.asTypeOf(new DCacheReq)
+        isMMIO := false.B
     }
-
+    io.doingMMIO := isMMIO
     io.mmioDone := mmioDone
+
+    // 正在处理的mmio
+    io.mmiostqIdx := mmioReq.uop.stqIdx
 
     io.mmioDoneReq := Mux(mmioDone , mmioReq , 0.U.asTypeOf(new DCacheReq))
     
@@ -121,6 +128,8 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
                 
                 // 以mmio的req内信息为准
                 mmioPipeNumber := io.mmioPipeNumberIn
+
+                dataLineBuffer := io.replaceDataLine
 
             }.elsewhen(io.replaceMetaLine.valid && io.replaceMetaLine.dirty){
 
@@ -163,8 +172,11 @@ class ReplaceUnit extends Module  with HasDcacheParameters{
     }.elsewhen(state === wb){
         io.cbusReq.addr := replaceAddr
         io.cbusReq.data := dataLineBuffer(offsetIdx)
+
         when(io.cbusResp.ready){
-            state := Mux(io.cbusResp.isLast, Mux( isFence && isMMIO , ready ,fetch), wb)//写回完成，正常指令去fetch，是fence指令就直接回到ready
+            state := Mux(!io.cbusResp.isLast,   wb , 
+                     Mux( isFence || isMMIO ,   ready ,//写回完成，正常指令去fetch，是fence或者mmio指令就直接回到ready
+                                                fetch))
             offsetIdx := Mux(io.cbusResp.isLast, 0.U, offsetIdx + 1.U)
 
             when(io.cbusResp.isLast){

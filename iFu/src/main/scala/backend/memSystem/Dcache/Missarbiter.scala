@@ -14,6 +14,8 @@ class Missarbiter extends CoreModule with HasDcacheParameters {
     val alive = Input(Vec(memWidth , Bool()))
     val missAllocPos = Input(Vec(memWidth,UInt(log2Ceil(nWays).W)))
     val mshrisFull = Input(Bool())
+    val mshrstqIdx = Input(UInt(lsuParameters.stqAddrSz.W))
+    val mshrhasStore = Input(Bool())
     val sendNack = Output(Vec(memWidth , Bool()))
     val sendResp = Output(Vec(memWidth , Bool()))
     val pipeNumber = Output(UInt(1.W))
@@ -35,25 +37,53 @@ class Missarbiter extends CoreModule with HasDcacheParameters {
   when((io.miss(0) && io.alive(0)) && (!io.miss(1) || !io.alive(1))) {
     // 只有1号流水线是hit的时候，才会去写0号的miss
 
-
-    when(!io.mshrisFull) {
-
-      io.mshrReq.valid := true.B
-      // 这里要包括data，addr，uop，特别注意还有mask
-      io.mshrReq.bits := io.req(0)
-      io.replacePos := io.missAllocPos(0)
-      io.pipeNumber := 0.U
-
-    }
-
     // 判定0号的返回情况
     io.sendResp(0) := false.B
 
     when(isStore(io.req(0))) {
-      // store miss是要一定要发回nack的
-      io.sendNack(0) := true.B
-      io.storeFailed := true.B
+      
+      // store miss
+      when(io.mshrhasStore){
+        // 如果已经有store,看看是不是自己,只有存的不是自己的那些store，才会发回nack
+        when(io.mshrstqIdx =/= io.req(0).uop.stqIdx){
+          io.sendNack(0) := true.B
+          io.storeFailed := true.B
+        }.otherwise{
+          // 是自己的store，不发回nack
+          io.sendNack(0) := false.B
+          io.storeFailed := false.B
+        }
+        
+
+      }.otherwise{
+          // 当前没有store指令,尝试写入
+          when(!io.mshrisFull) {
+          io.mshrReq.valid := true.B
+          // 这里要包括data，addr，uop，特别注意还有mask
+          io.mshrReq.bits := io.req(0)
+          io.replacePos := io.missAllocPos(0)
+          io.pipeNumber := 0.U
+        }
+        // 只要不满，自己写成功了，就不发回nack
+        when(io.mshrisFull){
+          io.sendNack(0) := true.B
+          io.storeFailed := true.B
+        }.otherwise{
+          io.sendNack(0) := false.B
+          io.storeFailed := false.B
+        }
+      }
+
     }.otherwise {
+
+      // 对于load指令，只要mshr不满，就可以写入,写入了就不发回nack
+      when(!io.mshrisFull) {
+        io.mshrReq.valid := true.B
+        // 这里要包括data，addr，uop，特别注意还有mask
+        io.mshrReq.bits := io.req(0)
+        io.replacePos := io.missAllocPos(0)
+        io.pipeNumber := 0.U
+      }
       io.sendNack(0) := Mux(io.mshrisFull, true.B, false.B)
     }
 

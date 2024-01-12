@@ -119,10 +119,12 @@ class MSHR extends CoreModule with HasDcacheParameters {
         mshr := 0.U.asTypeOf(new MSHRdata)
     }
     // reset 和写入调换了顺序，见fixlog说明
-    
+
+    mshr.req.uop.brMask := GetNewBrMask(io.brupdate, mshr.req.uop)
+
     when(io.req.fire){
         // 满足则写入新的请求
-        mshr.valid := true.B
+        mshr.valid := true.B && !IsKilledByBranch(io.brupdate, io.req.bits.uop)
         mshr.id := io.id
         mshr.req := io.req.bits
         mshr.waiting := true.B
@@ -131,6 +133,8 @@ class MSHR extends CoreModule with HasDcacheParameters {
         mshr.issued := false.B
         mshr.way := io.replacePos
         mshr.pipeNumber := io.pipeNumber
+
+        mshr.req.uop.brMask := GetNewBrMask(io.brupdate, io.req.bits.uop)
     }
 
     // 传出id
@@ -139,7 +143,7 @@ class MSHR extends CoreModule with HasDcacheParameters {
     io.getPipeNumber := mshr.pipeNumber
 
 
-    mshr.req.uop.brMask := GetNewBrMask(io.brupdate, mshr.req.uop)
+    
 
     val mshrBlockAddr = Mux(mshr.valid, getBlockAddr(mshr.req.addr), 0.U)
     dontTouch(mshrBlockAddr)
