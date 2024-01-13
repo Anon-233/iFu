@@ -302,8 +302,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // 事实上,rpu写回和mshr的replay不会同时发生
     // (RPU写回至少8周期,mshr里面最多不超过8项连发,而且mshr每次replay必须等一次写回之后一周期才开始)
 
-
-
     val s0valid = Mux((rpuNormalDone), true.B,
         Mux( rpuMMIODone    , true.B,
         Mux((mshrReplayValid), true.B,
@@ -338,11 +336,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                     Mux(prefetchValid,      prefetch,
                                             nil))))))))
 
-    val s0kill = Wire(Vec( memWidth , Bool()))
+
+    val s0kill = WireInit(VecInit(Seq.fill(memWidth)(false.B)))
     
-    for(w <- 0 until memWidth){
-        s0kill(w) := (!(io.lsu.req.bits(w).valid))
-    }
 
 
     //rpu拿到的新的写回信息 
@@ -453,6 +449,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
       !(io.lsu.exception && s0req(0).uop.use_ldq),
         init=false.B)
     val s1req = RegNext(s0req)
+    for (w <- 0 until memWidth) { s1req(w).uop.brMask := GetNewBrMask(io.lsu.brupdate,s1req(w).uop) }
+
     val s1replayPipeNumber = RegNext(s0replayPipeNumber)
     var s1state = RegNext(s0state)
 
@@ -598,6 +596,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
 
     val s2req = RegNext(s1req)
+
+    for (w <- 0 until memWidth) { s2req(w).uop.brMask := GetNewBrMask(io.lsu.brupdate,s2req(w).uop) }
+
     val s2replayPipeNumber = RegNext(s1replayPipeNumber)
     val s2replayHitPos = RegNext(s1replayHitPos)
 
@@ -744,10 +745,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     }.elsewhen(s2state === replay && s2valid){
         // 特别的，如果是replay，给mshr一个信号，告诉他这个fetchAddr已经被处理过了
         mshrs.io.replayDone := true.B
-
         // 然后根据replayPipeNumber来准备对应流水线返回的内容
         when(s2replayPipeNumber === 0.U(1.W)){
-            sendResp(0) := true.B
+            sendResp(0) := Mux(IsKilledByBranch(io.lsu.brupdate, s2req(0).uop) || s2kill(0), false.B , true.B )
             sendNack(0) := false.B
             sendResp(1) := false.B
             sendNack(1) := false.B
@@ -755,13 +755,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         }.elsewhen(s2replayPipeNumber === 1.U(1.W)){
             sendResp(0) := false.B
             sendNack(0) := false.B
-            sendResp(1) := true.B
+            sendResp(1) := Mux(IsKilledByBranch(io.lsu.brupdate, s2req(1).uop) || s2kill(1), false.B , true.B )
             sendNack(1) := false.B
         }
 
-//        when(( isStore(s2req(0)) && s2replayPipeNumber === 0.U(1.W)) ){
-//            s2StoreReplay := true.B
-//        }
 
         
         for(w <- 0 until memWidth){

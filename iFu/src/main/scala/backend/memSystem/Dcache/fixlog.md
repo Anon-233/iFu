@@ -230,3 +230,14 @@ branchMiss的时候kill掉全部iskilledbybranch的请求？
 如果一个mmio遇到RPUbusy，看RPU寄存器里面有没有自己，如果有，别发回nack，只有不是自己才发回nack。
 
 (这个之前哪怕自己在寄存器里面，他也发回nack)
+
+
+
+
+1.14 
+
+任何流水阶段的请求都需要进行IskilledbyBranch和GetNewBrmask的处理,这里再dcache的流水线每一级加上了判断逻辑
+
+返回的replay不需要记住流水线号，只要挑0号返回就可以了。
+
+要重构一下dcache
