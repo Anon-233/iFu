@@ -124,7 +124,7 @@ class MSHR extends CoreModule with HasDcacheParameters {
 
     when(io.req.fire){
         // 满足则写入新的请求
-        mshr.valid := true.B && !IsKilledByBranch(io.brupdate, io.req.bits.uop)
+        mshr.valid := true.B
         mshr.id := io.id
         mshr.req := io.req.bits
         mshr.waiting := true.B
