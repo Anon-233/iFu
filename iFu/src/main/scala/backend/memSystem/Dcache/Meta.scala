@@ -186,7 +186,7 @@ class DcacheMeta extends Module with HasDcacheParameters{
                 val wantWrite = RegNext(io.lsuRead(w).req.bits.isWrite)
                 val blockAddr = RegNext(Cat(readTag(w), readIdx(w)))
                 val rtag = RegNext(readTag(w))
-                val hitoh = VecInit(rmetaSet.map((x: MetaLine) => (x.tag === rtag) &&
+                val hitoh = VecInit(rmetaSet.map((x: MetaLine) => (x.tag === rtag) && x.valid &&
                   !(io.readOnlyBlockAddr.valid && (blockAddr === io.readOnlyBlockAddr.bits) && wantWrite)
                     // tag 要匹配，并且传进来的如果是一个试图访问只读块的store指令，就认为是miss
                 )).asUInt

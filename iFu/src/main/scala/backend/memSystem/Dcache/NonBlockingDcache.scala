@@ -478,7 +478,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     for(w <- 0 until memWidth){    //lsu的s1kill指的就是s1
         s1kill(w) := io.lsu.s1_kill(w) ||   //store失败，发回nack返回当前流水线， //store replay成功，告诉lsu一个nack去找下一个位置 //mshr里面有store，就不要让下一条进来
                     RegNext(s0kill(w)  ||
-                    ( isStore(s0req(w)) && s2StoreFailed)
+                    ( isStore(s0req(w)) && ( s0state === lsu || s0state === mmioreq)  && s2StoreFailed)
                     ) 
     }
     // 如果miss，记录下将要去替换的Pos
@@ -589,7 +589,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s2kill = Wire(Vec(memWidth , Bool()))
     for(w <- 0 until memWidth){
         s2kill(w) := RegNext(s1kill(w) ||
-                            ( isStore(s1req(w)) && s2StoreFailed)
+                            ( isStore(s1req(w)) && (s1state === lsu || s1state === mmioreq)  && s2StoreFailed)
                             )
     }
     val s2hit = RegNext(s1hit)

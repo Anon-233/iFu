@@ -237,7 +237,12 @@ branchMiss的时候kill掉全部iskilledbybranch的请求？
 1.14 
 
 任何流水阶段的请求都需要进行IskilledbyBranch和GetNewBrmask的处理,这里再dcache的流水线每一级加上了判断逻辑
+(特别地，要注意dcache的st指令是不需要加入iskilledbybranch的判断逻辑的,因为他们已经被提交)
+
 
 返回的replay不需要记住流水线号，只要挑0号返回就可以了。
 
 要重构一下dcache
+
+一个s valid两个s valid ,将kill信号整合进valid
+
