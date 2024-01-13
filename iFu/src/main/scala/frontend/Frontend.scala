@@ -365,14 +365,14 @@ class Frontend extends CoreModule {
                 (f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits =/= brsigs.target)
             )
 
-            // i << 1是防止溢出，因为sfbOffset <= Cacheline
+            // 多计算1位是防止溢出，要求sfbOffset <= Cacheline
             val offset_from_aligned_pc = (
                 (i << 2).U((log2Ceil(lineBytes) + 1).W) + brsigs.sfbOffset.bits
             )
-            val lower_mask = Wire(UInt((2 * fetchWidth).W))
-            val upper_mask = Wire(UInt((2 * fetchWidth).W))
+            val lower_mask = Wire(UInt((2 * fetchWidth).W)) // sfb br 所在的位置
+            val upper_mask = Wire(UInt((2 * fetchWidth).W)) // sfb br tgt 所在的位置
             lower_mask := UIntToOH(i.U)
-            upper_mask := UIntToOH(offset_from_aligned_pc(log2Ceil(fetchWidth*2) +1 ,2)) << Mux(f3_is_last_bank_in_block, bankWidth.U, 0.U)
+            upper_mask := UIntToOH(offset_from_aligned_pc(log2Ceil(fetchWidth * 2 + 1) + 1, 2)) << Mux(f3_is_last_bank_in_block, bankWidth.U, 0.U)
 
             /**
              * 判断是否是sfb指令，如果是Cacheline的最后一个bank，那么最多只能取3个bank（跨Cacheline）
@@ -380,8 +380,10 @@ class Frontend extends CoreModule {
              */
             f3_fetch_bundle.sfbs(i) := (
                 f3_mask(i) && brsigs.sfbOffset.valid &&
-                (offset_from_aligned_pc <= Mux(f3_is_last_bank_in_block, (fetchBytes + bankBytes).U,(2 * fetchBytes).U))
+                (offset_from_aligned_pc <= Mux(f3_is_last_bank_in_block, (fetchBytes + bankBytes).U, (2 * fetchBytes).U))
             )
+            // sfb_masks -> br 和 tgt 之间不包括br和tgt的指令
+            // 0 -> 不在范围内 1 -> 在范围内
             f3_fetch_bundle.sfb_masks(i) := (~MaskLower(lower_mask)).asUInt & (~MaskUpper(upper_mask)).asUInt
             /**
              * 没有发生异常
@@ -503,13 +505,13 @@ class Frontend extends CoreModule {
     // 下面将要处理sfbs
     val f4_shadowable_masks = VecInit((0 until fetchWidth).map{ i =>
         f4.io.deq.bits.shadowable_mask.asUInt |
-          (~f4.io.deq.bits.sfb_masks(i)).asUInt(fetchWidth - 1,0)    // the instructions which not in sfb shadow
+        (~f4.io.deq.bits.sfb_masks(i)).asUInt(fetchWidth - 1, 0)    // the instructions which not in sfb shadow
     })
     val f3_shadowable_masks = VecInit((0 until fetchWidth).map{ i =>
         Mux(f4.io.enq.valid, f4.io.enq.bits.shadowable_mask.asUInt, 0.U) |
-          (~f4.io.deq.bits.sfb_masks(i)).asUInt(2 * fetchWidth - 1, fetchWidth)
+        (~f4.io.deq.bits.sfb_masks(i)).asUInt(2 * fetchWidth - 1, fetchWidth)
     })
-    val f4_sfbs = VecInit((0 until fetchWidth) map {i => (
+    val f4_sfbs = VecInit((0 until fetchWidth) map {i => (  // 该指令能否被视为sfb br
         ((~f4_shadowable_masks(i)).asUInt === 0.U) && ((~f3_shadowable_masks(i)).asUInt === 0.U) &&
         f4.io.deq.bits.sfbs(i) &&
         !(f4.io.deq.bits.cfiIdx.valid && f4.io.deq.bits.cfiIdx.bits === i.U)
