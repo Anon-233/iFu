@@ -366,11 +366,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     val s1req = RegNext(s0req)
     // 所有真正的lsu事务都需要在s1阶段进行brmask的更新(mmioreq,replay,lsu)
-    when(s1state === lsu || s1state === replay || s1state === mmioreq){
-        for (w <- 0 until memWidth){ 
-            s1req(w).uop.brMask := GetNewBrMask(io.lsu.brupdate,s1req(w).uop) 
-        }
+    // when(s1state === lsu || s1state === replay || s1state === mmioreq){
+    for (w <- 0 until memWidth){ 
+        s1req(w).uop.brMask := GetNewBrMask(io.lsu.brupdate,s0req(w).uop) 
     }
+    // }
 
     // mshr的read请求所需信息
     val s1fetchAddr = RegNext(s0fetchAddr)
@@ -453,11 +453,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s2state = RegNext(s1state)
     val s2req = RegNext(s1req)
 
-    when(s2state === lsu || s2state === replay || s2state === mmioreq){
+    // when(s2state === lsu || s2state === replay || s2state === mmioreq){
     for (w <- 0 until memWidth){ 
-        s2req(w).uop.brMask := GetNewBrMask(io.lsu.brupdate,s2req(w).uop) 
+        s2req(w).uop.brMask := GetNewBrMask(io.lsu.brupdate,s1req(w).uop) 
     }
-    }
+    // }
 
 
     val s2valid = WireInit(0.U.asTypeOf(Vec(memWidth , Bool())))
@@ -536,7 +536,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                     io.lsu.resp(w).bits.data := DontCare
                     io.lsu.resp(w).bits.uop := s2req(w).uop
 
-                    
+
 
                 }.otherwise{
                     // load，现在的meta,data自带转发功能不用特别判断什么
