@@ -540,7 +540,7 @@ class Lsu extends CoreModule {
     dcache.io.lsu.rob_head_idx := io.core.rob_head_idx
 
     val dmem_req = Wire(Vec(memWidth, Valid(new DCacheReq)))
-    dcache.io.lsu.req.valid := dmem_req.map(_.valid).reduce(_||_) && dcache.io.lsu.req.ready
+    dcache.io.lsu.req.valid := dmem_req.map(_.valid).reduce(_||_)
     dcache.io.lsu.req.bits := dmem_req
     val dmem_req_fire = widthMap(w => dmem_req(w).valid && dcache.io.lsu.req.fire)
 
