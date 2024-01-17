@@ -1304,35 +1304,30 @@ object loadDataGen{
         val loadData = WireInit(0.U(32.W))
         when(memSize === 0.U){
             when(addr === 0.U){
-                when(memSigned){
-                    loadData := Cat(Fill(24,data(7)),data(7,0))}
-                        .otherwise{
-                            loadData := data(7,0)
-                        }}
-                    .elsewhen(addr === 1.U) {
-                        when(memSigned) {
-                            loadData := Cat(Fill(24, data(15)), data(15, 8))
-                        }
-                                .otherwise {
-                                    loadData := data(15, 8)
-                                }
-                    }
-                    .elsewhen(addr === 2.U){
-                        when(memSigned) {
-                            loadData := Cat(Fill(24, data(23)), data(23, 16))
-                        }
-                                .otherwise {
-                                    loadData := data(23, 16)
-                                }
-                    }
-                    .elsewhen(addr === 3.U){
-                        when(memSigned) {
-                            loadData := Cat(Fill(24, data(31)), data(31, 24))
-                        }
-                                .otherwise {
-                                    loadData := data(31, 24)
-                                }
-                    }
+                when(memSigned) {
+                    loadData := Cat(Fill(24, data(7)), data(7, 0))
+                } .otherwise{
+                    loadData := data(7,0)
+                }
+            }.elsewhen(addr === 1.U) {
+                when(memSigned) {
+                    loadData := Cat(Fill(24, data(15)), data(15, 8))
+                }.otherwise {
+                    loadData := data(15, 8)
+                }
+            }.elsewhen(addr === 2.U){
+                when(memSigned) {
+                    loadData := Cat(Fill(24, data(23)), data(23, 16))
+                }.otherwise {
+                    loadData := data(23, 16)
+                }
+            }.elsewhen(addr === 3.U){
+                when(memSigned) {
+                    loadData := Cat(Fill(24, data(31)), data(31, 24))
+                }.otherwise {
+                    loadData := data(31, 24)
+                }
+            }
         }.elsewhen(memSize === 1.U){
             when(addr(1) === 0.U){
                 when(memSigned){
@@ -1340,14 +1335,13 @@ object loadDataGen{
                 }.otherwise{
                     loadData := data(15,0)
                 }
+            }.elsewhen(addr(1) === 1.U){
+                when(memSigned) {
+                    loadData := Cat(Fill(16, data(31)), data(31, 16))
+                }.otherwise {
+                    loadData := data(31, 16)
+                }
             }
-                    .elsewhen(addr(1) === 1.U){
-                        when(memSigned) {
-                            loadData := Cat(Fill(16, data(31)), data(31, 16))
-                        }.otherwise {
-                            loadData := data(31, 16)
-                        }
-                    }
         }.elsewhen(memSize === 2.U){
             loadData := data(31,0)
         }
@@ -1360,19 +1354,16 @@ object storeDataGen{
         when(memSize === 0.U){
             when(addr === 0.U){ 
                 storeData(0) := data(7,0)}
-                    .elsewhen(addr === 1.U){storeData(1) := data(15,8)}
-                    .elsewhen(addr === 2.U){storeData(2) := data(23,16)}
-                    .elsewhen(addr === 3.U){storeData(3) := data(31,24)}
+                    .elsewhen(addr === 1.U){storeData(1) := data(7,0)}
+                    .elsewhen(addr === 2.U){storeData(2) := data(7,0)}
+                    .elsewhen(addr === 3.U){storeData(3) := data(7,0)}
         }.elsewhen(memSize === 1.U){
-        
             when(addr(1) === 0.U){
                 storeData(0) := data(7,0)
                 storeData(1) := data(15,8)}
             .elsewhen(addr(1) === 1.U){
-                storeData(2) := data(23,16)
-                storeData(3) := data(31,24)}
-
-        
+                storeData(2) := data(7,0)
+                storeData(3) := data(15,8)}
         }.elsewhen(memSize === 2.U){
             storeData(0) := data(7,0)
             storeData(1) := data(15,8)
