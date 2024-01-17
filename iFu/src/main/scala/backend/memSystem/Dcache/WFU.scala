@@ -54,7 +54,7 @@ class WriteFetchUnit extends Module  with HasDcacheParameters{
     val state = RegInit(ready)
     val receive_head = RegInit(0.U(log2Ceil(nRowWords).W))
     val execute_head = RegInit(0.U(log2Ceil(nRowWords).W))
-    val tail = RegInit(0.U(log2Ceil(nRowWords).W))
+    val tail = RegInit(0.U((log2Ceil(nRowWords)+1).W))//宽度加1位,不然根本无法增大到nRowWords
     val refillIdx = RegInit(0.U(log2Ceil(nRowWords).W))
     val dataLineBuffer = RegInit(0.U.asTypeOf(Vec(nRowWords,UInt(32.W))))
     val replaceAddr = RegInit(0.U(32.W))

@@ -707,6 +707,19 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         fenceMetaWrite.req.bits.setdirty.valid := true.B
         fenceMetaWrite.req.bits.setdirty.bits := false.B
 
+        // 彻底清除这一行
+        fenceMetaWrite.req.bits.setvalid.valid := true.B
+        fenceMetaWrite.req.bits.setvalid.bits := false.B
+
+        fenceMetaWrite.req.bits.setreadOnly.valid := true.B
+        fenceMetaWrite.req.bits.setreadOnly.bits := false.B
+
+        fenceMetaWrite.req.bits.setfixed.valid := true.B
+        fenceMetaWrite.req.bits.setfixed.bits := false.B
+
+        fenceMetaWrite.req.bits.setTag.valid := true.B
+        fenceMetaWrite.req.bits.setTag.bits := 0.U
+
     }.elsewhen(s2state === prefetch){
         // TODO
     }.elsewhen(s2state === nil){

@@ -136,4 +136,17 @@ lsuNormalValid := io.lsu.req.fire && !lsuhasMMIO && io.lsu.req.ready
 如果仅仅在写回脏行之后清掉meta的dirty位,那以后有个对该行的uncacheable的写请求,就会造成不一致
 但是上述操作本身就是具有破坏缓存一致性的风险,这应该是不会发生的
 
+
+fence之后必须彻底清除掉这一行
+
+原因在于st miss
+在fence写回脏行的时候,会变成readOnly状态,如果有store 这一行,会进mshr,等所谓的脏位清零,
+然而接下来mshrread不会匹配,一定会找个invalid的路作为自己refill的路----即使此时那一行"还在",等他refill完,他那就有两个项,以后的命中判断就出问题了
+
+因此在fence结束必须彻底清除掉那一行,这样以后的命中判断才可以正常按照新拿来的那一行进行
+
+在普通的替换策略是不需要担心,因为如果那被替换的一行变成readonly,就意味着它在wb,它一定会在wb后fetch被销毁掉,等st来mshrread,这一行就被新的覆盖了
+这时是正常的寻路替换
+
+
 10. TODO: 协调lsu的信号控制:如果仅仅是isunique,就只判断stqEmpty,只有fence指令才会给dcache发force_order,才会判断dcache的ordered
