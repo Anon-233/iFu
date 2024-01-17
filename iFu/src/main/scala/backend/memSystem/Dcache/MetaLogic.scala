@@ -115,8 +115,6 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     debug_clock := debug_clock + 1.U
 
 
-    // 这个hasDirty要始终返回hasDirty给外界
-    io.fenceRead.resp.bits.hasDirty := meta.io.read(0).resp.bits.hasDirty
 
     val lsu_R :: lsu_W :: mshr_R :: axi_W :: replay_R :: replay_W :: fence_R :: fence_W :: cacop_R :: cacop_W :: none :: Nil = Enum(11)
     
@@ -154,7 +152,6 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                         Mux(io.mshrRead.req.valid, io.mshrRead.req.bits,
                         Mux(io.replayRead.req.valid, io.replayRead.req.bits,
                         Mux(io.fenceRead.req.valid, io.fenceRead.req.bits,
-                        
                         Mux(io.cacopRead.req.valid, io.cacopRead.req.bits,
                                                     0.U.asTypeOf(new DcacheMetaReq))))))
 
@@ -199,6 +196,8 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     for(w <- 0 until memWidth){
         
         val rmetaSet = meta.io.read(w).resp.bits.rmetaSet
+        val dirtyIdx = meta.io.read(w).resp.bits.dirtyIdx
+        val dirtyPos = meta.io.read(w).resp.bits.dirtyPos
         val rpos = RegNext(readPos(w))
         val ridx = RegNext(readIdx(w))
         
@@ -258,10 +257,11 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
 
 
             is(fence_R){
-                readResp(w).bits.rmeta := rmetaSet(rpos)
+                // fence 从返回对应脏行的meta和位置信息
+                readResp(w).bits.rmeta := rmetaSet(dirtyPos)
                 readResp(w).bits.hit := DontCare
-                readResp(w).bits.idx := ridx
-                readResp(w).bits.pos := rpos
+                readResp(w).bits.idx := dirtyIdx
+                readResp(w).bits.pos := dirtyPos
             }
 
             // TODO cacop_R
@@ -281,6 +281,8 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
             }
             is(fence_R){
                 io.fenceRead.resp := readResp(w)
+                // 这个hasDirty要始终返回hasDirty给外界
+                io.fenceRead.resp.bits.hasDirty := meta.io.hasDirty
             }
         }
     }

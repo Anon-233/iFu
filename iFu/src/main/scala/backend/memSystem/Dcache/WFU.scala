@@ -177,12 +177,17 @@ class WriteFetchUnit extends Module  with HasDcacheParameters{
                 // 写回总线完毕,wbOnly的话可以造一个meta写请求,清除脏行
                 when(wbOnly){
                     // 这是即将转为ready，可以将replaceWay和replaceAddr清空
+
+                    // 做一个清除对应行的操作
                     io.fenceClearReq.valid := true.B
                     io.fenceClearReq.bits.addr := replaceAddr
+                    io.fenceClearReq.bits.data := DontCare
+
                     io.pos := replaceWay
 
                     replaceAddr := 0.U
                     replaceWay := 0.U
+                    wbOnly := false.B
                 }
             }
 

@@ -53,7 +53,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // prefetch : prefetch的请求
     // mshrread : mshr的fetch请求(期间会读取meta,送给WFU)
     // nil : 什么都不做
-    // fence : 清空所有的dirty行
+    // fence_read : 清空所有的dirty行
 
     io.lsu.req.ready := false.B
     for(w <- 0 until memWidth){
@@ -65,7 +65,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     }
 
 
-    val replay :: wb :: refill ::  mshrread :: lsu  :: mmioreq :: mmioresp  :: prefetch  :: fence :: cacop :: nil :: Nil = Enum(11)
+    val replay :: wb :: refill ::  mshrread :: lsu  :: mmioreq :: mmioresp  :: prefetch  :: fence_read :: fence_clear :: cacop :: nil :: Nil = Enum(12)
 
 
 
@@ -156,7 +156,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     val mshrReadValid = Wire(Bool())
     val mshrReplayValid =Wire(Bool())
-    val fenceValid = Wire(Bool())
+    val fenceReadValid = Wire(Bool())
+    val fenceClearValid = Wire(Bool())
     val prefetchValid = Wire(Bool())
 
     // val cacopValid = Wire(Bool())
@@ -191,10 +192,14 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     mshrs.io.req.valid := false.B
     mshrs.io.req.bits := 0.U.asTypeOf(new DCacheReq)
 
-    // lsu还在发force_order并且dcache行里面还有dirty，就进行fence操作
-    fenceValid := (io.lsu.force_order && fenceMetaRead.resp.bits.hasDirty) 
+    // lsu还在发force_order并且dcache行里面还有dirty，就进行在总线空闲时进行fence操作
+    fenceReadValid := (io.lsu.force_order && fenceMetaRead.resp.bits.hasDirty) && axiReady 
     //清掉里面所有的load指令(第一个周期清,之后别一直拉高)
-    mshrs.io.fenceClear := fenceValid && RegNext(!fenceValid)
+    mshrs.io.fenceClear := fenceReadValid && RegNext(!fenceReadValid)
+
+    // wfu做完之后去清除掉对应的meta行
+    fenceClearValid := wfu.io.fenceClearReq.valid
+
     // 只要meta没有dirty，就可以回应fence，不需要管流水线和mshr状态（如果里面有没做完的指令，lsu肯定非空，unique仍然会停留在dispatch）
     io.lsu.ordered := !fenceMetaRead.resp.bits.hasDirty
 
@@ -237,8 +242,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                         Mux( mshrReplayValid, true.B,
                         Mux( mshrReadValid,   true.B,
                         Mux( lsuNormalValid,  io.lsu.req.bits(w).valid,
-                        Mux( fenceValid,      true.B,
-                        Mux( prefetchValid ,    true.B, false.B)))))))))
+                        Mux( fenceReadValid,      true.B,
+                        Mux( fenceClearValid,     true.B,
+                        Mux( prefetchValid ,    true.B, false.B))))))))))
         }.otherwise{
             // 能用到这个else的只有lsu的请求,包括lsuMMIOValid/lsuNormalValid
             s0valid(w) := Mux( lsuMMIOValid || lsuNormalValid, io.lsu.req.bits(w).valid, false.B)
@@ -259,8 +265,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                         Mux( mshrReplayValid, mshrs.io.replay.bits,
                         Mux( mshrReadValid,   mshrs.io.newFetchreq.bits,
                         Mux( lsuNormalValid,  io.lsu.req.bits(w).bits,
-                        Mux( fenceValid,      dontCareReq,
-                        Mux( prefetchValid ,    dontCareReq, dontCareReq)))))))))
+                        Mux( fenceReadValid,      dontCareReq,
+                        Mux( fenceClearValid,     wfu.io.fenceClearReq.bits,
+                        Mux( prefetchValid ,    dontCareReq, dontCareReq))))))))))
         }otherwise{
             s0req(w) := Mux(lsuMMIOValid || lsuNormalValid, io.lsu.req.bits(w).bits, dontCareReq)
         }
@@ -276,7 +283,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                     Mux( mshrReplayValid, replay,
                     Mux( mshrReadValid,   mshrread,
                     Mux( lsuNormalValid,  lsu,
-                    Mux( fenceValid,      fence,
+                    Mux( fenceReadValid,      fence_read,
                     Mux( prefetchValid ,    prefetch, nil)))))))))
 
     // 做判断接replay请求
@@ -292,7 +299,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     s0pos := Mux( wbValid, wfu.io.pos,
             Mux( refillValid,   wfu.io.pos,         
             Mux( mshrReplayValid, mshrs.io.replaypos,
-                                     nil)))
+            Mux( fenceClearValid,     wfu.io.pos,
+                                     0.U))))
 
 
     // mshrread 的时候传出来的去fetch的地址
@@ -340,9 +348,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         
     }.elsewhen(s0state === mmioresp || s0state === mmioreq){
         // mmio在s0不走cache,没什么做的
-    }.elsewhen(s0state === fence){
+    }.elsewhen(s0state === fence_read){
         // 要告诉meta，fenceRead一行出来
         fenceMetaRead.req.valid := true.B
+        fenceMetaRead.req.bits.isFence := true.B
+    }.elsewhen(s0state === fence_clear){
+
     }.otherwise{
         // TODO prefetch cacop
     }
@@ -437,7 +448,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     }.elsewhen(s1state === mmioresp || s1state === mmioreq){
         // mmioresp:s1不干活，等着后面s2交还给lsu
         // mmioreq:s1不干活，等着后面发请求给axi
-    }.elsewhen(s1state === fence){
+    }.elsewhen(s1state === fence_read){
         when(!fenceMetaRead.resp.bits.hasDirty) {
             //没有Dirty就不做了
         }.otherwise{
@@ -593,7 +604,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     }.elsewhen(s2state === mshrread){
         // 激活wfu在1阶段就做完了
-    }.elsewhen(s2state ===fence){
+    }.elsewhen(s2state ===fence_read){
         // 激活wfu在1阶段就做完了,这里可能之后做fenceWrite的清除对应meta行
     }.elsewhen(s2state === wb){
         // 将读到的data给wfu
@@ -687,6 +698,15 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         sendNack(0) := false.B
         sendResp(1) := false.B
         sendNack(1) := false.B
+    }.elsewhen(s2state === fence_clear){
+        // 清除对应的meta行的dirty位
+        fenceMetaWrite.req.valid := s2valid(0)
+        fenceMetaWrite.req.bits.idx := getIdx(s2req(0).addr)
+        fenceMetaWrite.req.bits.pos := s2pos
+
+        fenceMetaWrite.req.bits.setdirty.valid := true.B
+        fenceMetaWrite.req.bits.setdirty.bits := false.B
+
     }.elsewhen(s2state === prefetch){
         // TODO
     }.elsewhen(s2state === nil){
@@ -705,10 +725,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     // 当两个都ready并且流水线中没有fence,mmioreq,mshrread,mmioresp,wb,refill的时候，axiReady才会拉高
     axiReady := (wfu.io.ready && mmiou.io.ready) &&
-                (s1state =/= fence && s1state =/= mmioresp && s1state =/= mmioreq && s1state =/= mshrread && s1state =/= wb && s1state =/= refill) &&
-                (s2state =/= fence && s2state =/= mmioresp && s2state =/= mmioreq && s2state =/= mshrread && s2state =/= wb && s2state =/= refill)
-
-
+                (s1state =/= fence_read && s1state =/= fence_clear && s1state =/= mmioresp && s1state =/= mmioreq && s1state =/= mshrread && s1state =/= wb && s1state =/= refill) &&
+                (s1state =/= fence_read && s2state =/= fence_clear && s2state =/= mmioresp && s2state =/= mmioreq && s2state =/= mshrread && s2state =/= wb && s2state =/= refill)
 
     // TODO enable continuous hit store forwarding(DONE)
     // TODO simplify the IO channel of DCacheData and DCacheMeta(DONE)

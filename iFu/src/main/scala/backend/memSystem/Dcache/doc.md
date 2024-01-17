@@ -131,3 +131,9 @@ lsuMMIOValid := io.lsu.req.fire && lsuhasMMIO && axiReady
 lsuNormalValid := io.lsu.req.fire && !lsuhasMMIO && io.lsu.req.ready
 ```
 
+9. 有关fenceClear的meta行处理
+目前写回脏行之后不动其他位,只做dirty位
+如果仅仅在写回脏行之后清掉meta的dirty位,那以后有个对该行的uncacheable的写请求,就会造成不一致
+但是上述操作本身就是具有破坏缓存一致性的风险,这应该是不会发生的
+
+10. TODO: 协调lsu的信号控制:如果仅仅是isunique,就只判断stqEmpty,只有fence指令才会给dcache发force_order,才会判断dcache的ordered

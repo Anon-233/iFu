@@ -12,8 +12,8 @@ import iFu.util._
 // 区分DcacheMetaResp
 class MetaResp extends CoreBundle with HasDcacheParameters{
     val rmetaSet  = Vec(nWays, new MetaLine)
-    // 供外界判断是否有dirty
-    val hasDirty  = Bool()
+    val dirtyIdx  = UInt(nIdxBits.W)
+    val dirtyPos  = UInt(log2Ceil(nWays).W)
 }
 
 class MetaIO extends CoreBundle with HasDcacheParameters{
@@ -25,6 +25,8 @@ class DcacheMeta extends Module with HasDcacheParameters{
     val io = IO(new CoreBundle{ 
         val read     = Vec( memWidth ,new MetaIO)
         val write    = new MetaIO
+    // 专线hasDirty
+        val hasDirty = Output(Bool())
     })
 
     val valids = RegInit(VecInit(Seq.fill(nSets)(VecInit(Seq.fill(nWays)(false.B)))))
@@ -48,10 +50,10 @@ class DcacheMeta extends Module with HasDcacheParameters{
     // preserve dirty position
     val dirtyIdx = Wire(UInt(nIdxBits.W))
     dirtyIdx := PriorityEncoder(valids zip dirtys map { case (v, d) => (v.asUInt & d.asUInt).orR })
-
-    val hasDirty = dirtys.map(_.asUInt.orR).reduce(_ || _)
-    // 通过0号口持续向外传
-    io.read(0).resp.bits.hasDirty := RegNext(hasDirty)
+    val dirtyPos = Wire(UInt(log2Ceil(nWays).W))
+    dirtyPos := PriorityEncoder(valids(dirtyIdx).asUInt & dirtys(dirtyIdx).asUInt)
+    //传递有脏位的信息
+    io.hasDirty := dirtys.map(_.asUInt.orR).reduce(_ || _)
     // read
     val rvalid  = io.read.map( _.req.valid)
     val rreq    = io.read.map( _.req.bits)
@@ -77,6 +79,8 @@ class DcacheMeta extends Module with HasDcacheParameters{
         }
         io.read(w).resp.bits.rmetaSet := rmetaSet(w)
         io.read(w).resp.valid := RegNext(rvalid(w))
+        io.read(w).resp.bits.dirtyIdx := RegNext(dirtyIdx)
+        io.read(w).resp.bits.dirtyPos := RegNext(dirtyPos)
     }
 
     // write
