@@ -57,11 +57,17 @@ class DcacheParameters {
     def nRowWords = nRowBits / 32
     val nSets = 64
     val nWays = 8
+
+    def nTotalWords    = nSets * nWays * nRowWords
+
+    def n1vIdxBits     = log2Ceil(nTotalWords)
+
     val nMSHR = 8
     val nTLBEntries = 32
     def nOffsetBits = log2Ceil(nRowBytes)
     def nIdxBits = log2Ceil(nSets)
     def nTagBits = 32 - nOffsetBits - nIdxBits
+    def nAgebits = 10
     val coreDataBits = 32
     val vaddrBits = 32
     def nBlockAddrBits = vaddrBits - nOffsetBits
@@ -71,6 +77,7 @@ class DcacheParameters {
     val nFirstMSHRs = 4
     val nSecondMSHRs = 8
 
+    def getWordOffset(vaddr: UInt): UInt = vaddr(nOffsetBits - 1, 2)
     def getIdx(vaddr: UInt): UInt = vaddr(nOffsetBits + nIdxBits - 1, nOffsetBits)
     def getTag(vaddr: UInt): UInt = vaddr(vaddrBits - 1, vaddrBits - nTagBits)
     def getBlockAddr(vaddr: UInt): UInt = vaddr(vaddrBits - 1, nOffsetBits)
@@ -78,6 +85,8 @@ class DcacheParameters {
     def isStore(req : DCacheReq): Bool = req.uop.use_stq
 
     def isMMIO(req : DCacheReq): Bool = req.is_uncacheable
+
+    def isUncacheable(req : DCacheReq): Bool = req.is_uncacheable
 
 }
 

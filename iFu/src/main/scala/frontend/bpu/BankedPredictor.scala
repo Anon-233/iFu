@@ -259,18 +259,18 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
     // f2以f1为基础，接收btb，bim的输出结果
     io.resp.f2 := RegNext(io.resp.f1)
 
-    for(w <- 0 until bankWidth){
+    for (w <- 0 until bankWidth) {
         // bim预测taken（不存在命不命中的说法）覆盖f2的初值
-        io.resp.f2(w).taken := btb.io.s2taken(w)
+        io.resp.f2(w).taken := bim.io.s2taken(w)
 
         // 对于btb，当且仅当命中，结果的valid有效，才会把对应的结果覆盖f2的初值
-        when(btb.io.s2targs(w).valid){
+        when (btb.io.s2targs(w).valid) {
             io.resp.f2(w).isBranch := btb.io.s2br(w)
             io.resp.f2(w).isJal := btb.io.s2jal(w)
             io.resp.f2(w).predictedpc := btb.io.s2targs(w)
 
             // btb推测为taken为真当且仅当检测到jal指令，这时bim置信度显然没有必然跳转的jal高，取btb的taken
-            when(btb.io.s2taken(w)){
+            when (btb.io.s2taken(w)) {
             io.resp.f2(w).taken := btb.io.s2taken(w)
             }
 
