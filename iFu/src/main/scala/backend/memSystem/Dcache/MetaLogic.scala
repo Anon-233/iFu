@@ -281,12 +281,13 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
             }
             is(fence_R){
                 io.fenceRead.resp := readResp(w)
-                // 这个hasDirty要始终返回hasDirty给外界
-                io.fenceRead.resp.bits.hasDirty := meta.io.hasDirty
+
             }
         }
     }
 
+    // 这个hasDirty要始终通过fenceRead返回hasDirty给外界
+    io.fenceRead.resp.bits.hasDirty := meta.io.hasDirty
 
 
     //write
