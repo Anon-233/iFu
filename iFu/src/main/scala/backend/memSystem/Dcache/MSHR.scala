@@ -246,7 +246,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     newblockAddrMatches(i) := firstMSHRs(i).newblockAddrMatch
 
     firstMSHRs(i).brupdate := io.brupdate
-    firstMSHRs(i).reset := !firstMSHRs(i).hasStore /* && io.fenceClear */
+    firstMSHRs(i).reset :=  false.B/*!firstMSHRs(i).hasStore && io.fenceClear */
 
     firstMSHRs(i).fetchedBlockAddr := io.fetchedBlockAddr
     firstMSHRs(i).fetchReady := io.fetchReady
@@ -306,7 +306,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         secondMSHRs(i).fetchedpos := 0.U
         
         secondMSHRs(i).brupdate := io.brupdate
-        secondMSHRs(i).reset := !secondMSHRs(i).hasStore /* && io.fenceClear */
+        secondMSHRs(i).reset := false.B/*!secondMSHRs(i).hasStore && io.fenceClear */
 
         secondMSHRs(i).replayReq.ready := false.B
         
