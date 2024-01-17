@@ -150,3 +150,6 @@ fence之后必须彻底清除掉这一行
 
 
 10. TODO: 协调lsu的信号控制:如果仅仅是isunique,就只判断stqEmpty,只有fence指令才会给dcache发force_order,才会判断dcache的ordered
+
+11. 对于mshr的fenceClear:
+不需要,unique亮起来的时候,此时后端所有的指令都是一定要完成的,不用清什么ld之类的

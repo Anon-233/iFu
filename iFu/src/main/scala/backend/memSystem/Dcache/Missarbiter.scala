@@ -62,7 +62,7 @@ class Missarbiter extends CoreModule with HasDcacheParameters {
     io.sendNack(1) := Mux(io.mshrReq.ready, false.B, true.B)
 
 
-  }.elsewhen((io.miss(0) && io.alive(0)) && (io.miss(1) && io.alive(1))) {
+  }.elsewhen(wantaccess(0) && wantaccess(1)){
 
     // 0号按存不进去处理
     io.sendResp(0) := false.B

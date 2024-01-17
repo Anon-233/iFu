@@ -185,9 +185,12 @@ class WriteFetchUnit extends Module  with HasDcacheParameters{
 
                     io.pos := replaceWay
 
+                    // 做完了恢复初始状态再退出
                     replaceAddr := 0.U
                     replaceWay := 0.U
                     wbOnly := false.B
+                    tail := 0.U
+                    execute_head := 0.U
                 }
             }
 

@@ -212,24 +212,30 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // 检查全局，如果此时流水线的s0和s1阶段状态为lsu并且有store，就将其kill掉
     val s2StoreFailed = WireInit(false.B)
 
-    // 如果当周期检测到有非lsu请求的话，就将它置零，下周期lsu发送不过来，同时再去执行非lsu请求
+    // 对于普通lsu请求,如果当周期检测到有高于lsu优先级请求的话，就将ready置零，下周期lsu发送不过来，同时再去执行非lsu请求
+    // 对于mmio的lsu请求,要看总线是否空闲,如果总线空闲,就可以发,如果总线不空闲,就不让发
     io.lsu.req.ready := !(wbValid   ||
                           refillValid ||
-                          (io.lsu.req.valid && lsuhasMMIO && !axiReady) ||
+                          fenceClearValid  || 
                           mmioRespValid ||
                           mshrReplayValid ||
-                            // 这个信号用于判断s2storeFailed的时候不去接当周期lsu的store请求
+                          mshrReadValid ||
+                        // 这个信号用于判断s2storeFailed的时候不去接当周期lsu的store请求
                           (lsuhasStore && s2StoreFailed) || 
-                          mshrReadValid || 
-                          prefetchValid
+                        // 如果lsu是mmo  
+                           (io.lsu.req.valid && lsuhasMMIO && !axiReady)
                           )
 
   
     // 总线相关请求是最高优先级,包括wb和refill这两个请求,他们互斥,只有一个会发生
     // lsuMMIOValid 和 mmioRespValid 也是总线请求
-    // (同一时间,以上四个最多只有一个发生)
+    // fenceClear 和 fenceRead也都属于总线请求
+    // (同一时间,以上六个最多只有一个发生)
+    
     // 然后是mshrrepplay,和mshrread
     // 然后lsu的请求
+    // 然而fenceRead的时候其实是清除脏位,往往配合未完成的store指令一起做完才算完事,因此要给lsu和mshr,replay让步
+    // 优先级很低,可以等着,但是fenceClear是要点名清除某一行,那个周期发了必须做,之后就没这个信号了,因此fenceClear优先级要在总线最高级那里
 
     val s0valid = Wire(Vec(memWidth, Bool()))
 
@@ -237,13 +243,13 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         when(w.U === 0.U){
             s0valid(w) := Mux(wbValid, true.B,
                         Mux( refillValid,         true.B,
+                        Mux( fenceClearValid,     true.B,
                         Mux( lsuMMIOValid,   io.lsu.req.bits(w).valid,
                         Mux( mmioRespValid    , true.B,
                         Mux( mshrReplayValid, true.B,
                         Mux( mshrReadValid,   true.B,
                         Mux( lsuNormalValid,  io.lsu.req.bits(w).valid,
                         Mux( fenceReadValid,      true.B,
-                        Mux( fenceClearValid,     true.B,
                         Mux( prefetchValid ,    true.B, false.B))))))))))
         }.otherwise{
             // 能用到这个else的只有lsu的请求,包括lsuMMIOValid/lsuNormalValid
@@ -258,7 +264,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     for(w <- 0 until memWidth){
         when(w.U === 0.U){
             s0req(w)  := Mux(wbValid, wfu.io.axiReadReq.bits,
-                        Mux( refillValid,   wfu.io.axiWriteReq.bits,         
+                        Mux( refillValid,   wfu.io.axiWriteReq.bits, 
+                        Mux( fenceClearValid,     wfu.io.fenceClearReq.bits,        
                         Mux( lsuMMIOValid,   io.lsu.req.bits(w).bits,
                         // 这里的mmioresp是DcacheReq作为载体,data是可能的rdata,uop是对应uop
                         Mux( mmioRespValid    , mmiou.io.mmioResp.bits,
@@ -266,7 +273,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                         Mux( mshrReadValid,   mshrs.io.newFetchreq.bits,
                         Mux( lsuNormalValid,  io.lsu.req.bits(w).bits,
                         Mux( fenceReadValid,      dontCareReq,
-                        Mux( fenceClearValid,     wfu.io.fenceClearReq.bits,
                         Mux( prefetchValid ,    dontCareReq, dontCareReq))))))))))
         }otherwise{
             s0req(w) := Mux(lsuMMIOValid || lsuNormalValid, io.lsu.req.bits(w).bits, dontCareReq)
@@ -277,14 +283,15 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
 
     val s0state =   Mux( wbValid, wb,
-                    Mux( refillValid,   refill,         
+                    Mux( refillValid,   refill,
+                    Mux( fenceClearValid, fence_clear,        
                     Mux( lsuMMIOValid,   mmioreq,
                     Mux( mmioRespValid    , mmioresp,
                     Mux( mshrReplayValid, replay,
                     Mux( mshrReadValid,   mshrread,
                     Mux( lsuNormalValid,  lsu,
                     Mux( fenceReadValid,      fence_read,
-                    Mux( prefetchValid ,    prefetch, nil)))))))))
+                    Mux( prefetchValid ,    prefetch, nil))))))))))
 
     // 做判断接replay请求
     mshrs.io.replay.ready := s0state === replay
@@ -492,7 +499,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val missArbiter = Module(new Missarbiter)
     missArbiter.io.req := s2req
     missArbiter.io.miss := s2hit.map(x => ~x)
-    missArbiter.io.alive := s2valid
+    for(w <- 0 until memWidth){
+        missArbiter.io.alive(w) := s2valid(w) && s2state === lsu
+    }
     missArbiter.io.mshrReq.ready := false.B
 
 
