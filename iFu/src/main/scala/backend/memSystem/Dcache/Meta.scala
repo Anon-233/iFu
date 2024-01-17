@@ -41,8 +41,7 @@ class DcacheMeta extends Module with HasDcacheParameters{
         when (resetIdx === (nSets - 1).U) {
             reseting := false.B
         }
-        tags.write(resetIdx, VecInit(Seq.fill(nWays)(0.U)))
-        valids(resetIdx) := VecInit(Seq.fill(nWays)(false.B))
+        // tags.write(resetIdx, VecInit(Seq.fill(nWays)(0.U)))
         resetIdx := resetIdx + 1.U
     }
 
@@ -128,10 +127,10 @@ class DcacheMeta extends Module with HasDcacheParameters{
         val wpos_bypass = RegNext(wpos)
         when (RegNext(bypass(w))) {
             // 看看write操作对应位有修改吗，如果有，用写的值，没有的话，还是保留原来读到的rmetaSet的值
-            io.read(w).resp.bits.rmetaSet(wpos_bypass).valid := Mux(RegNext(wreq.setvalid.valid), RegNext(wreq.setvalid.bits), rmetaSet(w)(wpos).valid)
-            io.read(w).resp.bits.rmetaSet(wpos_bypass).dirty := Mux(RegNext(wreq.setdirty.valid), RegNext(wreq.setdirty.bits), rmetaSet(w)(wpos).dirty)
-            io.read(w).resp.bits.rmetaSet(wpos_bypass).readOnly := Mux(RegNext(wreq.setreadOnly.valid), RegNext(wreq.setreadOnly.bits), rmetaSet(w)(wpos).readOnly)
-            io.read(w).resp.bits.rmetaSet(wpos_bypass).tag := Mux(RegNext(wreq.setTag.valid), RegNext(wreq.setTag.bits), rmetaSet(w)(wpos).tag)
+            io.read(w).resp.bits.rmetaSet(wpos_bypass).valid := Mux(RegNext(wreq.setvalid.valid), RegNext(wreq.setvalid.bits), rmetaSet(w)(wpos_bypass).valid)
+            io.read(w).resp.bits.rmetaSet(wpos_bypass).dirty := Mux(RegNext(wreq.setdirty.valid), RegNext(wreq.setdirty.bits), rmetaSet(w)(wpos_bypass).dirty)
+            io.read(w).resp.bits.rmetaSet(wpos_bypass).readOnly := Mux(RegNext(wreq.setreadOnly.valid), RegNext(wreq.setreadOnly.bits), rmetaSet(w)(wpos_bypass).readOnly)
+            io.read(w).resp.bits.rmetaSet(wpos_bypass).tag := Mux(RegNext(wreq.setTag.valid), RegNext(wreq.setTag.bits), rmetaSet(w)(wpos_bypass).tag)
         }
     }
 

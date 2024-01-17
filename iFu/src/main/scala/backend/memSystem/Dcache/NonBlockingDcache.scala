@@ -169,15 +169,15 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         req.valid && isMMIO(req.bits)
     ).reduce(_||_)
 
-    // 流水线里面有mmioresp的时候，下一个请求不要进来
-    lsuMMIOValid := io.lsu.req.valid && lsuhasMMIO && axiReady
-    lsuNormalValid := io.lsu.req.valid && !lsuhasMMIO
+    // 流水线里面有mmioresp的时候，下一个fire的请求不要进来
+    lsuMMIOValid := io.lsu.req.fire && lsuhasMMIO && axiReady
+    lsuNormalValid := io.lsu.req.fire && !lsuhasMMIO && io.lsu.req.ready
 
 
     val lsuhasStore = io.lsu.req.bits.map( req =>
         req.valid && isStore(req.bits)
     ).reduce(_||_)
-       
+
     // 存储mshr的信息
     val mshrs = Module(new MSHRFile)
 
@@ -459,7 +459,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     }
     // }
 
-
     val s2valid = WireInit(0.U.asTypeOf(Vec(memWidth , Bool())))
     for(w <- 0 until memWidth){
                         // 上个周期没被kill
@@ -478,7 +477,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s2pos = RegNext(s1pos)
     // lsu请求下hit的pos
     val s2hitpos = RegNext(s1hitpos)
-
     // lsu阶段，如果发生了miss，将由missArbiter来决定写入mshr行为
     val missArbiter = Module(new Missarbiter)
     missArbiter.io.req := s2req
@@ -508,39 +506,52 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // 以上将所有中途kill或者miss的请求都处理完了，接下来处理hit且活着的请求
         for(w <- 0 until memWidth){
             when(s2hit(w)){
-                // hit的指令，返回数据
-                sendResp(w) := s2valid(w)
-                sendNack(w) := false.B
+                sendResp(w):= s2valid(w)
+                sendNack(w):= false.B
 
                 when(isStore(s2req(w))){
-                    // meta,data写操作
-                    // meta拉高dirty位
-                    lsuMetaWrite.req.valid := s2valid(w)
-                    lsuMetaWrite.req.bits.idx := getIdx(s2req(w).addr)
-                    lsuMetaWrite.req.bits.pos := s2hitpos(w)
+                    when(mshrs.io.hasStore){
+                        // 如果这个即将想要完成的store指令发现mshr里面还有store指令
+                        // (重填结束的下一周期，store的replay先于其他内容
+                        // 充填结束后的两个周期其他st都会被这个hasStore约束不会超前执行
+                        // 自己不能先于其执行，因此按照storeFailed反馈
+                        sendResp(w):= false.B
+                        sendNack(w):= s2valid(w)
 
-                    lsuMetaWrite.req.bits.setdirty.valid := true.B
-                    lsuMetaWrite.req.bits.setdirty.bits := true.B
-                    
-                    //data 执行写操作
-                    val rdata = lsuDataRead(w).resp.bits.data
-                    val wdata = WordWrite(s2req(w) , rdata)
+                        s2StoreFailed := s2valid(w)
+                        io.lsu.resp(w).bits.data := DontCare
+                        io.lsu.resp(w).bits.uop := s2req(w).uop
+                    }.otherwise{
+                        // 正常操作
+
+                        // meta,data写操作
+                        // meta拉高dirty位
+                        lsuMetaWrite.req.valid := s2valid(w)
+                        lsuMetaWrite.req.bits.idx := getIdx(s2req(w).addr)
+                        lsuMetaWrite.req.bits.pos := s2hitpos(w)
+
+                        lsuMetaWrite.req.bits.setdirty.valid := true.B
+                        lsuMetaWrite.req.bits.setdirty.bits := true.B
+                        
+                        //data 执行写操作
+                        val rdata = lsuDataRead(w).resp.bits.data
+                        val wdata = WordWrite(s2req(w) , rdata)
 
 
-                    lsuDataWrite.req.valid := s2valid(w)
-                    lsuDataWrite.req.bits.idx := getIdx(s2req(w).addr)
-                    lsuDataWrite.req.bits.pos := s2hitpos(w)
-                    lsuDataWrite.req.bits.offset := getWordOffset(s2req(w).addr)
-                    lsuDataWrite.req.bits.data := wdata
+                        lsuDataWrite.req.valid := s2valid(w)
+                        lsuDataWrite.req.bits.idx := getIdx(s2req(w).addr)
+                        lsuDataWrite.req.bits.pos := s2hitpos(w)
+                        lsuDataWrite.req.bits.offset := getWordOffset(s2req(w).addr)
+                        lsuDataWrite.req.bits.data := wdata
 
-                    io.lsu.resp(w).bits.data := DontCare
-                    io.lsu.resp(w).bits.uop := s2req(w).uop
-
-
+                        io.lsu.resp(w).bits.data := DontCare
+                        io.lsu.resp(w).bits.uop := s2req(w).uop
+                        }
 
                 }.otherwise{
                     // load，现在的meta,data自带转发功能不用特别判断什么
-                    io.lsu.resp(w).bits.data := lsuDataRead(w).resp.bits.data 
+                    
+                    io.lsu.resp(w).bits.data := lsuDataRead(w).resp.bits.data
                     io.lsu.resp(w).bits.uop := s2req(w).uop
                 }
             }

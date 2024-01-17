@@ -28,7 +28,7 @@ class DcacheData extends Module with HasDcacheParameters{
             reseting := false.B
         }
 
-        data.write(reset_1vIdx, 0.U)
+        // data.write(reset_1vIdx, 0.U)
         reset_1vIdx := reset_1vIdx + 1.U
     }
 
@@ -40,6 +40,8 @@ class DcacheData extends Module with HasDcacheParameters{
     for (w <- 0 until memWidth) {
         io.read(w).resp := 0.U.asTypeOf(Valid(new DcacheDataResp))
         io.read(w).resp.valid := RegNext(rvalid(w))
+        val rdata = data.read(ridx1v(w))
+        dontTouch(rdata)
         io.read(w).resp.bits.data := data.read(ridx1v(w))
     }
 
@@ -58,6 +60,7 @@ class DcacheData extends Module with HasDcacheParameters{
 
     // bypass
     val bypass = Wire(Vec(memWidth, Bool()))
+    dontTouch(bypass)
     for (w <- 0 until memWidth) {
         // 当周期判断，下周期转发
         bypass(w) := rvalid(w) && wvalid && (ridx1v(w) === widx1v)

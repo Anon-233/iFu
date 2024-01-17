@@ -85,6 +85,7 @@ for(w <- 0 until memWidth){
 问题：在一个storemiss ， 进了mshr，lsu会从下一个st指令一直重发，这里应该不允许做完（保证顺序！）
 
 解决此问题需要利用的机制是，s1判断，如果mshr里面有store，就判为miss，然后再以s2的时候hasStore接不了而引起重发
+<!-- 这个不好 -->
 
 
 然而，如果refill最后一个到第二周期，是一个曾经miss的store指令发起的，就会导致这个store在下个周期才能被replay
@@ -96,8 +97,8 @@ replay到s0的时候，s2的storemiss发现没有hasStore，就可以存进去�
 
 作出改动：首先一个一表项直到fetchReady后的两周期才会被清掉，多留两个周期的"影子"，然后，所有s1判断到mshr.io.hasStore的st会被判为miss
 
-1. refill，fetchReady，s1的miss，一周期之后进去，一表项还在，根据影子判断是secondMiss
-2. refill，fetchReady，s0的超前命中st，一周期之后，一表项还在，hasStore还是为高，自己被判为miss，两周期之后，一表项还在，自己装不进去，会发回nack，导致重发
+- refill，fetchReady，s1的miss，一周期之后进去，一表项还在，根据影子判断是secondMiss
+- refill，fetchReady，s0的超前命中st，一周期之后，一表项还在，hasStore还是为高，自己被判为miss，两周期之后，一表项还在，自己装不进去，会发回nack，导致重发
 
 这两个特殊的周期由此解决、
 
@@ -106,3 +107,27 @@ replay到s0的时候，s2的storemiss发现没有hasStore，就可以存进去�
 移除fakeFirstMiss，保留快速唤醒，将hasStore转变为一二表项共同的判断逻辑
 并且这两个特殊的存活周期中该表项会变成ready，并且记录下replay的pos，
 如果在特殊周期有二次命中，肯定不能从头开始等（那一个一表项马上消失，等不来的），必须快速唤醒，并且从那个一表项拿replaypos
+
+6. 对上面乱序的补充
+判断st乱序的情况不能只看mshr的hasStore,还要看流水线里面有无比他前面的store，如果有，自己要按miss论处，判断逻辑在s1，因此hasStore要看mshr和s2里面的store
+
+```scala
+    // mshr有store，或者s2里面有一个即将失败的store请求，还在s1的store就要把自己判断为miss
+    val hasStore = mshrs.io.hasStore || (s2valid(0) &&isStore(s2req(0)) && !s2hit(0)) 
+
+    s1hit(w) := Mux(isStore(s1req(w)) && hasStore, false.B, true.B)
+```
+
+7. reseting
+dcache一共64*8*16个字需要很多个周期才reset为0，这期间如果请求已经发过来了，就可能被reset覆盖掉！
+因此先不做数据的reset试一下
+
+
+8. 
+把这里的req.valid变成了req.fire，否则lsu没发这边已经开始拿过来做了就会导致问题发生
+```scala
+// 流水线里面有mmioresp的时候，下一个fire的请求不要进来
+lsuMMIOValid := io.lsu.req.fire && lsuhasMMIO && axiReady
+lsuNormalValid := io.lsu.req.fire && !lsuhasMMIO && io.lsu.req.ready
+```
+
