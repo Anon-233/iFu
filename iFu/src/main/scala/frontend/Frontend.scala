@@ -469,15 +469,13 @@ class Frontend extends CoreModule {
         }
     }
 // -------------------------------------------------------
+    val f4_clear = WireInit(false.B)
     val f4 = withReset(reset.asBool || f4_clear) {
         Module(new Queue(new FetchBundle, 1, pipe = true, flow = false))
     }
 
     val f4_btb_corrections = Module(new Queue(new BranchPredictionUpdate, 2))
 // -------------------------------------------------------
-
-    val f4_clear = WireInit(false.B)
-
     f4_btb_corrections.io.enq.valid                   := f3_ifu_resp.io.deq.fire && f3_btb_mispredicts.reduce(_||_)
     f4_btb_corrections.io.enq.bits                    := DontCare
     f4_btb_corrections.io.enq.bits.isMispredictUpdate := false.B
