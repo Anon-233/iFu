@@ -45,8 +45,8 @@ class ROBParameters {
 }
 
 class LSUParameters{
-    val numSTQEntries: Int = 32
-    val numLDQEntries: Int = 32
+    val numSTQEntries: Int = 16
+    val numLDQEntries: Int = 16
     val ldqAddrSz    : Int = log2Ceil(numLDQEntries)
     val stqAddrSz    : Int = log2Ceil(numSTQEntries)
 }

@@ -19,7 +19,7 @@ trait HasBPUParameters {
     val blockOffBits = log2Ceil(blockBytes)
     val numChunks = blockBytes / bankBytes
     val nRasEntries = 8
-    val ftqSz = 40   
+    val ftqSz = 40
 
     val CFI_SZ = 2
     val BSRC_SZ = 2
