@@ -39,7 +39,8 @@ class FrontendParameters{
 class ROBParameters {
     val coreWidth: Int = 4
     val retireWidth: Int = 4 //decodeWidth
-    val numRobEntries:Int = 128
+    // val numRobEntries:Int = 128
+    val numRobEntries:Int = 32
     val numRobRows: Int = numRobEntries/coreWidth
     val robAddrSz: Int = log2Ceil(numRobRows) + log2Ceil(coreWidth)
 }
@@ -52,11 +53,11 @@ class LSUParameters{
 }
 
 class DcacheParameters {
-    val nRowBits = 512
-    def nRowBytes = nRowBits / 8
-    def nRowWords = nRowBits / 32
+    val nRowWords = 16
+    def nRowBits = nRowWords * 32
+    def nRowBytes = nRowWords * 4
     val nSets = 64
-    val nWays = 8
+    val nWays = 4
 
     def nTotalWords    = nSets * nWays * nRowWords
 
@@ -110,14 +111,18 @@ trait HasCoreParameters {
     val brTagSz: Int = log2Ceil(maxBrCount)
     val numLRegs: Int = 32
     val lregSz: Int = log2Ceil(numLRegs)
-    val numPRegs: Int = 108
+    // val numPRegs: Int = 108
+    val numPRegs: Int = 63
     val pregSz: Int = log2Ceil(numPRegs)
     val frontendParams: FrontendParameters = new FrontendParameters
     val robParameters: ROBParameters = new ROBParameters
     val lsuParameters: LSUParameters = new LSUParameters
     val dcacheParameters: DcacheParameters = new DcacheParameters
     val issueParams: Seq[IssueParams] = Seq(
-        IssueParams(issueWidth = 2, numIssueSlots = 24, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
-        IssueParams(issueWidth = 4, numIssueSlots = 40, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4))
+        // IssueParams(issueWidth = 2, numIssueSlots = 24, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
+        // IssueParams(issueWidth = 4, numIssueSlots = 40, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4)
+        IssueParams(issueWidth = 2, numIssueSlots = 12, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
+        IssueParams(issueWidth = 4, numIssueSlots = 20, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4)
+        )
     val enableSFBOpt: Boolean = true
 }

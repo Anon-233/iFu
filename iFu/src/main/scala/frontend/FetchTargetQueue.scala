@@ -162,6 +162,7 @@ class FetchTargetQueue extends CoreModule {
     io.bpdUpdate.bits.target             := bpu_tgt
     io.bpdUpdate.bits.cfiIsBr            := bpu_entry.brMask(bpu_entry.cfiIdx.bits)
     io.bpdUpdate.bits.cfiIsJal           := bpu_entry.cfiType === CFI_JAL || bpu_entry.cfiType === CFI_JALR
+    io.bpdUpdate.bits.cfiIsJalr          := false.B
     io.bpdUpdate.bits.gHist              := bpu_gHist
     io.bpdUpdate.bits.meta               := bpu_meta
 // ---------------------------------------------
@@ -211,7 +212,7 @@ class FetchTargetQueue extends CoreModule {
     for (i <- 0 until 2) {
         val idx         = io.getFtqpc(i).ftqIdx
         val next_idx    = WrapInc(idx, numFTQEntries)
-        val next_is_enq = (next_idx === enqPtr) && io.enq.fire
+        val next_is_enq = (next_idx === bpu_ptr) && io.enq.fire
         val next_pc     = Mux(next_is_enq, io.enq.bits.pc, pc_mem(next_idx))
 
         io.getFtqpc(i).entry := RegNext(entries(idx))

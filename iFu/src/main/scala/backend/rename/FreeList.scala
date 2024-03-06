@@ -27,6 +27,7 @@ class FreeList (
 
     //除了x0其他的寄存器刚开始都是free
     val freeList = RegInit(UInt(numPregs.W), ~(1.U(numPregs.W)))
+    // val brAllocList = Reg(Vec(maxBrCount, UInt(numPregs.W)))
     val brAllocList = Reg(Vec(maxBrCount, UInt(numPregs.W)))
 
     //分配

@@ -148,8 +148,16 @@ fence之后必须彻底清除掉这一行
 在普通的替换策略是不需要担心,因为如果那被替换的一行变成readonly,就意味着它在wb,它一定会在wb后fetch被销毁掉,等st来mshrread,这一行就被新的覆盖了
 这时是正常的寻路替换
 
-
+                                                            
 10. TODO: 协调lsu的信号控制:如果仅仅是isunique,就只判断stqEmpty,只有fence指令才会给dcache发force_order,才会判断dcache的ordered
 
 11. 对于mshr的fenceClear:
 不需要,unique亮起来的时候,此时后端所有的指令都是一定要完成的,不用清什么ld之类的
+
+
+
+12. 资源节约 priority Encoder 是否真的需要？
+当前的位置信息使用优先级编码器，方便debug,但是这里会不会造成LUT过多的浪费？
+以及这篇文章所说的
+https://zhuanlan.zhihu.com/p/650745488
+是不是错误将我们的BRAM识别成了LUT？

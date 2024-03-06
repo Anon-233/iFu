@@ -29,10 +29,15 @@ class DcacheMeta extends Module with HasDcacheParameters{
         val hasDirty = Output(Bool())
     })
 
-    val valids = RegInit(VecInit(Seq.fill(nSets)(VecInit(Seq.fill(nWays)(false.B)))))
-    val dirtys = RegInit(VecInit(Seq.fill(nSets)(VecInit(Seq.fill(nWays)(false.B)))))
-    val readOnlys = RegInit(VecInit(Seq.fill(nSets)(VecInit(Seq.fill(nWays)(false.B)))))
-    val fixeds = RegInit(VecInit(Seq.fill(nSets)(VecInit(Seq.fill(nWays)(false.B)))))
+    // val valids = RegInit(VecInit(Seq.fill(nSets)(VecInit(Seq.fill(nWays)(false.B)))))
+    // val dirtys = RegInit(VecInit(Seq.fill(nSets)(VecInit(Seq.fill(nWays)(false.B)))))
+    // val readOnlys = RegInit(VecInit(Seq.fill(nSets)(VecInit(Seq.fill(nWays)(false.B)))))
+    // val fixeds = RegInit(VecInit(Seq.fill(nSets)(VecInit(Seq.fill(nWays)(false.B)))))
+    val valids = RegInit(VecInit(Seq.fill(nSets)(0.U(nWays.W))))
+    val dirtys = RegInit(VecInit(Seq.fill(nSets)(0.U(nWays.W))))
+    val readOnlys = Mem(nSets, UInt(nWays.W))
+    val fixeds = Mem(nSets, UInt(nWays.W))
+    
     val tags = SyncReadMem(nSets, Vec(nWays, UInt(nTagBits.W)))
 
     // reset tags
@@ -49,11 +54,11 @@ class DcacheMeta extends Module with HasDcacheParameters{
 
     // preserve dirty position
     val dirtyIdx = Wire(UInt(nIdxBits.W))
-    dirtyIdx := PriorityEncoder(valids zip dirtys map { case (v, d) => (v.asUInt & d.asUInt).orR })
+    dirtyIdx := PriorityEncoder((0 until nSets).map(i => (valids(i) & dirtys(i)).orR))
     val dirtyPos = Wire(UInt(log2Ceil(nWays).W))
-    dirtyPos := PriorityEncoder(valids(dirtyIdx).asUInt & dirtys(dirtyIdx).asUInt)
+    dirtyPos := PriorityEncoder(valids(dirtyIdx) & dirtys(dirtyIdx))
     //传递有脏位的信息
-    io.hasDirty := dirtys.map(_.asUInt.orR).reduce(_ || _)
+    io.hasDirty := (valids(dirtyIdx) & dirtys(dirtyIdx)).orR
     // read
     val rvalid  = io.read.map( _.req.valid)
     val rreq    = io.read.map( _.req.bits)
@@ -101,22 +106,26 @@ class DcacheMeta extends Module with HasDcacheParameters{
         
         // write valids
         when(wreq.setvalid.valid){
-            valids(widx)(wpos) := wreq.setvalid.bits
+            // valids(widx)(wpos) := wreq.setvalid.bits
+            valids(widx) := (valids(widx) & ~wmask) | (VecInit(Seq.fill(nWays)(wreq.setvalid.bits)).asUInt & wmask) 
         }
 
         // write dirtys
         when(wreq.setdirty.valid){
-            dirtys(widx)(wpos) := wreq.setdirty.bits
+            // dirtys(widx)(wpos) := wreq.setdirty.bits
+            dirtys(widx) := (dirtys(widx) & ~wmask) | (VecInit(Seq.fill(nWays)(wreq.setdirty.bits)).asUInt & wmask)
         }
 
         // write readOnlys
         when(wreq.setreadOnly.valid){
-            readOnlys(widx)(wpos) := wreq.setreadOnly.bits
+            // readOnlys(widx)(wpos) := wreq.setreadOnly.bits
+            readOnlys(widx) := (readOnlys(widx) & ~wmask) | (VecInit(Seq.fill(nWays)(wreq.setreadOnly.bits)).asUInt & wmask)
         }
 
         // write fixeds
         when(wreq.setfixed.valid){
-            fixeds(widx)(wpos) := wreq.setfixed.bits
+            // fixeds(widx)(wpos) := wreq.setfixed.bits
+            fixeds(widx) := (fixeds(widx) & ~wmask) | (VecInit(Seq.fill(nWays)(wreq.setfixed.bits)).asUInt & wmask)
         }
     }
     
@@ -137,7 +146,4 @@ class DcacheMeta extends Module with HasDcacheParameters{
             io.read(w).resp.bits.rmetaSet(wpos_bypass).tag := Mux(RegNext(wreq.setTag.valid), RegNext(wreq.setTag.bits), rmetaSet(w)(wpos_bypass).tag)
         }
     }
-
-
-
 }

@@ -84,8 +84,8 @@ class MSHR extends CoreModule with HasDcacheParameters {
 
     // 数据存储
     val mshr = RegInit(0.U.asTypeOf(new MSHRdata))
-    dontTouch(mshr)
-    dontTouch(io)
+    // dontTouch(mshr)
+    // dontTouch(io)
 
     // 告诉外界是否存了一个store指令
     io.hasStore := isStore(mshr.req) && mshr.valid
@@ -136,7 +136,7 @@ class MSHR extends CoreModule with HasDcacheParameters {
     io.getID := mshr.id
 
     val mshrBlockAddr = Mux(mshr.valid, getBlockAddr(mshr.req.addr), 0.U)
-    dontTouch(mshrBlockAddr)
+    // dontTouch(mshrBlockAddr)
     // 给外界返回match判断
     io.newblockAddrMatch := mshr.valid && mshrBlockAddr === io.newBlockAddr
     io.fetchedBlockAddrMatch := mshr.valid && mshrBlockAddr === io.fetchedBlockAddr
@@ -206,7 +206,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
             
         })
 
-    dontTouch(io)
+    // dontTouch(io)
     val firstMSHRs = VecInit((Seq.fill(nFirstMSHRs)(Module(new MSHR))).map(_.io))
     val secondMSHRs = VecInit((Seq.fill(nSecondMSHRs)(Module(new MSHR))).map(_.io))
 
@@ -227,8 +227,8 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     val haswait = waitinglist.reduce(_ || _)
     val waitingpos = PriorityEncoder(waitinglist)
 
-    dontTouch(waitinglist)
-    dontTouch(haswait)
+    // dontTouch(waitinglist)
+    // dontTouch(haswait)
 
     val firstHasStores = WireInit(0.U.asTypeOf(Vec(nFirstMSHRs, Bool())))
 
