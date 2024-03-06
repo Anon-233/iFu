@@ -915,4 +915,14 @@ class iFuCore extends CoreModule {
 
     io.commit := cmtZipper.io.zippedCommit
     io.event  := eventDetector.io.debug_event
+
+    //-------------------------------------------------------------
+    // *** Perfomance Counters ***
+    //-------------------------------------------------------------
+    val tot = RegInit(0.U(64.W))
+
+    val decode_num = RegInit(0.U(64.W))
+    decode_num := decode_num + PopCount(dec_valids.asUInt)
+
+    
 }

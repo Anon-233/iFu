@@ -164,25 +164,25 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
 
 // ---------------------------------------------
 //      Performance Counter
-    val num_branchs = RegInit(0.U(64.W))
-    num_branchs := num_branchs + PopCount(io.s1targs.map(_.valid))
-    val num_mis_preds = RegInit(0.U(64.W))
-    num_mis_preds := num_mis_preds + PopCount(
-        wastaken zip (0 until bankWidth) map {
-            case (t, idx) => (
-                io.s1update.bits.meta(idx).ubtbMeta.hit &&
-                (meta(io.s1update.bits.meta(idx).ubtbMeta.write_way)(idx).state.isTaken =/= t)
-            ).asBool
-        }
-    )
-    val num_updates = RegInit(0.U(64.W))
-    num_updates := num_updates + io.s1update.valid.asUInt
+    // val num_branchs = RegInit(0.U(64.W))
+    // num_branchs := num_branchs + PopCount(io.s1targs.map(_.valid))
+    // val num_mis_preds = RegInit(0.U(64.W))
+    // num_mis_preds := num_mis_preds + PopCount(
+    //     wastaken zip (0 until bankWidth) map {
+    //         case (t, idx) => (
+    //             io.s1update.bits.meta(idx).ubtbMeta.hit &&
+    //             (meta(io.s1update.bits.meta(idx).ubtbMeta.write_way)(idx).state.isTaken =/= t)
+    //         ).asBool
+    //     }
+    // )
+    // val num_updates = RegInit(0.U(64.W))
+    // num_updates := num_updates + io.s1update.valid.asUInt
 
-    val start = RegInit(false.B)
-    when (num_branchs > 1.U) { start := true.B }
-    when (start && num_branchs(8, 0) === 0.U) {
-        printf("UBTB %d: %d %d %d\n", ubtb_id.U, num_branchs, num_mis_preds, num_updates)
-    }
+    // val start = RegInit(false.B)
+    // when (num_branchs > 1.U) { start := true.B }
+    // when (start && num_branchs(8, 0) === 0.U) {
+    //     printf("UBTB %d: %d %d %d\n", ubtb_id.U, num_branchs, num_mis_preds, num_updates)
+    // }
 // ---------------------------------------------
 }
 
