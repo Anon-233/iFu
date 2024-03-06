@@ -919,10 +919,14 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     // *** Perfomance Counters ***
     //-------------------------------------------------------------
-    val tot = RegInit(0.U(64.W))
-
-    val decode_num = RegInit(0.U(64.W))
-    decode_num := decode_num + PopCount(dec_valids.asUInt)
-
     
+    // a counter
+    val (cntVal, cntWrap) = Counter(true.B, 10000)
+
+    val dec_throughput = RegInit(0.U(64.W))
+    dec_throughput := dec_throughput + PopCount(dec_valids.asUInt)
+    when (cntWrap) {
+        printf("dec_throughput: %d\n", dec_throughput)
+        dec_throughput := 0.U
+    }
 }
