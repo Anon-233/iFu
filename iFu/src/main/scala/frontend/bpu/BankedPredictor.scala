@@ -259,6 +259,7 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
     // f2以f1为基础，接收btb，bim的输出结果
     io.resp.f2 := RegNext(io.resp.f1)
 
+    
     for (w <- 0 until bankWidth) {
         // bim预测taken（不存在命不命中的说法）覆盖f2的初值
         io.resp.f2(w).taken := bim.io.s2taken(w)
@@ -276,6 +277,7 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
 
         }
     }
+   
 
     // f3以f2为基础，接收tage，loop的输出结果
     io.resp.f3 := RegNext(io.resp.f2)
@@ -284,31 +286,33 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
     tage.io.f1gHist := io.f1ghist
     tage.io.previousf3Taken := RegNext(VecInit(io.resp.f2.map(_.taken)))
 
+    /*
     // tage可以根据传入的初值，在内部判断命中与否，在内部自行选择好是否覆盖f3的初值
     // 传出来的值不需要像btb一样再次判断，直接覆盖初值即可
     for(w <- 0 until bankWidth){
         io.resp.f3(w).taken := tage.io.f3taken(w)
     }
+    */
 
 
     // 对于loop，还需要传入f2targs，f2isBr,f3fire,f3mask
 
-        // 接收f2的预测结果targs和br，loop会在内部筛出供f3的跳转指令
+    // 接收f2的预测结果targs和br，loop会在内部筛出供f3的跳转指令
     loop.io.f2targs := VecInit(io.resp.f2.map(_.predictedpc))
     loop.io.f2isBr := VecInit(io.resp.f2.map(_.isBranch))
 
-        // 以及f3fire和s3mask
+    // 以及f3fire和s3mask
     loop.io.f3fire := io.f3fire
     loop.io.f3mask := s3mask
 
+    /*
     for(w <- 0 until bankWidth){
         // 这里只有valid的预测信息才是真正有效，针对命中的循环br指令的，才可以覆盖f3的初值
         when(loop.io.f3taken(w).valid){
             io.resp.f3(w).taken := loop.io.f3taken(w).bits
         }
     } 
-
-    
+    */
 
     // 最后收集五个计数器预测过程中产生的meta信息
     for(w <- 0 until bankWidth ){

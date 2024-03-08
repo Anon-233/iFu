@@ -84,42 +84,50 @@ class BranchPredictor extends Module
     io.resp.f3.meta(0)    := bankedPredictors(0).io.f3meta
     io.resp.f3.meta(1)    := bankedPredictors(1).io.f3meta
 
-
-    when (bank(io.resp.f1.pc) === 0.U) {
-      for (i <- 0 until bankWidth) {
-        io.resp.f1.predInfos(i)           := 0.U.asTypeOf(new PredictionInfo)/* bankedPredictors(0).io.resp.f1(i) */
-        io.resp.f1.predInfos(i+bankWidth) := 0.U.asTypeOf(new PredictionInfo)/* bankedPredictors(1).io.resp.f1(i) */
+    if(EnableBPD){
+      when (bank(io.resp.f1.pc) === 0.U) {
+        for (i <- 0 until bankWidth) {
+          io.resp.f1.predInfos(i)           := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(0).io.resp.f1(i)
+          io.resp.f1.predInfos(i+bankWidth) := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(1).io.resp.f1(i)
+        }
+      } .otherwise {
+        for (i <- 0 until bankWidth) {
+          io.resp.f1.predInfos(i)           := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(1).io.resp.f1(i)
+          io.resp.f1.predInfos(i+bankWidth) := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(0).io.resp.f1(i)
+        }
       }
-    } .otherwise {
-      for (i <- 0 until bankWidth) {
-        io.resp.f1.predInfos(i)           := 0.U.asTypeOf(new PredictionInfo)/* bankedPredictors(1).io.resp.f1(i) */
-        io.resp.f1.predInfos(i+bankWidth) := 0.U.asTypeOf(new PredictionInfo)/* bankedPredictors(0).io.resp.f1(i) */
+
+      when (bank(io.resp.f2.pc) === 0.U) {
+        for (i <- 0 until bankWidth) {
+          io.resp.f2.predInfos(i)           := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(0).io.resp.f2(i)
+          io.resp.f2.predInfos(i+bankWidth) := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(1).io.resp.f2(i)
+        }
+      } .otherwise {
+        for (i <- 0 until bankWidth) {
+          io.resp.f2.predInfos(i)           := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(1).io.resp.f2(i)
+          io.resp.f2.predInfos(i+bankWidth) := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(0).io.resp.f2(i)
+        }
+      }
+
+      when (bank(io.resp.f3.pc) === 0.U) {
+        for (i <- 0 until bankWidth) {
+          io.resp.f3.predInfos(i)           := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(0).io.resp.f3(i)
+          io.resp.f3.predInfos(i+bankWidth) := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(1).io.resp.f3(i)
+        }
+      } .otherwise {
+        for (i <- 0 until bankWidth) {
+          io.resp.f3.predInfos(i)           := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(1).io.resp.f3(i)
+          io.resp.f3.predInfos(i+bankWidth) := /* 0.U.asTypeOf(new PredictionInfo) */bankedPredictors(0).io.resp.f3(i)
+        }
+      }
+    }else{
+      for (i <- 0 until fetchWidth) {
+        io.resp.f1.predInfos(i) := 0.U.asTypeOf(new PredictionInfo)
+        io.resp.f2.predInfos(i) := 0.U.asTypeOf(new PredictionInfo)
+        io.resp.f3.predInfos(i) := 0.U.asTypeOf(new PredictionInfo)
       }
     }
-
-    when (bank(io.resp.f2.pc) === 0.U) {
-      for (i <- 0 until bankWidth) {
-        io.resp.f2.predInfos(i)           := 0.U.asTypeOf(new PredictionInfo)/* bankedPredictors(0).io.resp.f2(i) */
-        io.resp.f2.predInfos(i+bankWidth) := 0.U.asTypeOf(new PredictionInfo)/* bankedPredictors(1).io.resp.f2(i) */
-      }
-    } .otherwise {
-      for (i <- 0 until bankWidth) {
-        io.resp.f2.predInfos(i)           := 0.U.asTypeOf(new PredictionInfo)/* bankedPredictors(1).io.resp.f2(i) */
-        io.resp.f2.predInfos(i+bankWidth) := 0.U.asTypeOf(new PredictionInfo)/* bankedPredictors(0).io.resp.f2(i) */
-      }
-    }
-
-    when (bank(io.resp.f3.pc) === 0.U) {
-      for (i <- 0 until bankWidth) {
-        io.resp.f3.predInfos(i)           := 0.U.asTypeOf(new PredictionInfo)/* bankedPredictors(0).io.resp.f3(i) */
-        io.resp.f3.predInfos(i+bankWidth) := 0.U.asTypeOf(new PredictionInfo)/* bankedPredictors(1).io.resp.f3(i) */
-      }
-    } .otherwise {
-      for (i <- 0 until bankWidth) {
-        io.resp.f3.predInfos(i)           := 0.U.asTypeOf(new PredictionInfo)/* bankedPredictors(1).io.resp.f3(i) */
-        io.resp.f3.predInfos(i+bankWidth) := 0.U.asTypeOf(new PredictionInfo)/* bankedPredictors(0).io.resp.f3(i) */
-      }
-    }
+    
   
 
   io.resp.f1.pc := RegNext(io.f0req.bits.pc)

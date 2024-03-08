@@ -23,6 +23,7 @@ trait HasBPUParameters {
 
     val CFI_SZ = 2
     val BSRC_SZ = 2
+    val EnableBPD = true
 }
 
 trait HasLoopParameters extends HasBPUParameters {

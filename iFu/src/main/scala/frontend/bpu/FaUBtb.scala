@@ -117,7 +117,7 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
     // we don't care if offset > 2^13, BTB will handle it
     val new_offset = (
         (s1_update.bits.target.asSInt) -
-        (s1_update.bits.pc.asSInt + (s1_update.bits.cfiIdx.bits << 2).asSInt)
+        (s1_update.bits.pc.asUInt + (s1_update.bits.cfiIdx.bits << 2).asUInt).asSInt
     )
 
     // update target offset

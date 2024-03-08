@@ -929,4 +929,18 @@ class iFuCore extends CoreModule {
         printf("dec_throughput: %d\n", dec_throughput)
         dec_throughput := 0.U
     }
+
+    val rob_throughput = RegInit(0.U(64.W))
+    rob_throughput := rob_throughput + PopCount(rob.io.commit.valids.asUInt)
+    when (cntWrap) {
+        printf("rob_throughput: %d\n", rob_throughput)
+        rob_throughput := 0.U
+    }
+
+    val rob_throughput_arch = RegInit(0.U(64.W))
+    rob_throughput_arch := rob_throughput_arch + PopCount(rob.io.commit.arch_valids.asUInt)
+    when (cntWrap) {
+        printf("rob_throughput_arch: %d\n", rob_throughput_arch)
+        rob_throughput_arch := 0.U
+    }
 }

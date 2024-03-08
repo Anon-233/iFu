@@ -274,8 +274,8 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
     firstFull := !(firstAllocatable.reduce(_ || _))
 
-    // 传入的请求是不是首次miss
-    val firstMiss = !(newblockAddrMatches.reduce(_ || _))
+    // 传入的请求是不是首次miss, 如果是store指令，必须作为首次miss(见log)
+    val firstMiss = !(newblockAddrMatches.reduce(_ || _)) || isStore(io.req.bits)
     val allocFirstMSHR = PriorityEncoder(firstAllocatable.asUInt)
 
     // 二表中的每一项是否可以写入新的请求

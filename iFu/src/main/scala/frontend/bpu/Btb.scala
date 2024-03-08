@@ -129,7 +129,7 @@ class BtbPredictor extends Module with HasBtbParameters {
     val min_offset = Cat(1.U(1.W), (0.U)((offsetSz - 1).W)).asSInt
     val new_offset = (
         s1_update.bits.target.asSInt -
-        (s1_update.bits.pc.asSInt + (s1_update.bits.cfiIdx.bits << 2).asSInt)
+        (s1_update.bits.pc + (s1_update.bits.cfiIdx.bits << 2)).asSInt
     )
     // handle offset > 2^13
     val need_extend = (new_offset > max_offset) || (new_offset < min_offset)

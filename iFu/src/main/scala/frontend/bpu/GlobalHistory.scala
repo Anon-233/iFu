@@ -43,6 +43,14 @@ class GlobalHistory extends CoreBundle{
         branches: UInt, cfi_taken: Bool, cfi_is_br: Bool, cfi_idx: UInt,
         cfi_valid: Bool, addr: UInt, cfi_is_call: Bool, cfi_is_ret: Bool
     ): GlobalHistory = {
+        // branches: 传进来的predinfo里面有效分支指令的mask
+        // cfi_taken: 这里面确实存在taken的指令
+        // cfi_is_br: 这条指令是branch
+        // cfi_idx: 这条指令在fetchWidth中的位置
+        // cfi_valid: 这条指令是有效的
+        // addr: 这条指令的地址
+        // cfi_is_call: 这条指令是call
+        // cfi_is_ret: 这条指令是ret
         val cfi_idx_fixed = cfi_idx(log2Ceil(fetchWidth) - 1, 0)
         val cfi_idx_oh = UIntToOH(cfi_idx_fixed)
         val new_history = Wire(new GlobalHistory)

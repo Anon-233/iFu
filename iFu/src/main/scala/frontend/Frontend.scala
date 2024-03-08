@@ -116,6 +116,11 @@ class Frontend extends CoreModule {
     val s0_is_replay       = WireInit(false.B)
     val s0_replay_tlb_resp = Wire(new ITLBResp)
 
+    dontTouch(s0_valid)
+    dontTouch(s0_vpc)
+    dontTouch(s0_ghist)
+    dontTouch(s0_is_replay)
+
     // the first cycle after reset, the frontend will fetch from resetPC
     when (RegNext(reset.asBool) && !reset.asBool) {
         s0_valid := true.B
@@ -135,6 +140,13 @@ class Frontend extends CoreModule {
     val s1_vpc       = RegNext(s0_vpc)
     val s1_ghist     = RegNext(s0_ghist)
     val s1_is_replay = RegNext(s0_is_replay)
+
+    dontTouch(f1_clear)
+    dontTouch(s1_valid)
+    dontTouch(s1_vpc)
+    dontTouch(s1_ghist)
+    dontTouch(s1_is_replay)
+
 // --------------------------------------------------------
 // Stage 1 -> access tlb, send paddr to icache, and use bpd.f1 to predict next pc
     // access TLB
@@ -195,6 +207,13 @@ class Frontend extends CoreModule {
     val s2_ghist     = Reg(new GlobalHistory)
     val s2_is_replay = RegNext(s1_is_replay) && s2_valid
     val s2_tlb_resp  = RegNext(f1_tlb_resp)
+
+    dontTouch(f2_clear)
+    dontTouch(s2_valid)
+    dontTouch(s2_vpc)
+    dontTouch(s2_ghist)
+    dontTouch(s2_is_replay)
+    dontTouch(s2_tlb_resp)
 // --------------------------------------------------------
 // Stage 2 -> check and prepare for replay, and use bpd.f2 to redirect(if needed)
     // when replay happened, don't send request to tlb again
@@ -579,4 +598,5 @@ class Frontend extends CoreModule {
         s0_is_replay := false.B
     }
 // --------------------------------------------------------
+
 }
