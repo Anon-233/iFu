@@ -23,7 +23,7 @@ class PredState extends Bundle {
     def update(taken: Bool) = {
         val next = Cat(
             taken ^ state(0),
-            state(1) & (taken ^ state(0))
+            ((~taken) & (~state(1)) & state(0)) | (taken & (state(1) | state(0)))
         )
         this.state := next
     }
