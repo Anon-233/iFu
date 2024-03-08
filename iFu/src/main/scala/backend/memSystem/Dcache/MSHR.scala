@@ -244,8 +244,9 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
     firstMSHRs(i).newBlockAddr := getBlockAddr(io.req.bits.addr)
     newblockAddrMatches(i) := firstMSHRs(i).newblockAddrMatch
-
-    firstMSHRs(i).brupdate := io.brupdate
+    // 一表只起到作为代表去指导取地址，因此不要传入分支更新，即使被kill掉，由于不知道有没有人依赖这个
+    // 一表项，所以不会被分支抹掉,还需要继续取完
+    firstMSHRs(i).brupdate := /* io.brupdate */ 0.U.asTypeOf(new BrUpdateInfo)
     firstMSHRs(i).reset :=  false.B/*!firstMSHRs(i).hasStore && io.fenceClear */
 
     firstMSHRs(i).fetchedBlockAddr := io.fetchedBlockAddr
@@ -275,7 +276,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     firstFull := !(firstAllocatable.reduce(_ || _))
 
     // 传入的请求是不是首次miss, 如果是store指令，必须作为首次miss(见log)
-    val firstMiss = !(newblockAddrMatches.reduce(_ || _)) || isStore(io.req.bits)
+    val firstMiss = !(newblockAddrMatches.reduce(_ || _))
     val allocFirstMSHR = PriorityEncoder(firstAllocatable.asUInt)
 
     // 二表中的每一项是否可以写入新的请求

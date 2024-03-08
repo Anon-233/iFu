@@ -259,7 +259,7 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
     // f2以f1为基础，接收btb，bim的输出结果
     io.resp.f2 := RegNext(io.resp.f1)
 
-    /*
+    
     for (w <- 0 until bankWidth) {
         // bim预测taken（不存在命不命中的说法）覆盖f2的初值
         io.resp.f2(w).taken := bim.io.s2taken(w)
@@ -277,7 +277,7 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
 
         }
     }
-    */
+   
 
     // f3以f2为基础，接收tage，loop的输出结果
     io.resp.f3 := RegNext(io.resp.f2)
