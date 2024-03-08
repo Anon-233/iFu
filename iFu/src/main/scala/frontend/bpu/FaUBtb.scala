@@ -112,12 +112,13 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
     val s1_update         = io.s1update
     val s1_update_cfi_idx = s1_update.bits.cfiIdx.bits
     val s1_update_meta    = VecInit(s1_update.bits.meta.map(_.ubtbMeta))
-    val s1_update_way     = VecInit(s1_update_meta.map(_.write_way))
+    val s1_update_ways     = VecInit(s1_update_meta.map(_.write_way))
+    val s1_update_way     = s1_update_ways(s1_update_cfi_idx)
 
     // we don't care if offset > 2^13, BTB will handle it
     val new_offset = (
         (s1_update.bits.target.asSInt) -
-        (s1_update.bits.pc.asUInt + (s1_update.bits.cfiIdx.bits << 2).asUInt).asSInt
+        (s1_update.bits.pc.asUInt + (s1_update_cfi_idx << 2).asUInt).asSInt
     )
 
     // update target offset
@@ -125,10 +126,16 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
         s1_update.valid && s1_update.bits.isCommitUpdate &&
         s1_update.bits.cfiTaken && s1_update.bits.cfiIdx.valid
     )
-    for (w <- 0 until bankWidth) {
-        when (wen) {
-            btb(s1_update_way(w))(s1_update_cfi_idx).offset := new_offset
-        } 
+    
+    // for (w <- 0 until bankWidth) {
+    //     when (wen) {
+    //         btb(s1_update_way(w))(s1_update_cfi_idx).offset := new_offset
+    //     } 
+    // }
+
+    // among all the ways that are updated, we only care about the hit one
+    when(wen){
+        btb(s1_update_way)(s1_update_cfi_idx).offset := new_offset
     }
 
     // update predictor state\
@@ -140,23 +147,24 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
                 (
                     s1_update.bits.cfiIdx.valid &&
                     s1_update.bits.cfiTaken &&
-                    s1_update.bits.cfiIdx.bits === w.U
+                    s1_update_cfi_idx === w.U
                 )
             )
         )
 
         when (branch_taken) {
-            wastaken(w)      := branch_taken || s1_update.bits.cfiIsJal
+            wastaken(w)      :=  (s1_update_cfi_idx === w.U && s1_update.bits.cfiIdx.valid &&
+                                (s1_update.bits.cfiTaken || s1_update.bits.cfiIsJal))
             val s1_update_tag = fetchIdx(s1_update.bits.pc)
 
-            valid(Cat(s1_update_way(w), w.U(log2Ceil(bankWidth).W))) := true.B
-            meta(s1_update_way(w))(w).is_br := s1_update.bits.brMask(w)
-            meta(s1_update_way(w))(w).tag   := s1_update_tag
+            valid(Cat(s1_update_way, w.U(log2Ceil(bankWidth).W))) := true.B
+            meta(s1_update_way)(w).is_br := s1_update.bits.brMask(w)
+            meta(s1_update_way)(w).tag   := s1_update_tag
 
             when (s1_update_meta(w).hit) {
-                meta(s1_update_way(w))(w).state.update(wastaken(w))
+                meta(s1_update_way)(w).state.update(wastaken(w))
             } .otherwise {
-                meta(s1_update_way(w))(w).state.init(wastaken(w))
+                meta(s1_update_way)(w).state.init(wastaken(w))
             }
         }
     }
