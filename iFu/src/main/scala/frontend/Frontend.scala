@@ -459,7 +459,7 @@ class Frontend extends CoreModule {
     )
 
     ras.io.write_valid := false.B
-    ras.io.write_addr  := (f3_aligned_pc.asSInt + (f3_fetch_bundle.cfiIdx.bits << 2).asSInt + 4.S).asUInt
+    ras.io.write_addr  := f3_aligned_pc + (f3_fetch_bundle.cfiIdx.bits << 2) + 4.U
     ras.io.write_idx   := WrapInc(f3_fetch_bundle.gHist.rasIdx, numRasEntries)
 
     val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist
