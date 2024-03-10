@@ -52,15 +52,24 @@ class DcacheMeta extends Module with HasDcacheParameters{
         resetIdx := resetIdx + 1.U
     }
 
+    val sethasDirtys = Wire(Vec(nSets, Bool()))
+    for (i <- 0 until nSets) {
+        sethasDirtys(i) := (valids(i) & dirtys(i)).orR
+    }
+    
     // preserve dirty position
     val dirtyIdx = Wire(UInt(nIdxBits.W))
-    val sethasDirtys = (0 until nSets).map(i => (valids(i) & dirtys(i)).orR)
     dirtyIdx := PriorityEncoder(sethasDirtys)
     val dirtyPos = Wire(UInt(log2Ceil(nWays).W))
     dirtyPos := PriorityEncoder(valids(dirtyIdx) & dirtys(dirtyIdx))
     //传递有脏位的信息
-    // io.hasDirty := (valids(dirtyIdx) & dirtys(dirtyIdx)).orR
-    io.hasDirty := sethasDirtys.reduce(_ | _)
+    io.hasDirty := sethasDirtys.asUInt.orR
+
+    
+    val flushIdx = RegInit(0.U(nIdxBits.W))
+    val flushPos = RegInit(0.U(log2Ceil(nWays).W))
+    // TODO (maybe not nessary) use flushIdx and flushPos 
+
     // read
     val rvalid  = io.read.map( _.req.valid)
     val rreq    = io.read.map( _.req.bits)
