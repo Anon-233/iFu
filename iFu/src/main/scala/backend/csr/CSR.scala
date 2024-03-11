@@ -440,7 +440,7 @@ class CSRFile extends CoreModule {
 // below code is for debug output
     io.debug_csr_reg := csrRegNxt
 
-    if (true) {
+    if (!FPGAPlatform) {
         val difftest = Module(new DifftestCSRRegState)
         difftest.io.clock  := clock
         difftest.io.coreid := 0.U   // only support 1 core now
@@ -473,8 +473,5 @@ class CSRFile extends CoreModule {
         difftest.io.dmw0      := csrRegNxt.dmw0.asUInt
         difftest.io.dmw1      := csrRegNxt.dmw1.asUInt
     }
-
 // --------------------------------------------------------
-
-
 }

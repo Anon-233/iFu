@@ -38,8 +38,6 @@ class iFuCore extends CoreModule {
         val dresp = Input(new CBusResp)
         val commit = Output(new debugCommit)
         val event = Output(new debugEvent)
-        val register = Output(Vec(32 , UInt(32.W) ))
-        // val csr_register = Output(new CSRReg)
     })
 /*-----------------------------*/
 
@@ -890,13 +888,10 @@ class iFuCore extends CoreModule {
     val diff      = Module(new debugDiff)
     val cmtZipper = Module(new cmtZipper)
     val eventDetector = Module(new eventDetector)
-    val lregOut   = Wire(Vec(32, UInt(xLen.W)))
     val rawCommit = WireInit(0.U.asTypeOf(new debugCommit))
 
     diff.io.commit := rob.io.commit
-    lregOut        := diff.io.lregOut   //用这个接difftest，或者进入后端debugDiff文件中接入
-    io.register    := lregOut
-    
+
     // 为了和commit的指令以及csr对上周期，这里多等一下
     eventDetector.io.exception := RegNext(rob.io.com_xcpt.valid)
     eventDetector.io.xcpt_uop := RegNext(rob.io.com_xcpt.bits.uop)
