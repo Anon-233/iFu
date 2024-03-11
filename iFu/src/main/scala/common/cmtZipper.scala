@@ -21,14 +21,14 @@ class cmtZipper extends CoreModule {
     val idxs = Wire(Vec(cmtsz, Valid(UInt(log2Ceil(cmtsz).W))))
     idxs := 0.U.asTypeOf(Vec(cmtsz, Valid(UInt(log2Ceil(cmtsz).W))))
 
-    when (rawCommit.arch_valids.reduce(_|_)) {
+    when (rawCommit.valids.reduce(_|_)) {
         // 初始化头元素
-        idxs(0).valid := rawCommit.arch_valids(0)
-        idxs(0).bits  := Mux(rawCommit.arch_valids(0), 0.U, 3.U/*2'b11*/)
+        idxs(0).valid := rawCommit.valids(0)
+        idxs(0).bits  := Mux(rawCommit.valids(0), 0.U, 3.U/*2'b11*/)
 
         for (i <- 1 until 4) {
-            idxs(i).valid := rawCommit.arch_valids(i)
-            idxs(i).bits  := Mux(rawCommit.arch_valids(i), idxs(i-1).bits + 1.U, idxs(i-1).bits)
+            idxs(i).valid := rawCommit.valids(i)
+            idxs(i).bits  := Mux(rawCommit.valids(i), idxs(i-1).bits + 1.U, idxs(i-1).bits)
         }
     }
 
@@ -39,7 +39,7 @@ class cmtZipper extends CoreModule {
         val idx = idxs(i).bits
 
         when (valid) {
-            io.zippedCommit.arch_valids(idx) := true.B
+            io.zippedCommit.valids(idx) := true.B
             io.zippedCommit.debug_pc(idx)    := rawCommit.debug_pc(i)
             io.zippedCommit.debug_ldst(idx)  := rawCommit.debug_ldst(i)
             io.zippedCommit.debug_insts(idx) := rawCommit.debug_insts(i)
