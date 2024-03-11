@@ -10,34 +10,24 @@ import iFu.backend._
 import iFu.tlb.{TLBData, TLBDataManager}
 import iFu.util._
 
-class debugCommit extends CoreBundle{
+class debugCommit extends CoreBundle {
     val debug_insts = Vec(robParameters.retireWidth, UInt(32.W))
     val debug_wdata = Vec(robParameters.retireWidth, UInt(xLen.W))
-    val debug_ldst = Vec(robParameters.retireWidth, UInt(lregSz.W))
-    val debug_pc = Vec(robParameters.retireWidth, UInt(32.W))
-    val debug_wen =  Vec(robParameters.retireWidth,Bool())
+    val debug_ldst  = Vec(robParameters.retireWidth, UInt(lregSz.W))
+    val debug_pc    = Vec(robParameters.retireWidth, UInt(32.W))
+    val debug_wen   = Vec(robParameters.retireWidth,Bool())
 
     val arch_valids = Vec(robParameters.retireWidth,Bool())
-}
-
-class debugEvent extends  CoreBundle{
-    val excpvalid = Bool()//当前指令例外/中断
-    val isEret = Bool()//当前指令是eret
-    val intrNo = UInt(11.W)//当前指令中断号，即estat[12:2]
-    val ecode = UInt(15.W)//当前指令异常码，即estat.ecode
-    val epc = UInt(32.W)//出错指令的pc
-    val einst = UInt(32.W)//出错指令
 }
 
 class iFuCore extends CoreModule {
     val io = IO(new CoreBundle {
         val ext_int = Input(UInt(8.W))
-        val ireq = Output(new CBusReq)
-        val iresp = Input(new CBusResp)
-        val dreq = Output(new CBusReq)
-        val dresp = Input(new CBusResp)
-        val commit = Output(new debugCommit)
-        val event = Output(new debugEvent)
+        val ireq    = Output(new CBusReq)
+        val iresp   = Input(new CBusResp)
+        val dreq    = Output(new CBusReq)
+        val dresp   = Input(new CBusResp)
+        val commit  = Output(new debugCommit)
     })
 /*-----------------------------*/
 
@@ -111,7 +101,7 @@ class iFuCore extends CoreModule {
     val tlb_data    = Module(new TLBDataManager)
 
     tlb_data.io.csr_context         := csr.io.tlb_data_csr_reg
-//    tlb_data.io.r_req(0)
+    // tlb_data.io.r_req(0)
     tlb_data.io.r_req(0)            <> DontCare //TODO 删除
     tlb_data.io.r_req(1)            <> lsu.io.core.tlb_data.r_req(0)
     tlb_data.io.r_req(2)            <> lsu.io.core.tlb_data.r_req(1)
@@ -120,7 +110,6 @@ class iFuCore extends CoreModule {
     lsu.io.core.tlb_data.r_resp(0)       <> tlb_data.io.r_resp(1)
     lsu.io.core.tlb_data.r_resp(1)       <> tlb_data.io.r_resp(2)
     lsu.io.csr.dtlb_csr_reg         := csr.io.dtlb_csr_reg
-    // io.csr_register                 := csr.io.debug_csr_reg
 
 /*-----------------------------*/
 
@@ -887,15 +876,9 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     val diff      = Module(new debugDiff)
     val cmtZipper = Module(new cmtZipper)
-    val eventDetector = Module(new eventDetector)
     val rawCommit = WireInit(0.U.asTypeOf(new debugCommit))
 
     diff.io.commit := rob.io.commit
-
-    // 为了和commit的指令以及csr对上周期，这里多等一下
-    eventDetector.io.exception := RegNext(rob.io.com_xcpt.valid)
-    eventDetector.io.xcpt_uop := RegNext(rob.io.com_xcpt.bits.uop)
-    eventDetector.io.debug_csr_reg := csr.io.debug_csr_reg
 
     for(w <- 0 until robParameters.retireWidth) {
         rawCommit.debug_pc(w)    := rob.io.commit.uops(w).debug_pc
@@ -909,7 +892,6 @@ class iFuCore extends CoreModule {
     cmtZipper.io.rawCommit := rawCommit
 
     io.commit := cmtZipper.io.zippedCommit
-    io.event  := eventDetector.io.debug_event
 
     //-------------------------------------------------------------
     // *** Perfomance Counters ***

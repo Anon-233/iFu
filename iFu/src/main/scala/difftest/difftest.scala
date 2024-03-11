@@ -73,6 +73,15 @@ class DiffCSRRegStateIO extends DifftestBundle {
     val dmw1      = Input(UInt(64.W))
 }
 
+class DifftestExcpEventIO extends DifftestBundle {
+    val excp_valid    = Input(Bool())
+    val eret          = Input(Bool())
+    val intrNo        = Input(UInt(11.W))
+    val cause         = Input(UInt(15.W))
+    val exceptionPC   = Input(UInt(32.W))
+    val exceptionInst = Input(UInt(32.W))
+}
+
 class DiffGRegStateIO extends DifftestBundle {
   val gpr = Input(Vec(32, UInt(64.W)))
 }
@@ -112,4 +121,8 @@ class DifftestStoreEvent extends BlackBox {
 
 class DifftestLoadEvent extends BlackBox {
     val io = IO(new DiffLoadEventIO)
+}
+
+class DifftestExcpEvent extends BlackBox {
+    val io = IO(new DifftestExcpEventIO)
 }

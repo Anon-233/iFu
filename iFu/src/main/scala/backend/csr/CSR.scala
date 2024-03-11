@@ -152,8 +152,6 @@ class CSRFileIO extends CoreBundle {
     val rd       = Input(UInt(32.W))
     val rj       = Input(UInt(32.W))
 
-    val debug_csr_reg = Output(new CSRReg)
-
     val dtlb_csr_reg  = Output(new DTLBCsrContext)
     val tlb_data_csr_reg = Output(new TLBDataCsrContext)
 }
@@ -438,40 +436,53 @@ class CSRFile extends CoreModule {
 
 // --------------------------------------------------------
 // below code is for debug output
-    io.debug_csr_reg := csrRegNxt
+    if (!FPGAPlatform) {
+        val diff_csr = Module(new DifftestCSRRegState)
+        diff_csr.io.clock  := clock
+        diff_csr.io.coreid := 0.U   // only support 1 core now
+
+        diff_csr.io.crmd      := csrRegNxt.crmd.asUInt
+        diff_csr.io.prmd      := csrRegNxt.prmd.asUInt
+        diff_csr.io.euen      := csrRegNxt.euen.asUInt
+        diff_csr.io.ecfg      := csrRegNxt.ecfg.asUInt
+        diff_csr.io.estat     := csrRegNxt.estat.asUInt
+        diff_csr.io.era       := csrRegNxt.era.asUInt
+        diff_csr.io.badv      := csrRegNxt.badv.asUInt
+        diff_csr.io.eentry    := csrRegNxt.eentry.asUInt
+        diff_csr.io.tlbidx    := csrRegNxt.tlbidx.asUInt
+        diff_csr.io.tlbehi    := csrRegNxt.tlbehi.asUInt
+        diff_csr.io.tlbelo0   := csrRegNxt.tlbelo0.asUInt
+        diff_csr.io.tlbelo1   := csrRegNxt.tlbelo1.asUInt
+        diff_csr.io.asid      := csrRegNxt.asid.asUInt
+        diff_csr.io.pgdl      := csrRegNxt.pgdl.asUInt
+        diff_csr.io.pgdh      := csrRegNxt.pgdh.asUInt
+        diff_csr.io.save0     := csrRegNxt.save0.asUInt
+        diff_csr.io.save1     := csrRegNxt.save1.asUInt
+        diff_csr.io.save2     := csrRegNxt.save2.asUInt
+        diff_csr.io.save3     := csrRegNxt.save3.asUInt
+        diff_csr.io.tid       := csrRegNxt.tid.asUInt
+        diff_csr.io.tcfg      := csrRegNxt.tcfg.asUInt
+        diff_csr.io.tval      := csrRegNxt.tval.asUInt
+        diff_csr.io.ticlr     := csrRegNxt.ticlr.asUInt
+        diff_csr.io.llbctl    := csrRegNxt.llbctl.asUInt
+        diff_csr.io.tlbrentry := csrRegNxt.tlbrentry.asUInt
+        diff_csr.io.dmw0      := csrRegNxt.dmw0.asUInt
+        diff_csr.io.dmw1      := csrRegNxt.dmw1.asUInt
+    }
 
     if (!FPGAPlatform) {
-        val difftest = Module(new DifftestCSRRegState)
-        difftest.io.clock  := clock
-        difftest.io.coreid := 0.U   // only support 1 core now
+        val diff_excp = Module(new DifftestExcpEvent)
+        diff_excp.io.clock  := clock
+        diff_excp.io.coreid := 0.U
 
-        difftest.io.crmd      := csrRegNxt.crmd.asUInt
-        difftest.io.prmd      := csrRegNxt.prmd.asUInt
-        difftest.io.euen      := csrRegNxt.euen.asUInt
-        difftest.io.ecfg      := csrRegNxt.ecfg.asUInt
-        difftest.io.estat     := csrRegNxt.estat.asUInt
-        difftest.io.era       := csrRegNxt.era.asUInt
-        difftest.io.badv      := csrRegNxt.badv.asUInt
-        difftest.io.eentry    := csrRegNxt.eentry.asUInt
-        difftest.io.tlbidx    := csrRegNxt.tlbidx.asUInt
-        difftest.io.tlbehi    := csrRegNxt.tlbehi.asUInt
-        difftest.io.tlbelo0   := csrRegNxt.tlbelo0.asUInt
-        difftest.io.tlbelo1   := csrRegNxt.tlbelo1.asUInt
-        difftest.io.asid      := csrRegNxt.asid.asUInt
-        difftest.io.pgdl      := csrRegNxt.pgdl.asUInt
-        difftest.io.pgdh      := csrRegNxt.pgdh.asUInt
-        difftest.io.save0     := csrRegNxt.save0.asUInt
-        difftest.io.save1     := csrRegNxt.save1.asUInt
-        difftest.io.save2     := csrRegNxt.save2.asUInt
-        difftest.io.save3     := csrRegNxt.save3.asUInt
-        difftest.io.tid       := csrRegNxt.tid.asUInt
-        difftest.io.tcfg      := csrRegNxt.tcfg.asUInt
-        difftest.io.tval      := csrRegNxt.tval.asUInt
-        difftest.io.ticlr     := csrRegNxt.ticlr.asUInt
-        difftest.io.llbctl    := csrRegNxt.llbctl.asUInt
-        difftest.io.tlbrentry := csrRegNxt.tlbrentry.asUInt
-        difftest.io.dmw0      := csrRegNxt.dmw0.asUInt
-        difftest.io.dmw1      := csrRegNxt.dmw1.asUInt
+        val xcpt_uop = io.com_xcpt.bits.uop
+
+        diff_excp.io.excp_valid    := io.exception
+        diff_excp.io.eret          := !xcpt_uop.xcpt_valid && xcpt_uop.uopc === uopERET
+        diff_excp.io.intrNo        := csrRegNxt.estat.asUInt(12, 2)
+        diff_excp.io.cause         := Cat(csrRegNxt.estat.ecode, csrRegNxt.estat.esubcode)
+        diff_excp.io.exceptionPC   := xcpt_uop.debug_pc
+        diff_excp.io.exceptionInst := xcpt_uop.debug_inst
     }
 // --------------------------------------------------------
 }
