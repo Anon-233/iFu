@@ -1,4 +1,4 @@
-package iFu.backend
+package iFu.difftest
 
 import chisel3._
 import chisel3.util._
@@ -8,7 +8,7 @@ import iFu.common.Consts._
 
 import iFu.difftest._
 
-class debugDiff extends CoreModule {
+class LogicRegisters extends CoreModule {
     val io = IO(new Bundle {
         val commit = Input(new CommitSignals())
     })
@@ -27,13 +27,11 @@ class debugDiff extends CoreModule {
         }
     }
 
-    if (!FPGAPlatform) {
-        val difftest = Module(new DifftestGRegState)
-        difftest.io.clock  := clock
-        difftest.io.coreid := 0.U   // only support 1 core now
+    val difftest = Module(new DifftestGRegState)
+    difftest.io.clock  := clock
+    difftest.io.coreid := 0.U   // only support 1 core now
 
-        for (i <- 0 until numLRegs) {
-            difftest.io.gpr(i) := debug_reg(i)
-        }
+    for (i <- 0 until numLRegs) {
+        difftest.io.gpr(i) := debug_reg(i)
     }
 }

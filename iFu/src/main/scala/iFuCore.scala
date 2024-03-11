@@ -2,23 +2,18 @@ package iFu
 
 import chisel3._
 import chisel3.util._
-import iFu.common._
-import iFu.common.Consts._
+
 import iFu.frontend._
 import iFu.frontend.FrontendUtils.bankAlign
+
 import iFu.backend._
-import iFu.tlb.{TLBData, TLBDataManager}
+import iFu.tlb._
+
+import iFu.common._
+import iFu.common.Consts._
 import iFu.util._
 
-class debugCommit extends CoreBundle {
-    val debug_insts = Vec(robParameters.retireWidth, UInt(32.W))
-    val debug_wdata = Vec(robParameters.retireWidth, UInt(xLen.W))
-    val debug_ldst  = Vec(robParameters.retireWidth, UInt(lregSz.W))
-    val debug_pc    = Vec(robParameters.retireWidth, UInt(32.W))
-    val debug_wen   = Vec(robParameters.retireWidth,Bool())
-
-    val valids      = Vec(robParameters.retireWidth,Bool())
-}
+import iFu.difftest._
 
 class iFuCore extends CoreModule {
     val io = IO(new CoreBundle {
@@ -873,22 +868,23 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     // *** debug for difftest
     //-------------------------------------------------------------
-    val diff      = Module(new debugDiff)
-    val cmtZipper = Module(new cmtZipper)
-    val rawCommit = WireInit(0.U.asTypeOf(new debugCommit))
+    if (!FPGAPlatform) {
+        val logic_registers = Module(new LogicRegisters)
+        logic_registers.io.commit := rob.io.commit
 
-    diff.io.commit := rob.io.commit
+        val instr_commits = Module(new InstrCommits)
+        val rawCommit = WireInit(0.U.asTypeOf(new InstrCommit))
+        instr_commits.io.rawCommit := rawCommit
 
-    for(w <- 0 until robParameters.retireWidth) {
-        rawCommit.debug_pc(w)    := rob.io.commit.uops(w).debug_pc
-        rawCommit.debug_ldst(w)  := rob.io.commit.uops(w).ldst
-        rawCommit.debug_insts(w) := rob.io.commit.uops(w).debug_inst
-        rawCommit.debug_wdata(w) := rob.io.commit.debug_wdata(w)
-        rawCommit.debug_wen(w)   := rob.io.commit.uops(w).ldst_val && rob.io.commit.arch_valids(w)
-        rawCommit.valids(w)      := rob.io.commit.arch_valids(w) & (~RegNext(rob.io.com_xcpt.valid))
+        for (w <- 0 until robParameters.retireWidth) {
+            rawCommit.debug_pc(w)    := rob.io.commit.uops(w).debug_pc
+            rawCommit.debug_ldst(w)  := rob.io.commit.uops(w).ldst
+            rawCommit.debug_insts(w) := rob.io.commit.uops(w).debug_inst
+            rawCommit.debug_wdata(w) := rob.io.commit.debug_wdata(w)
+            rawCommit.debug_wen(w)   := rob.io.commit.uops(w).ldst_val && rob.io.commit.arch_valids(w)
+            rawCommit.valids(w)      := rob.io.commit.arch_valids(w) & (~RegNext(rob.io.com_xcpt.valid))
+        }
     }
-
-    cmtZipper.io.rawCommit := rawCommit
 
     //-------------------------------------------------------------
     // *** Perfomance Counters ***

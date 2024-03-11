@@ -216,35 +216,35 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
 
     // 5个预测器
     val faubtb = Module(new FaUBtbPredictior(bank_id))
-    val bim = Module(new BimPredictor)
-    val btb = Module(new BtbPredictor)
-    val tage = Module(new TagePredictor)
-    val loop = Module(new LoopPredictor)
+    // val bim = Module(new BimPredictor)
+    // val btb = Module(new BtbPredictor)
+    // val tage = Module(new TagePredictor)
+    // val loop = Module(new LoopPredictor)
 
     // 预测器基本信息输入
 
     // 更新信息
     faubtb.io.s1update := s1update
-    btb.io.s1update := s1update
-    bim.io.s1update := s1update
-    tage.io.f1update := s1update
-    loop.io.f1update := s1update
+    // btb.io.s1update := s1update
+    // bim.io.s1update := s1update
+    // tage.io.f1update := s1update
+    // loop.io.f1update := s1update
 
     // 基本的pc和使能位
     faubtb.io.s1valid := s1valid
     faubtb.io.s1pc := s1pc
 
-    btb.io.s0valid := s0valid
-    btb.io.s0pc := s0pc
+    // btb.io.s0valid := s0valid
+    // btb.io.s0pc := s0pc
 
-    bim.io.s0valid := s0valid
-    bim.io.s0pc := s0pc
+    // bim.io.s0valid := s0valid
+    // bim.io.s0pc := s0pc
 
-    tage.io.f1valid := s1valid
-    tage.io.f1pc := s1pc
+    // tage.io.f1valid := s1valid
+    // tage.io.f1pc := s1pc
 
-    loop.io.f2valid := s2valid
-    loop.io.f2pc := s2pc
+    // loop.io.f2valid := s2valid
+    // loop.io.f2pc := s2pc
 
     // f1接收faubtb输出结果
     for(w <- 0 until bankWidth){
@@ -260,31 +260,31 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
     io.resp.f2 := RegNext(io.resp.f1)
 
     
-    for (w <- 0 until bankWidth) {
-        // bim预测taken（不存在命不命中的说法）覆盖f2的初值
-        io.resp.f2(w).taken := bim.io.s2taken(w)
+    // for (w <- 0 until bankWidth) {
+    //     // bim预测taken（不存在命不命中的说法）覆盖f2的初值
+    //     io.resp.f2(w).taken := bim.io.s2taken(w)
 
-        // 对于btb，当且仅当命中，结果的valid有效，才会把对应的结果覆盖f2的初值
-        when (btb.io.s2targs(w).valid) {
-            io.resp.f2(w).isBranch := btb.io.s2br(w)
-            io.resp.f2(w).isJal := btb.io.s2jal(w)
-            io.resp.f2(w).predictedpc := btb.io.s2targs(w)
+    //     // 对于btb，当且仅当命中，结果的valid有效，才会把对应的结果覆盖f2的初值
+    //     when (btb.io.s2targs(w).valid) {
+    //         io.resp.f2(w).isBranch := btb.io.s2br(w)
+    //         io.resp.f2(w).isJal := btb.io.s2jal(w)
+    //         io.resp.f2(w).predictedpc := btb.io.s2targs(w)
 
-            // btb推测为taken为真当且仅当检测到jal指令，这时bim置信度显然没有必然跳转的jal高，取btb的taken
-            when (btb.io.s2taken(w)) {
-            io.resp.f2(w).taken := btb.io.s2taken(w)
-            }
+    //         // btb推测为taken为真当且仅当检测到jal指令，这时bim置信度显然没有必然跳转的jal高，取btb的taken
+    //         when (btb.io.s2taken(w)) {
+    //         io.resp.f2(w).taken := btb.io.s2taken(w)
+    //         }
 
-        }
-    }
+    //     }
+    // }
    
 
     // f3以f2为基础，接收tage，loop的输出结果
     io.resp.f3 := RegNext(io.resp.f2)
 
     // 对于tage，还需要全局历史，以及前面f3taken传入之前的预测值作为参考，一并传入
-    tage.io.f1gHist := io.f1ghist
-    tage.io.previousf3Taken := RegNext(VecInit(io.resp.f2.map(_.taken)))
+    // tage.io.f1gHist := io.f1ghist
+    // tage.io.previousf3Taken := RegNext(VecInit(io.resp.f2.map(_.taken)))
 
     
     // tage可以根据传入的初值，在内部判断命中与否，在内部自行选择好是否覆盖f3的初值
@@ -298,12 +298,12 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
     // 对于loop，还需要传入f2targs，f2isBr,f3fire,f3mask
 
     // 接收f2的预测结果targs和br，loop会在内部筛出供f3的跳转指令
-    loop.io.f2targs := VecInit(io.resp.f2.map(_.predictedpc))
-    loop.io.f2isBr := VecInit(io.resp.f2.map(_.isBranch))
+    // loop.io.f2targs := VecInit(io.resp.f2.map(_.predictedpc))
+    // loop.io.f2isBr := VecInit(io.resp.f2.map(_.isBranch))
 
     // 以及f3fire和s3mask
-    loop.io.f3fire := io.f3fire
-    loop.io.f3mask := s3mask
+    // loop.io.f3fire := io.f3fire
+    // loop.io.f3mask := s3mask
 
     
     /* for(w <- 0 until bankWidth){
@@ -316,11 +316,11 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
 
     // 最后收集五个计数器预测过程中产生的meta信息
     for(w <- 0 until bankWidth ){
-        io.f3meta(w).bimMeta := bim.io.s3meta(w)
-        io.f3meta(w).btbMeta := btb.io.s3meta(w)
-        io.f3meta(w).tageMeta := tage.io.f3meta(w)
         io.f3meta(w).ubtbMeta := faubtb.io.s3meta(w)
-        io.f3meta(w).loopMeta := loop.io.f3meta(w)
+        // io.f3meta(w).bimMeta := bim.io.s3meta(w)
+        // io.f3meta(w).btbMeta := btb.io.s3meta(w)
+        // io.f3meta(w).tageMeta := tage.io.f3meta(w)
+        // io.f3meta(w).loopMeta := loop.io.f3meta(w)
     }
 
 
