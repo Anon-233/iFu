@@ -83,6 +83,12 @@ class LSUCoreIO extends CoreBundle {
     val lsu_xcpt       = Output(Valid(new Exception))
 
     val tlb_data    = new LSUTLBDataIO
+
+
+    // for performance analysis
+    val ldq_valids = Output(Vec(lsuParameters.numLDQEntries, Bool()))
+    val stq_valids = Output(Vec(lsuParameters.numSTQEntries, Bool()))
+
 }
 
 class LSUCsrIO extends CoreBundle {
@@ -1220,6 +1226,16 @@ class Lsu extends CoreModule {
     dontTouch(debug_signal)
     when(next_live_store_mask(stq_tail)){
         debug_signal := 1.U
+    }
+
+    // performance analysis
+
+    for(i <- 0 until numLdqEntries){
+        io.core.ldq_valids(i) := ldq(i).valid
+    }
+
+    for(i <- 0 until numStqEntries){
+        io.core.stq_valids(i) := stq(i).valid
     }
 }
 
