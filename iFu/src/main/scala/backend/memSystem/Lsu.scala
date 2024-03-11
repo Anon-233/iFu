@@ -926,7 +926,8 @@ class Lsu extends CoreModule {
     val r_xcpt = Reg(new Exception)
 
     val ld_xcpt_valid = failed_loads.reduce(_|_)
-    val ld_xcpt_uop = ldq(Mux(l_idx >= numLdqEntries.U, l_idx - numLdqEntries.U, l_idx)).bits.uop
+    val ld_xcpt_uop = ldq(Mux(l_idx >= numLdqEntries.U, l_idx - numLdqEntries.U, l_idx)(ldqAddrSz-1,0)).bits.uop
+
 
     val use_tlb_xcpt = (tlb_xcpt_valid && IsOlder(tlb_xcpt_uop.robIdx, ld_xcpt_uop.robIdx, io.core.rob_head_idx)) || !ld_xcpt_valid
 

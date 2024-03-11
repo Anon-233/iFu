@@ -42,7 +42,7 @@ class DcacheData extends Module with HasDcacheParameters{
         io.read(w).resp.valid := RegNext(rvalid(w))
         val rdata = data.read(ridx1v(w))
         dontTouch(rdata)
-        io.read(w).resp.bits.data := data.read(ridx1v(w))
+        io.read(w).resp.bits.data := rdata
     }
 
     // write

@@ -39,7 +39,7 @@ class iFuCore extends CoreModule {
         val commit = Output(new debugCommit)
         val event = Output(new debugEvent)
         val register = Output(Vec(32 , UInt(32.W) ))
-        val csr_register = Output(new CSRReg)
+        // val csr_register = Output(new CSRReg)
     })
 /*-----------------------------*/
 
@@ -122,7 +122,7 @@ class iFuCore extends CoreModule {
     lsu.io.core.tlb_data.r_resp(0)       <> tlb_data.io.r_resp(1)
     lsu.io.core.tlb_data.r_resp(1)       <> tlb_data.io.r_resp(2)
     lsu.io.csr.dtlb_csr_reg         := csr.io.dtlb_csr_reg
-    io.csr_register                 := csr.io.debug_csr_reg
+    // io.csr_register                 := csr.io.debug_csr_reg
 
 /*-----------------------------*/
 

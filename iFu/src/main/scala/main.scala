@@ -22,6 +22,7 @@ object Main extends App {
         "--lowering-options=explicitBitcast,disallowLocalVariables,disallowPortDeclSharing",
         // "--repl-seq-mem",
         // "--repl-seq-mem-file=Foo.sv.conf"
+        // "--dead-code-elimination" // 添加这一行
     )
 
     ChiselStage.emitSystemVerilogFile(
