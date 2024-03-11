@@ -17,7 +17,7 @@ class debugCommit extends CoreBundle {
     val debug_pc    = Vec(robParameters.retireWidth, UInt(32.W))
     val debug_wen   = Vec(robParameters.retireWidth,Bool())
 
-    val arch_valids = Vec(robParameters.retireWidth,Bool())
+    val valids      = Vec(robParameters.retireWidth,Bool())
 }
 
 class iFuCore extends CoreModule {
@@ -886,7 +886,7 @@ class iFuCore extends CoreModule {
         rawCommit.debug_insts(w) := rob.io.commit.uops(w).debug_inst
         rawCommit.debug_wdata(w) := rob.io.commit.debug_wdata(w)
         rawCommit.debug_wen(w)   := rob.io.commit.uops(w).ldst_val && rob.io.commit.arch_valids(w)
-        rawCommit.arch_valids(w) := rob.io.commit.arch_valids(w)
+        rawCommit.valids(w)      := rob.io.commit.arch_valids(w) & (~RegNext(rob.io.com_xcpt.valid))
     }
 
     cmtZipper.io.rawCommit := rawCommit
