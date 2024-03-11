@@ -943,4 +943,11 @@ class iFuCore extends CoreModule {
         printf("rob_throughput_arch: %d\n", rob_throughput_arch)
         rob_throughput_arch := 0.U
     }
+
+    val redirect_flush = RegInit(0.U(64.W))
+    redirect_flush := redirect_flush + PopCount(ifu.io.core.redirect_flush.asUInt)
+    when (cntWrap) {
+        printf("redirect_flush: %d\n", redirect_flush)
+        redirect_flush := 0.U
+    }
 }

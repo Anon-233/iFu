@@ -179,3 +179,10 @@ https://zhuanlan.zhihu.com/p/650745488
 
 14. 当前TODO
 给Dcache行扩充大小，一拍只有16个，但是要实现refillCycle = 4 之类连续发起四次AXI请求
+
+
+
+15. 修改了hasDirty的生成逻辑，如果是个seq的bool，reduce（_|_）需要的逻辑门很多，而一开始定义成Vec，之后asUInt.orR就可以转化成verilog里面的缩位逻辑了
+
+16. 记录参数影响，目前stq16 ldq 16  Rob 64 issunit 减半，
+ds影响不大，ipc还是1.27

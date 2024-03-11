@@ -9,10 +9,12 @@ SPLIT = true
 
 SBT = sbt
 
+CLI = scala-cli
+
 compile: $(gen_dir)/iFuCore.v
 
 $(gen_dir)/iFuCore.v: $(wildcard $(src_dir)/scala/*.scala)
-	$(SBT) -mem 8192  "run $(gen_dir) $(SPLIT)"
+	$(SBT) "run $(gen_dir) $(SPLIT)"
 
 split:
 	make SPLIT=false
