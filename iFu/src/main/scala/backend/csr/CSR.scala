@@ -8,6 +8,8 @@ import iFu.common.Consts._
 import iFu.common.CauseCode._
 import iFu.tlb._
 
+import iFu.difftest._
+
 class CRMD extends CoreBundle {
     val r0_0 = UInt(23.W)
     val datm = UInt(2.W)
@@ -437,6 +439,41 @@ class CSRFile extends CoreModule {
 // --------------------------------------------------------
 // below code is for debug output
     io.debug_csr_reg := csrRegNxt
+
+    if (true) {
+        val difftest = Module(new DifftestCSRRegState)
+        difftest.io.clock  := clock
+        difftest.io.coreid := 0.U   // only support 1 core now
+
+        difftest.io.crmd      := csrRegNxt.crmd.asUInt
+        difftest.io.prmd      := csrRegNxt.prmd.asUInt
+        difftest.io.euen      := csrRegNxt.euen.asUInt
+        difftest.io.ecfg      := csrRegNxt.ecfg.asUInt
+        difftest.io.estat     := csrRegNxt.estat.asUInt
+        difftest.io.era       := csrRegNxt.era.asUInt
+        difftest.io.badv      := csrRegNxt.badv.asUInt
+        difftest.io.eentry    := csrRegNxt.eentry.asUInt
+        difftest.io.tlbidx    := csrRegNxt.tlbidx.asUInt
+        difftest.io.tlbehi    := csrRegNxt.tlbehi.asUInt
+        difftest.io.tlbelo0   := csrRegNxt.tlbelo0.asUInt
+        difftest.io.tlbelo1   := csrRegNxt.tlbelo1.asUInt
+        difftest.io.asid      := csrRegNxt.asid.asUInt
+        difftest.io.pgdl      := csrRegNxt.pgdl.asUInt
+        difftest.io.pgdh      := csrRegNxt.pgdh.asUInt
+        difftest.io.save0     := csrRegNxt.save0.asUInt
+        difftest.io.save1     := csrRegNxt.save1.asUInt
+        difftest.io.save2     := csrRegNxt.save2.asUInt
+        difftest.io.save3     := csrRegNxt.save3.asUInt
+        difftest.io.tid       := csrRegNxt.tid.asUInt
+        difftest.io.tcfg      := csrRegNxt.tcfg.asUInt
+        difftest.io.tval      := csrRegNxt.tval.asUInt
+        difftest.io.ticlr     := csrRegNxt.ticlr.asUInt
+        difftest.io.llbctl    := csrRegNxt.llbctl.asUInt
+        difftest.io.tlbrentry := csrRegNxt.tlbrentry.asUInt
+        difftest.io.dmw0      := csrRegNxt.dmw0.asUInt
+        difftest.io.dmw1      := csrRegNxt.dmw1.asUInt
+    }
+
 // --------------------------------------------------------
 
 
