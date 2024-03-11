@@ -5,11 +5,13 @@ import chisel3._
 import chisel3.util._
 
 import iFu.common._
+import iFu.common.Consts._
+
+import iFu.difftest._
 
 class cmtZipper extends CoreModule {
     val io = IO(new Bundle{
         val rawCommit = Input(new debugCommit)
-        val zippedCommit = Output(new debugCommit)
     })
 
     //-------------------------------------
@@ -32,19 +34,29 @@ class cmtZipper extends CoreModule {
         }
     }
 
-    io.zippedCommit := 0.U.asTypeOf(new debugCommit)
+    if (!FPGAPlatform) {
+        for (i <- 0 until 4) {
+            val valid = idxs(i).valid
+            val idx   = idxs(i).bits
 
-    for (i <- 0 until 4) {
-        val valid = idxs(i).valid
-        val idx = idxs(i).bits
+            val difftest = Module(new DifftestInstrCommit)
+            difftest.io.clock  := clock
+            difftest.io.coreid := 0.U   // only support 1 core now
 
-        when (valid) {
-            io.zippedCommit.valids(idx) := true.B
-            io.zippedCommit.debug_pc(idx)    := rawCommit.debug_pc(i)
-            io.zippedCommit.debug_ldst(idx)  := rawCommit.debug_ldst(i)
-            io.zippedCommit.debug_insts(idx) := rawCommit.debug_insts(i)
-            io.zippedCommit.debug_wdata(idx) := rawCommit.debug_wdata(i)
-            io.zippedCommit.debug_wen(idx)   := rawCommit.debug_wen(i)
+            difftest.io.index          := i.U
+            difftest.io.valid          := valid
+            difftest.io.pc             := rawCommit.debug_pc(i)
+            difftest.io.instr          := rawCommit.debug_insts(i)
+            difftest.io.skip           := false.B
+            difftest.io.is_TLBFILL     := false.B
+            difftest.io.TLBFILL_index  := 0.U
+            difftest.io.is_CNTinst     := false.B
+            difftest.io.timer_64_value := 0.U
+            difftest.io.wen            := rawCommit.debug_wen(i)
+            difftest.io.wdest          := rawCommit.debug_ldst(i)
+            difftest.io.wdata          := rawCommit.debug_wdata(i)
+            difftest.io.csr_rstat      := false.B
+            difftest.io.csr_data       := 0.U
         }
     }
 }

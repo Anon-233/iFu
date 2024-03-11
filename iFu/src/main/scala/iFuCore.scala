@@ -27,7 +27,6 @@ class iFuCore extends CoreModule {
         val iresp   = Input(new CBusResp)
         val dreq    = Output(new CBusReq)
         val dresp   = Input(new CBusResp)
-        val commit  = Output(new debugCommit)
     })
 /*-----------------------------*/
 
@@ -890,8 +889,6 @@ class iFuCore extends CoreModule {
     }
 
     cmtZipper.io.rawCommit := rawCommit
-
-    io.commit := cmtZipper.io.zippedCommit
 
     //-------------------------------------------------------------
     // *** Perfomance Counters ***
