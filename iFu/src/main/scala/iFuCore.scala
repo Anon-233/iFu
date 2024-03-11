@@ -891,7 +891,7 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     
     // a counter
-    val (cntVal, cntWrap) = Counter(true.B, 10000)
+    val (cntVal, cntWrap) = Counter(true.B, 1000)
 
     val dec_throughput = RegInit(0.U(64.W))
     dec_throughput := dec_throughput + PopCount(dec_valids.asUInt)
