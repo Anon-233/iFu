@@ -924,14 +924,14 @@ class iFuCore extends CoreModule {
     val lsu_ldq_num = RegInit(0.U(64.W))
     lsu_ldq_num := lsu_ldq_num + PopCount(lsu.io.core.ldq_valids.asUInt)
     when (cntWrap) {
-        printf("lsu_num: %d\n", lsu_ldq_num)
+        printf("lsu_ldq_num: %d\n", lsu_ldq_num)
         lsu_ldq_num := 0.U
     }
 
     val lsu_stq_num = RegInit(0.U(64.W))
     lsu_stq_num := lsu_stq_num + PopCount(lsu.io.core.stq_valids.asUInt)
     when(cntWrap) {
-        printf("lsu_num: %d\n", lsu_stq_num)
+        printf("lsu_stq_num: %d\n", lsu_stq_num)
         lsu_stq_num := 0.U
     }
 }
