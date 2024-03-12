@@ -40,14 +40,14 @@ class ROBParameters {
     val coreWidth: Int = 4
     val retireWidth: Int = 4 //decodeWidth
     // val numRobEntries:Int = 128
-    val numRobEntries:Int = 64
+    val numRobEntries:Int = 32
     val numRobRows: Int = numRobEntries/coreWidth
     val robAddrSz: Int = log2Ceil(numRobRows) + log2Ceil(coreWidth)
 }
 
 class LSUParameters{
-    val numSTQEntries: Int = 16
-    val numLDQEntries: Int = 16
+    val numSTQEntries: Int = 8
+    val numLDQEntries: Int = 8
     val ldqAddrSz    : Int = log2Ceil(numLDQEntries)
     val stqAddrSz    : Int = log2Ceil(numSTQEntries)
 }
@@ -121,8 +121,10 @@ trait HasCoreParameters {
     val issueParams: Seq[IssueParams] = Seq(
         // IssueParams(issueWidth = 2, numIssueSlots = 24, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
         // IssueParams(issueWidth = 4, numIssueSlots = 40, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4)
-        IssueParams(issueWidth = 2, numIssueSlots = 12, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
-        IssueParams(issueWidth = 4, numIssueSlots = 20, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4)
+        // IssueParams(issueWidth = 2, numIssueSlots = 12, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
+        // IssueParams(issueWidth = 4, numIssueSlots = 20, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4)
+        IssueParams(issueWidth = 2, numIssueSlots = 6, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
+        IssueParams(issueWidth = 4, numIssueSlots = 10, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4)
         )
     val enableSFBOpt: Boolean = true
 }

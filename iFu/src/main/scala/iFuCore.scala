@@ -900,6 +900,21 @@ class iFuCore extends CoreModule {
         dec_throughput := 0.U
     }
 
+    val dis_throughput = RegInit(0.U(64.W))
+    dis_throughput := dis_throughput + PopCount(dis_valids.asUInt)
+    when (cntWrap) {
+        printf("dis_throughput: %d\n", dis_throughput)
+        dis_throughput := 0.U
+    }
+
+
+    val iss_throughput = RegInit(0.U(64.W))
+    iss_throughput := iss_throughput + PopCount(iss_valids.asUInt)
+    when (cntWrap) {
+        printf("iss_throughput: %d\n", iss_throughput)
+        iss_throughput := 0.U
+    }
+
     val rob_throughput = RegInit(0.U(64.W))
     rob_throughput := rob_throughput + PopCount(rob.io.commit.valids.asUInt)
     when (cntWrap) {
