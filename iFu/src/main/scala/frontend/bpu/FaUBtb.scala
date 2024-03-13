@@ -111,7 +111,7 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
 //      Update Logic
     val s1_update         = io.s1update
     val s1_update_cfi_idx = s1_update.bits.cfiIdx.bits
-    val s1_update_meta    = VecInit(s1_update.bits.meta.map(_.ubtbMeta))
+    val s1_update_meta    = VecInit(s1_update.bits.meta.map(_.uBTBMeta))
     val s1_update_ways     = VecInit(s1_update_meta.map(_.write_way))
     val s1_update_way     = s1_update_ways(s1_update_cfi_idx)
 
@@ -178,8 +178,8 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
     // num_mis_preds := num_mis_preds + PopCount(
     //     wastaken zip (0 until bankWidth) map {
     //         case (t, idx) => (
-    //             io.s1update.bits.meta(idx).ubtbMeta.hit &&
-    //             (meta(io.s1update.bits.meta(idx).ubtbMeta.write_way)(idx).state.isTaken =/= t)
+    //             io.s1update.bits.meta(idx).uBTBMeta.hit &&
+    //             (meta(io.s1update.bits.meta(idx).uBTBMeta.write_way)(idx).state.isTaken =/= t)
     //         ).asBool
     //     }
     // )

@@ -75,7 +75,7 @@ trait HasBtbParameters extends HasBPUParameters {
     val nSets        = 128
     val extendedNSets = 128
     val offsetSz = 13
-    val btbEntrySz = offsetSz + 1
+    val BTBEntrySz = offsetSz + 1
 
-    val btbMetaSz = tagSz + 1
+    val BTBMetaSz = tagSz + 1
 }

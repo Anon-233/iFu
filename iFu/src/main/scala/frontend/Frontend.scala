@@ -327,6 +327,7 @@ class Frontend extends CoreModule {
 
     bpd.io.f3fire := f3_bpd_resp.io.enq.fire
 
+
     val f4_ready = Wire(Bool())
     f3_ifu_resp.io.deq.ready := f4_ready
     f3_bpd_resp.io.deq.ready := f4_ready
@@ -487,6 +488,17 @@ class Frontend extends CoreModule {
             s0_ghist     := f3_predicted_ghist
         }
     }
+
+    dontTouch(f2_correct_f1_ghist)
+    dontTouch(f3_correct_f1_ghist)
+    dontTouch(f3_correct_f2_ghist)
+    dontTouch(f1_predicted_ghist)
+    dontTouch(f2_predicted_ghist)
+    dontTouch(f3_predicted_ghist)
+    dontTouch(f1_predicted_target)
+    dontTouch(f2_predicted_target)
+    dontTouch(f3_predicted_target)
+
 // -------------------------------------------------------
     val f4_clear = WireInit(false.B)
     val f4 = withReset(reset.asBool || f4_clear) {

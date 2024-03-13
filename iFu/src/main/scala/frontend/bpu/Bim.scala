@@ -113,19 +113,25 @@ class BimPredictor extends Module with HasBimParameters {
         }
     }
 
-    when (reset_en) {
-        bim_ram.write(
-            reset_idx,
-            VecInit(Seq.fill(bankWidth){ 2.U(2.W) }),
-            (~(0.U(bankWidth.W))).asBools
-        )
-    } .elsewhen (s1_update.valid && s1_update.bits.isCommitUpdate) {
-        bim_ram.write(
-            s1_update_idx,
-            s1_update_data,
-            s1_update_mask.asUInt.asBools
-        )
-    }
+    // when (reset_en) {
+    //     bim_ram.write(
+    //         reset_idx,
+    //         VecInit(Seq.fill(bankWidth){ 2.U(2.W) }),
+    //         (~(0.U(bankWidth.W))).asBools
+    //     )
+    // } .elsewhen (s1_update.valid && s1_update.bits.isCommitUpdate) {
+    //     bim_ram.write(
+    //         s1_update_idx,
+    //         s1_update_data,
+    //         s1_update_mask.asUInt.asBools
+    //     )
+    // }
+
+    bim_ram.write(
+        Mux(reset_en , reset_idx, s1_update_idx),
+        Mux(reset_en, VecInit(Seq.fill(bankWidth){ 2.U(2.W) }), s1_update_data),
+        Mux(reset_en, (~(0.U(bankWidth.W))), s1_update_mask.asUInt).asBools
+    )
 
     when (s1_update_mask.reduce(_||_) && s1_update.valid && s1_update.bits.isCommitUpdate) {
         when (wr_bypass_hit) {

@@ -28,6 +28,8 @@ class IssueSlotIO(val numWakeupPorts: Int) extends CoreBundle {
     val inUop  = Flipped(Valid(new MicroOp))
     val outUop = Output(new MicroOp)    // passed to next slot uop
     val uop    = Output(new MicroOp)    // issued uop
+
+    val killed_by_branch = Output(Bool())
 }
 
 class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
@@ -140,6 +142,7 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     when (IsKilledByBranch(io.brUpdate, slotUop)) {
         nextState := s_invalid
     }
+    io.killed_by_branch := IsKilledByBranch(io.brUpdate, slotUop)
 
     when (!io.inUop.valid) {
         slotUop.brMask := nextBrMask
@@ -154,9 +157,9 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     }
 
     // maybe bug-fix
-    when (io.ldSpecMiss && (p1Poisoned || p2Poisoned)) {
-        io.request := false.B
-    }
+    // when (io.ldSpecMiss && (p1Poisoned || p2Poisoned)) {
+    //     io.request := false.B
+    // }
 
     io.valid := isValid(state)
     io.uop := slotUop
