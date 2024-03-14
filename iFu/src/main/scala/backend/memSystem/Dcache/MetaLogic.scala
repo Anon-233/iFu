@@ -245,7 +245,10 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                 val invalidPos =  PriorityEncoder(VecInit(rmetaSet.map((x: MetaLine) => !x.valid && !x.fixed)).asUInt)
                 // 否则从fixed为假的行中挑一个
                 // (暂时没设置真的youngest)
-                val youngestPos = PriorityEncoder(VecInit(rmetaSet.map((x: MetaLine) => !x.fixed)).asUInt)
+                // val youngestPos = PriorityEncoder(VecInit(rmetaSet.map((x: MetaLine) => !x.fixed)).asUInt)
+                
+                // 这是随机替换策略
+                val youngestPos = debug_clock(log2Ceil(nWays)-1,0)
                 //满了取替换，没满取无效
                 val replacePos = Mux(isfull, youngestPos, invalidPos)
 

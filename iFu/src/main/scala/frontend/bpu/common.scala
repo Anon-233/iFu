@@ -57,6 +57,7 @@ trait HasUbtbParameters extends HasBPUParameters {
 
 trait HasBimParameters extends HasBPUParameters {
     val nSets = 2048
+    // val nSets = 1024
     val nWrBypassEntries = 2
         
     def bimWrite(v: UInt, taken: Bool): UInt = {
@@ -72,8 +73,10 @@ trait HasBimParameters extends HasBPUParameters {
 trait HasBtbParameters extends HasBPUParameters {
     val nWays        = 2
     def tagSz        = vaddrBits - log2Ceil(nSets) - log2Ceil(fetchBytes)
-    val nSets        = 128
-    val extendedNSets = 128
+    // val nSets        = 128
+    // val extendedNSets = 128
+    val nSets = 64
+    val extendedNSets = 64
     val offsetSz = 13
     val BTBEntrySz = offsetSz + 1
 

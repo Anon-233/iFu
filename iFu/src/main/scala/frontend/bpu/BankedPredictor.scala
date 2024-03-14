@@ -5,7 +5,6 @@ import chisel3.util._
 import iFu.common.CoreBundle
 
 
-
 //class BranchPredictionUpdate extends CoreBundle
 //{
 //    val fetchWidth = frontendParams.fetchWidth
@@ -321,8 +320,6 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
         // io.f3meta(w).tageMeta := tage.io.f3meta(w)
         // io.f3meta(w).loopMeta := loop.io.f3meta(w)
     }
-
-
 }
 
 

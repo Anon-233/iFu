@@ -4,7 +4,7 @@ import chisel3._
 import chisel3.util._
 import iFu.frontend.FrontendUtils._
 import scala.math.min
-
+import chisel3.util.random.LFSR
 
 
 class BTBEntry extends Bundle with HasBtbParameters {
@@ -103,15 +103,18 @@ class BTBPredictor extends Module with HasBtbParameters{
         io.s2taken(w) := RegNext(isJal)
     }
 
-    val calculateWay = {
-        val rmeta = Cat((VecInit(s1rmeta.map{w => VecInit(w.map(_.tag))})).asUInt, s1tag(tagSz-1,0))
-        val l = log2Ceil(nWays)
-        val nChunks = (rmeta.getWidth+ l -1) / l
-        val chunks = (0 until nChunks)map{ i=>
-            rmeta(min((i+1)*l,rmeta.getWidth)-1,i*l)
-        }
-        chunks.reduce(_^_)
-    }
+    // val calculateWay = {
+    //     val rmeta = Cat((VecInit(s1rmeta.map{w => VecInit(w.map(_.tag))})).asUInt, s1tag(tagSz-1,0))
+    //     val l = log2Ceil(nWays)
+    //     val nChunks = (rmeta.getWidth+ l -1) / l
+    //     val chunks = (0 until nChunks)map{ i=>
+    //         rmeta(min((i+1)*l,rmeta.getWidth)-1,i*l)
+    //     }
+    //     chunks.reduce(_^_)
+    // }
+
+    val repl_way_update_en = s1valid && !s1hits.reduce(_||_)
+    val calculateWay = LFSR(16, repl_way_update_en)(log2Ceil(nWays) - 1, 0)
 
     for (w <- 0 until bankWidth){
         s1meta(w).writeWay := Mux(s1hits(w),

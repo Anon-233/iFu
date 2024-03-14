@@ -14,6 +14,7 @@ class BPUParameters {
 class ICacheParameters {
     val nBanks: Int       = 2
     val nSets: Int        = 64
+    // val nSets : Int       = 128
     val nWays: Int        = 8
     val lineBytes:Int     = 64
     val indexBits: Int    = log2Ceil(nSets)
@@ -47,8 +48,8 @@ class ROBParameters {
 }
 
 class LSUParameters{
-    val numSTQEntries: Int = 32
-    val numLDQEntries: Int = 32
+    val numSTQEntries: Int = 16
+    val numLDQEntries: Int = 16
     val ldqAddrSz    : Int = log2Ceil(numLDQEntries)
     val stqAddrSz    : Int = log2Ceil(numSTQEntries)
 }

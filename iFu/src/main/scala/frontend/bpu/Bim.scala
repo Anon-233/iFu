@@ -49,7 +49,7 @@ class BimPredictor extends Module with HasBimParameters {
 
     for (w <- 0 until bankWidth) {
         val resp_valid = !reset_en && s2_valid
-        io.s2taken(w) := resp_valid && s2_bim(w)(1)
+        io.s2taken(w) := /* resp_valid && */ s2_bim(w)(1)
     }
 // ---------------------------------------------
 
