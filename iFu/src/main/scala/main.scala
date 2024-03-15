@@ -18,11 +18,10 @@ object Main extends App {
 
     val firtoolOpts = Array(
         "-O=release",
-        "--disable-annotation-unknown",
         "--lowering-options=explicitBitcast,disallowLocalVariables,disallowPortDeclSharing",
         // "--repl-seq-mem",
         // "--repl-seq-mem-file=Foo.sv.conf"
-        // "--dead-code-elimination" // 添加这一行
+        "--disable-all-randomization",
     )
 
     ChiselStage.emitSystemVerilogFile(
