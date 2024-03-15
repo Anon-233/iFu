@@ -90,7 +90,6 @@ class DcacheParameters {
     def isMMIO(req : DCacheReq): Bool = req.is_uncacheable
 
     def isUncacheable(req : DCacheReq): Bool = req.is_uncacheable
-
 }
 
 case class IssueParams(
