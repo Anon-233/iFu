@@ -181,7 +181,7 @@ class ALUUnit(
         val jalrTarget = (jalrTargetBase + imm).asUInt
         brInfo.jalrTarget := jalrTarget
 
-        val cfiIdx = ((uop.pcLowBits ^ Mux(io.getFtqPC.entry.startBank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth) + log2Ceil(coreInstrBytes) - 1 , log2Ceil(coreInstrBytes))
+        val cfiIdx = ((uop.pcLowBits ^ Mux(io.getFtqPC.entry.startBank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth), 2)
 
         when (pcSel === PC_JALR) {
             mispredict := !io.getFtqPC.nextVal || (io.getFtqPC.nextpc =/= jalrTarget) ||
