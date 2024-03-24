@@ -149,7 +149,7 @@ class iFuCore extends CoreModule {
     val brUpdate = Wire(new BrUpdateInfo)
     val b1       = Wire(new BrUpdateMasks)
     val b2       = Reg(new BrResolutionInfo)
-
+    if(!FPGAPlatform)dontTouch(brinfos)
     brUpdate.b1 := b1
     brUpdate.b2 := b2
 
@@ -814,7 +814,7 @@ class iFuCore extends CoreModule {
         rob.io.debug_wb_ldst(cnt)   := mem_uop.ldst
         rob.io.debug_wb_pc(cnt)     := mem_uop.debug_pc
 
-        dontTouch(mem_uop.debug_pc)
+        if(!FPGAPlatform)dontTouch(mem_uop.debug_pc)
         cnt += 1
     }
     for (eu <- exe_units) {
@@ -841,7 +841,7 @@ class iFuCore extends CoreModule {
              }
             cnt += 1
 
-            dontTouch(wb_uop.debug_pc)
+            if(!FPGAPlatform)dontTouch(wb_uop.debug_pc)
         }
     }
     require(cnt == numWritePorts)
@@ -891,62 +891,62 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     
     // a counter
-    val (cntVal, cntWrap) = Counter(true.B, 1000)
+    // val (cntVal, cntWrap) = Counter(true.B, 1000)
 
-    val dec_throughput = RegInit(0.U(64.W))
-    dec_throughput := dec_throughput + PopCount(dec_valids.asUInt)
-    when (cntWrap) {
-        printf("dec_throughput: %d\n", dec_throughput)
-        dec_throughput := 0.U
-    }
+    // val dec_throughput = RegInit(0.U(64.W))
+    // dec_throughput := dec_throughput + PopCount(dec_valids.asUInt)
+    // when (cntWrap) {
+    //     printf("dec_throughput: %d\n", dec_throughput)
+    //     dec_throughput := 0.U
+    // }
 
-    val dis_throughput = RegInit(0.U(64.W))
-    dis_throughput := dis_throughput + PopCount(dis_valids.asUInt)
-    when (cntWrap) {
-        printf("dis_throughput: %d\n", dis_throughput)
-        dis_throughput := 0.U
-    }
+    // val dis_throughput = RegInit(0.U(64.W))
+    // dis_throughput := dis_throughput + PopCount(dis_valids.asUInt)
+    // when (cntWrap) {
+    //     printf("dis_throughput: %d\n", dis_throughput)
+    //     dis_throughput := 0.U
+    // }
 
 
-    val iss_throughput = RegInit(0.U(64.W))
-    iss_throughput := iss_throughput + PopCount(iss_valids.asUInt)
-    when (cntWrap) {
-        printf("iss_throughput: %d\n", iss_throughput)
-        iss_throughput := 0.U
-    }
+    // val iss_throughput = RegInit(0.U(64.W))
+    // iss_throughput := iss_throughput + PopCount(iss_valids.asUInt)
+    // when (cntWrap) {
+    //     printf("iss_throughput: %d\n", iss_throughput)
+    //     iss_throughput := 0.U
+    // }
 
-    val rob_throughput = RegInit(0.U(64.W))
-    rob_throughput := rob_throughput + PopCount(rob.io.commit.valids.asUInt)
-    when (cntWrap) {
-        printf("rob_throughput: %d\n", rob_throughput)
-        rob_throughput := 0.U
-    }
+    // val rob_throughput = RegInit(0.U(64.W))
+    // rob_throughput := rob_throughput + PopCount(rob.io.commit.valids.asUInt)
+    // when (cntWrap) {
+    //     printf("rob_throughput: %d\n", rob_throughput)
+    //     rob_throughput := 0.U
+    // }
 
-    val rob_throughput_arch = RegInit(0.U(64.W))
-    rob_throughput_arch := rob_throughput_arch + PopCount(rob.io.commit.arch_valids.asUInt)
-    when (cntWrap) {
-        printf("rob_throughput_arch: %d\n", rob_throughput_arch)
-        rob_throughput_arch := 0.U
-    }
+    // val rob_throughput_arch = RegInit(0.U(64.W))
+    // rob_throughput_arch := rob_throughput_arch + PopCount(rob.io.commit.arch_valids.asUInt)
+    // when (cntWrap) {
+    //     printf("rob_throughput_arch: %d\n", rob_throughput_arch)
+    //     rob_throughput_arch := 0.U
+    // }
 
-    val redirect_flush = RegInit(0.U(64.W))
-    redirect_flush := redirect_flush + PopCount(ifu.io.core.redirect_flush.asUInt)
-    when (cntWrap) {
-        printf("redirect_flush: %d\n", redirect_flush)
-        redirect_flush := 0.U
-    }
+    // val redirect_flush = RegInit(0.U(64.W))
+    // redirect_flush := redirect_flush + PopCount(ifu.io.core.redirect_flush.asUInt)
+    // when (cntWrap) {
+    //     printf("redirect_flush: %d\n", redirect_flush)
+    //     redirect_flush := 0.U
+    // }
 
-    val lsu_ldq_num = RegInit(0.U(64.W))
-    lsu_ldq_num := lsu_ldq_num + PopCount(lsu.io.core.ldq_valids.asUInt)
-    when (cntWrap) {
-        printf("lsu_ldq_num: %d\n", lsu_ldq_num)
-        lsu_ldq_num := 0.U
-    }
+    // val lsu_ldq_num = RegInit(0.U(64.W))
+    // lsu_ldq_num := lsu_ldq_num + PopCount(lsu.io.core.ldq_valids.asUInt)
+    // when (cntWrap) {
+    //     printf("lsu_ldq_num: %d\n", lsu_ldq_num)
+    //     lsu_ldq_num := 0.U
+    // }
 
-    val lsu_stq_num = RegInit(0.U(64.W))
-    lsu_stq_num := lsu_stq_num + PopCount(lsu.io.core.stq_valids.asUInt)
-    when(cntWrap) {
-        printf("lsu_stq_num: %d\n", lsu_stq_num)
-        lsu_stq_num := 0.U
-    }
+    // val lsu_stq_num = RegInit(0.U(64.W))
+    // lsu_stq_num := lsu_stq_num + PopCount(lsu.io.core.stq_valids.asUInt)
+    // when(cntWrap) {
+    //     printf("lsu_stq_num: %d\n", lsu_stq_num)
+    //     lsu_stq_num := 0.U
+    // }
 }

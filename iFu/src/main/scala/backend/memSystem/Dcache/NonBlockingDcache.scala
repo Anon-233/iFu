@@ -223,7 +223,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                         // 这个信号用于判断s2storeFailed的时候不去接当周期lsu的store请求
                           (lsuhasStore && s2StoreFailed) || 
                         // 如果lsu是mmo  
-                           (io.lsu.req.valid && lsuhasMMIO && !axiReady)
+                          (/* io.lsu.req.valid &&  */lsuhasMMIO && !axiReady)
                           )
 
   

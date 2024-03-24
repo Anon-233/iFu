@@ -116,10 +116,10 @@ class Frontend extends CoreModule {
     val s0_is_replay       = WireInit(false.B)
     val s0_replay_tlb_resp = Wire(new ITLBResp)
 
-    dontTouch(s0_valid)
-    dontTouch(s0_vpc)
-    dontTouch(s0_ghist)
-    dontTouch(s0_is_replay)
+    if(!FPGAPlatform)dontTouch(s0_valid)
+    if(!FPGAPlatform)dontTouch(s0_vpc)
+    if(!FPGAPlatform)dontTouch(s0_ghist)
+    if(!FPGAPlatform)dontTouch(s0_is_replay)
 
     // the first cycle after reset, the frontend will fetch from resetPC
     when (RegNext(reset.asBool) && !reset.asBool) {
@@ -141,11 +141,11 @@ class Frontend extends CoreModule {
     val s1_ghist     = RegNext(s0_ghist)
     val s1_is_replay = RegNext(s0_is_replay)
 
-    dontTouch(f1_clear)
-    dontTouch(s1_valid)
-    dontTouch(s1_vpc)
-    dontTouch(s1_ghist)
-    dontTouch(s1_is_replay)
+    if(!FPGAPlatform)dontTouch(f1_clear)
+    if(!FPGAPlatform)dontTouch(s1_valid)
+    if(!FPGAPlatform)dontTouch(s1_vpc)
+    if(!FPGAPlatform)dontTouch(s1_ghist)
+    if(!FPGAPlatform)dontTouch(s1_is_replay)
 
 // --------------------------------------------------------
 // Stage 1 -> access tlb, send paddr to icache, and use bpd.f1 to predict next pc
@@ -208,12 +208,12 @@ class Frontend extends CoreModule {
     val s2_is_replay = RegNext(s1_is_replay) && s2_valid
     val s2_tlb_resp  = RegNext(f1_tlb_resp)
 
-    dontTouch(f2_clear)
-    dontTouch(s2_valid)
-    dontTouch(s2_vpc)
-    dontTouch(s2_ghist)
-    dontTouch(s2_is_replay)
-    dontTouch(s2_tlb_resp)
+    if(!FPGAPlatform)dontTouch(f2_clear)
+    if(!FPGAPlatform)dontTouch(s2_valid)
+    if(!FPGAPlatform)dontTouch(s2_vpc)
+    if(!FPGAPlatform)dontTouch(s2_ghist)
+    if(!FPGAPlatform)dontTouch(s2_is_replay)
+    if(!FPGAPlatform)dontTouch(s2_tlb_resp)
 // --------------------------------------------------------
 // Stage 2 -> check and prepare for replay, and use bpd.f2 to redirect(if needed)
     // when replay happened, don't send request to tlb again
@@ -391,7 +391,7 @@ class Frontend extends CoreModule {
              * 判断是否是sfb指令，如果是Cacheline的最后一个bank，那么最多只能取3个bank（跨Cacheline）
              * 正常情况，可以取4个bank
              */
-            f3_fetch_bundle.sfbs(i) := (
+            f3_fetch_bundle.sfbs(i) := ( 
                 f3_mask(i) && brsigs.sfbOffset.valid &&
                 (offset_from_aligned_pc <= Mux(f3_is_last_bank_in_block, (fetchBytes + bankBytes).U, (2 * fetchBytes).U))
             )
@@ -489,15 +489,15 @@ class Frontend extends CoreModule {
         }
     }
 
-    dontTouch(f2_correct_f1_ghist)
-    dontTouch(f3_correct_f1_ghist)
-    dontTouch(f3_correct_f2_ghist)
-    dontTouch(f1_predicted_ghist)
-    dontTouch(f2_predicted_ghist)
-    dontTouch(f3_predicted_ghist)
-    dontTouch(f1_predicted_target)
-    dontTouch(f2_predicted_target)
-    dontTouch(f3_predicted_target)
+    if(!FPGAPlatform)dontTouch(f2_correct_f1_ghist)
+    if(!FPGAPlatform)dontTouch(f3_correct_f1_ghist)
+    if(!FPGAPlatform)dontTouch(f3_correct_f2_ghist)
+    if(!FPGAPlatform)dontTouch(f1_predicted_ghist)
+    if(!FPGAPlatform)dontTouch(f2_predicted_ghist)
+    if(!FPGAPlatform)dontTouch(f3_predicted_ghist)
+    if(!FPGAPlatform)dontTouch(f1_predicted_target)
+    if(!FPGAPlatform)dontTouch(f2_predicted_target)
+    if(!FPGAPlatform)dontTouch(f3_predicted_target)
 
 // -------------------------------------------------------
     val f4_clear = WireInit(false.B)

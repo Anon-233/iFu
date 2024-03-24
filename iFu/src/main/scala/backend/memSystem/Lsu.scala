@@ -196,18 +196,36 @@ class Lsu extends CoreModule {
     //-------------------------------------------------------------
     // Enqueue new entries
     //-------------------------------------------------------------
-    var ld_enq_idx = ldq_tail
-    var st_enq_idx = stq_tail
-    var ldq_full = Bool() // 过程中出现ldq已满
-    var stq_full = Bool() // 过程中出现stq已满
+    // var ld_enq_idx = ldq_tail
+    // var st_enq_idx = stq_tail
+    // var ldq_full = Bool() // 过程中出现ldq已满
+    // var stq_full = Bool() // 过程中出现stq已满
+    val padded_ldq_head = ldq_head.pad(ldq_head.getWidth + 1)
+    val padded_ldq_tail = ldq_tail.pad(ldq_tail.getWidth + 1)
+    val padded_stq_head = stq_head.pad(stq_head.getWidth + 1)
+    val padded_stq_tail = stq_tail.pad(stq_tail.getWidth + 1)
 
+    val ldq_full = Mux(padded_ldq_tail >= padded_ldq_head, padded_ldq_tail + coreWidth.U >= padded_ldq_head + numLdqEntries.U,
+                                                                padded_ldq_tail + coreWidth.U >= padded_ldq_head)
+
+    val stq_full = Mux(padded_stq_tail >= padded_stq_head, padded_stq_tail + coreWidth.U >= padded_stq_head + numStqEntries.U,
+                                                                padded_stq_tail + coreWidth.U >= padded_stq_head)
+
+    val idxAllocator = Module(new IndexAllocator)
+    idxAllocator.io.dis_uops := io.core.dis_uops
+    idxAllocator.io.old_ldq_tail := ldq_tail
+    idxAllocator.io.old_stq_tail := stq_tail
     for (w <- 0 until coreWidth) {
-        ldq_full = WrapInc(ld_enq_idx, numLdqEntries) === ldq_head
+        // ldq_full = WrapInc(ld_enq_idx, numLdqEntries) === ldq_head
         io.core.ldq_full(w) := ldq_full
+        
+        val ld_enq_idx = idxAllocator.io.ldq_enq_idxs(w)
         io.core.dis_ldq_idx(w) := ld_enq_idx
 
-        stq_full = WrapInc(st_enq_idx, numStqEntries) === stq_head
+        // stq_full = WrapInc(st_enq_idx, numStqEntries) === stq_head
         io.core.stq_full(w) := stq_full
+
+        val st_enq_idx = idxAllocator.io.stq_enq_idxs(w)
         io.core.dis_stq_idx(w) := st_enq_idx
 
         // enq
@@ -237,10 +255,10 @@ class Lsu extends CoreModule {
             stq(st_enq_idx).bits.succeeded := false.B
 
             assert(st_enq_idx === io.core.dis_uops(w).bits.stqIdx, "[lsu] mismatch enq store tag.")
-            assert(!stq(st_enq_idx).valid, "[lsu] Enqueuing uop is overwriting stq entries")
+            // assert(!stq(st_enq_idx).valid, "[lsu] Enqueuing uop is overwriting stq entries")
         }
 
-        ld_enq_idx = Mux(dis_ld_val, WrapInc(ld_enq_idx, numLdqEntries), ld_enq_idx)
+        // ld_enq_idx = Mux(dis_ld_val, WrapInc(ld_enq_idx, numLdqEntries), ld_enq_idx)
         
 
         next_live_store_mask = Mux(dis_st_val,      // 新增store指令
@@ -248,13 +266,15 @@ class Lsu extends CoreModule {
             next_live_store_mask
         )
 
-        st_enq_idx = Mux(dis_st_val, WrapInc(st_enq_idx, numStqEntries), st_enq_idx)
+        // st_enq_idx = Mux(dis_st_val, WrapInc(st_enq_idx, numStqEntries), st_enq_idx)
 
         assert(!(dis_ld_val && dis_st_val), "A UOP is trying to go into both the LDQ and the STQ")
     }
 
-    ldq_tail := ld_enq_idx
-    stq_tail := st_enq_idx
+    // ldq_tail := ld_enq_idx
+    // stq_tail := st_enq_idx
+    ldq_tail := idxAllocator.io.new_ldq_tail
+    stq_tail := idxAllocator.io.new_stq_tail
 
     // TODO: cacop? fence?
 
@@ -343,7 +363,7 @@ class Lsu extends CoreModule {
         ldq_head === ldq_wakeup_idx &&
         ldq_wakeup_e.bits.st_dep_mask.asUInt === 0.U))
     ))
-    // dontTouch(ldq_wakeup_e)
+    // if(!FPGAPlatform)dontTouch(ldq_wakeup_e)
     // -----------------------
     // Determine what can fire
 
@@ -406,7 +426,7 @@ class Lsu extends CoreModule {
             lcam_avail = lcam_avail && !(will_fire && uses_lcam.B)
             dc_avail = dc_avail && !(will_fire && uses_dc.B)
             rob_avail = rob_avail && !(will_fire && uses_rob.B)
-            dontTouch(will_fire) // dontTouch these so we can inspect the will_fire signals
+            if(!FPGAPlatform)dontTouch(will_fire) // if(!FPGAPlatform)dontTouch these so we can inspect the will_fire signals
             will_fire
         }
 
@@ -1223,7 +1243,7 @@ class Lsu extends CoreModule {
     // TODO is this the most efficient way to compute the live store mask?
     live_store_mask := next_live_store_mask & ~(st_brkilled_mask.asUInt) & ~(st_exc_killed_mask.asUInt)
     val debug_signal = WireInit(0.U(1.W))
-    dontTouch(debug_signal)
+    if(!FPGAPlatform)dontTouch(debug_signal)
     when(next_live_store_mask(stq_tail)){
         debug_signal := 1.U
     }

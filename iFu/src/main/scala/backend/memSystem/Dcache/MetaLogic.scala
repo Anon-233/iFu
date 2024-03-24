@@ -111,7 +111,7 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     val ages = RegInit(VecInit(Seq.fill(nSets)(VecInit(Seq.fill(nWays)(0.U(nAgeBits.W))))))
 
     val debug_clock = RegInit(0.U(32.W))
-    dontTouch(io)
+    if(!FPGAPlatform)dontTouch(io)
     debug_clock := debug_clock + 1.U
 
 
@@ -128,11 +128,11 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     val readTag = Wire(Vec(memWidth, UInt(nTagBits.W)))
     val readPos = Wire(Vec(memWidth, UInt(log2Ceil(nWays).W)))
     val readResp = 0.U.asTypeOf(Vec(memWidth, Valid(new DcacheMetaResp)))
-    dontTouch(readType)
-    dontTouch(readIdx)
-    dontTouch(readPos)
-    dontTouch(readTag)
-    dontTouch(readResp)
+    if(!FPGAPlatform)dontTouch(readType)
+    if(!FPGAPlatform)dontTouch(readIdx)
+    if(!FPGAPlatform)dontTouch(readPos)
+    if(!FPGAPlatform)dontTouch(readTag)
+    if(!FPGAPlatform)dontTouch(readResp)
 
     for(w <- 0 until memWidth){
         readType :=  Mux(haslsuRead , lsu_R,

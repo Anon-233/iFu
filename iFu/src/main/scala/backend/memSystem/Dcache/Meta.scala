@@ -144,7 +144,7 @@ class DcacheMeta extends Module with HasDcacheParameters{
     
     // bypass
     val bypass = Wire(Vec(memWidth, Bool()))
-    dontTouch(bypass)
+    if(!FPGAPlatform)dontTouch(bypass)
     for (w <- 0 until memWidth) {
         bypass(w) := rvalid(w) && wvalid && (ridx(w) === widx)
         // 当周期判断，下周期转发

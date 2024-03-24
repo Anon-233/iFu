@@ -139,57 +139,90 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
     val updateLOwData = Wire(Vec(bankWidth, Bool()))
 
 // reset 全部置零
-    when(reseting){
-        table.write(
-        resetIdx,
-        VecInit(Seq.fill(bankWidth)(0.U.asTypeOf(new TageEntry()))),
-        VecInit(Seq.fill(bankWidth)(true.B))
-        )  
-        HIU.write(
-        resetIdx,
-        VecInit(Seq.fill(bankWidth)(false.B)),
-        VecInit(Seq.fill(bankWidth)(true.B))
-        )
-        LOU.write(
-        resetIdx,
-        VecInit(Seq.fill(bankWidth)(false.B)),
-        VecInit(Seq.fill(bankWidth)(true.B))
-        )
-// 除此之外,如果到了特定的清除u位的周期,也要清除u位
-    }.elsewhen(clearingHIU||clearingLOU){
-        when(clearingHIU){
-            HIU.write(
-            clearingUIdx.asUInt,
-            VecInit(Seq.fill(bankWidth)(false.B)),
-            VecInit(Seq.fill(bankWidth)(true.B))
-            )
-        }
-        when(clearingLOU){
-            LOU.write(
-            clearingUIdx.asUInt,
-            VecInit(Seq.fill(bankWidth)(false.B)),
-            VecInit(Seq.fill(bankWidth)(true.B))
-            )
-        }
+//     when(reseting){
+//         table.write(
+//         resetIdx,
+//         VecInit(Seq.fill(bankWidth)(0.U.asTypeOf(new TageEntry()))),
+//         VecInit(Seq.fill(bankWidth)(true.B))
+//         )  
+//         HIU.write(
+//         resetIdx,
+//         VecInit(Seq.fill(bankWidth)(false.B)),
+//         VecInit(Seq.fill(bankWidth)(true.B))
+//         )
+//         LOU.write(
+//         resetIdx,
+//         VecInit(Seq.fill(bankWidth)(false.B)),
+//         VecInit(Seq.fill(bankWidth)(true.B))
+//         )
+// // 除此之外,如果到了特定的清除u位的周期,也要清除u位
+//     }.elsewhen(clearingHIU||clearingLOU){
+//         when(clearingHIU){
+//             HIU.write(
+//             clearingUIdx.asUInt,
+//             VecInit(Seq.fill(bankWidth)(false.B)),
+//             VecInit(Seq.fill(bankWidth)(true.B))
+//             )
+//         }
+//         when(clearingLOU){
+//             LOU.write(
+//             clearingUIdx.asUInt,
+//             VecInit(Seq.fill(bankWidth)(false.B)),
+//             VecInit(Seq.fill(bankWidth)(true.B))
+//             )
+//         }
 
-//其他情况下正常进行更新写入 
-    }.otherwise{
-        table.write(
-        updateIdx,
-        updatewData,
-        io.updateMask
-        )
-        HIU.write(
-        updateIdx,
-        updateHIwData,
-        io.updateUMask
-        )
-        LOU.write(
-        updateIdx,
-        updateLOwData,
-        io.updateUMask
-        )
-    }
+// //其他情况下正常进行更新写入 
+//     }.otherwise{
+//         table.write(
+//         updateIdx,
+//         updatewData,
+//         io.updateMask
+//         )
+//         HIU.write(
+//         updateIdx,
+//         updateHIwData,
+//         io.updateUMask
+//         )
+//         LOU.write(
+//         updateIdx,
+//         updateLOwData,
+//         io.updateUMask
+//         )
+//     }
+
+    table.write(
+        Mux(reseting, resetIdx, updateIdx),
+        Mux(reseting, VecInit(Seq.fill(bankWidth)(0.U.asTypeOf(new TageEntry()))), updatewData),
+        Mux(reseting, VecInit(Seq.fill(bankWidth)(true.B)), io.updateMask)
+    )
+    HIU.write(
+        Mux(reseting,   resetIdx, 
+        Mux(clearingHIU,clearingUIdx.asUInt,
+                        updateIdx)),
+
+        Mux(reseting,   VecInit(Seq.fill(bankWidth)(false.B)),
+        Mux(clearingHIU,VecInit(Seq.fill(bankWidth)(false.B)),
+                        updateHIwData)),
+        
+        Mux(reseting,   VecInit(Seq.fill(bankWidth)(true.B)),
+        Mux(clearingHIU,VecInit(Seq.fill(bankWidth)(true.B)),
+                        io.updateUMask))
+    )
+
+    LOU.write(
+        Mux(reseting,   resetIdx, 
+        Mux(clearingLOU,clearingUIdx.asUInt,
+                        updateIdx)),
+
+        Mux(reseting,   VecInit(Seq.fill(bankWidth)(false.B)),
+        Mux(clearingLOU,VecInit(Seq.fill(bankWidth)(false.B)),
+                        updateLOwData)),
+        
+        Mux(reseting,   VecInit(Seq.fill(bankWidth)(true.B)),
+        Mux(clearingLOU,VecInit(Seq.fill(bankWidth)(true.B)),
+                        io.updateUMask))
+    )
 
     //此外设置wrBypass,由于表里面信息以mem存储,主要用于解决WAR冲突
 

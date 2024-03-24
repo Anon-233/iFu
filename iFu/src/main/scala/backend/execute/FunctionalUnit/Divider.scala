@@ -3,6 +3,7 @@ package iFu.backend
 import chisel3._
 import chisel3.util._
 import iFu.common._
+import iFu.common.Consts._
 
 class DivFuncCode {
     val SZ_DIV_FN = 4
@@ -283,7 +284,7 @@ class SRT16Divider(val debug: Boolean = false) extends AbstractDiv(DivFuncCode()
     // ---------- sPost0 - sPost1 Register -----------------------------------
     val rNextReg = RegEnable(rNext(xLen + 3, 3), state(sPost0))
     val rNextPdReg = RegEnable(rNextPd(xLen + 3, 3), state(sPost0))
-    dontTouch(rNextReg)
+    if(!FPGAPlatform)dontTouch(rNextReg)
     // ---------- sPost0 - sPost1 Register -----------------------------------
     // ----- sPost1 ----------------------------------------------------------
     val r = rNextReg

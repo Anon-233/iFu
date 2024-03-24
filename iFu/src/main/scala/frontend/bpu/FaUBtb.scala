@@ -72,7 +72,7 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
         })
     })
     val s1_hits = s1_hit_OHs.map(_.asUInt.orR)
-    val s1_hit_ways = s1_hit_OHs.map(oh => PriorityEncoder(oh))
+    val s1_hit_ways = s1_hit_OHs.map(oh => OHToUInt(oh))
 
     for (w <- 0 until bankWidth) {
         val resp_valid = io.s1valid && s1_hits(w)

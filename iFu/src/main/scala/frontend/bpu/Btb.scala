@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 import iFu.frontend.FrontendUtils._
 import scala.math.min
+import iFu.common.Consts._
 import chisel3.util.random.LFSR
 
 
@@ -79,10 +80,10 @@ class BTBPredictor extends Module with HasBtbParameters{
     val s1hitWays = s1hitOHs.map{oh => PriorityEncoder(oh)}
 
 
-    dontTouch(s0idx)
-    dontTouch(s1tag)
-    dontTouch(s1rmeta)
-    dontTouch(s1rbtb)
+    if(!FPGAPlatform)dontTouch(s0idx)
+    if(!FPGAPlatform)dontTouch(s1tag)
+    if(!FPGAPlatform)dontTouch(s1rmeta)
+    if(!FPGAPlatform)dontTouch(s1rbtb)
 
 
     for (w <- 0 until bankWidth){
@@ -135,14 +136,14 @@ class BTBPredictor extends Module with HasBtbParameters{
     val newOffsetValue = (s1update.bits.target.asSInt -
                             (s1update.bits.pc + (s1update.bits.cfiIdx.bits<<2)).asSInt
                         )
-    dontTouch(newOffsetValue)
-    dontTouch(maxOffsetValue)
-    dontTouch(minOffsetValue)
+    if(!FPGAPlatform)dontTouch(newOffsetValue)
+    if(!FPGAPlatform)dontTouch(maxOffsetValue)
+    if(!FPGAPlatform)dontTouch(minOffsetValue)
     // 相较于Ubtb,这里专门处理了offset的问题
     val needExtend = (newOffsetValue > maxOffsetValue ||
                         newOffsetValue < minOffsetValue)
 
-    dontTouch(needExtend)
+    if(!FPGAPlatform)dontTouch(needExtend)
 
     val s1updateWBtbData = Wire(new BTBEntry)
 
@@ -150,7 +151,7 @@ class BTBPredictor extends Module with HasBtbParameters{
     s1updateWBtbData.offset := newOffsetValue
 
     val s1updateIdx = fetchIdx(s1update.bits.pc)
-    dontTouch(s1updateWBtbData)
+    if(!FPGAPlatform)dontTouch(s1updateWBtbData)
     val s1updatewBtbMask = (UIntToOH(s1updateCfiIdx) &
         Fill(bankWidth, s1update.bits.cfiIdx.valid && s1update.bits.cfiTaken && s1update.bits.isCommitUpdate))
     
@@ -160,10 +161,10 @@ class BTBPredictor extends Module with HasBtbParameters{
     
     val s1updatewMetaData = Wire(Vec(bankWidth, new BTBMeta))
 
-    dontTouch(s1updatewBtbMask)
-    dontTouch(s1updateWBtbData)
-    dontTouch(s1updatewMetaMask)
-    dontTouch(s1updatewMetaData)
+    if(!FPGAPlatform)dontTouch(s1updatewBtbMask)
+    if(!FPGAPlatform)dontTouch(s1updateWBtbData)
+    if(!FPGAPlatform)dontTouch(s1updatewMetaMask)
+    if(!FPGAPlatform)dontTouch(s1updatewMetaData)
 
     for (w <- 0 until bankWidth){
         s1updatewMetaData(w).tag := Mux(s1update.bits.btbMispredicts(w) ,0.U ,s1updateIdx >> log2Ceil(nSets))
