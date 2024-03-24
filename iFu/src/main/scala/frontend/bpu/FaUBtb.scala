@@ -94,7 +94,8 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
 // ---------------------------------------------
 //      Prepare Meta for Update
     val repl_way_update_en = io.s1valid && !s1_hits.reduce(_||_)
-    val repl_way = LFSR(16, repl_way_update_en)(log2Ceil(nWays) - 1, 0)
+    val repl_way = LFSR(nWays, repl_way_update_en)(log2Ceil(nWays) - 1, 0)
+
     val s1_meta = Wire(Vec(bankWidth, new UBTBPredictMeta)) // 这个是返回给外面的信息 和meta不是同一个类型
     for (w <- 0 until bankWidth) {
         s1_meta(w).hit := s1_hits(w)
@@ -112,13 +113,13 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
     val s1_update         = io.s1update
     val s1_update_cfi_idx = s1_update.bits.cfiIdx.bits
     val s1_update_meta    = VecInit(s1_update.bits.meta.map(_.uBTBMeta))
-    val s1_update_ways     = VecInit(s1_update_meta.map(_.write_way))
+    val s1_update_ways    = VecInit(s1_update_meta.map(_.write_way))
     val s1_update_way     = s1_update_ways(s1_update_cfi_idx)
 
     // we don't care if offset > 2^13, BTB will handle it
     val new_offset = (
         (s1_update.bits.target.asSInt) -
-        (s1_update.bits.pc.asUInt + (s1_update_cfi_idx << 2).asUInt).asSInt
+        (s1_update.bits.pc.asUInt + (s1_update_cfi_idx << 2)).asSInt
     )
 
     // update target offset
@@ -172,25 +173,7 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
 
 // ---------------------------------------------
 //      Performance Counter
-    // val num_branchs = RegInit(0.U(64.W))
-    // num_branchs := num_branchs + PopCount(io.s1targs.map(_.valid))
-    // val num_mis_preds = RegInit(0.U(64.W))
-    // num_mis_preds := num_mis_preds + PopCount(
-    //     wastaken zip (0 until bankWidth) map {
-    //         case (t, idx) => (
-    //             io.s1update.bits.meta(idx).uBTBMeta.hit &&
-    //             (meta(io.s1update.bits.meta(idx).uBTBMeta.write_way)(idx).state.isTaken =/= t)
-    //         ).asBool
-    //     }
-    // )
-    // val num_updates = RegInit(0.U(64.W))
-    // num_updates := num_updates + io.s1update.valid.asUInt
-
-    // val start = RegInit(false.B)
-    // when (num_branchs > 1.U) { start := true.B }
-    // when (start && num_branchs(8, 0) === 0.U) {
-    //     printf("UBTB %d: %d %d %d\n", ubtb_id.U, num_branchs, num_mis_preds, num_updates)
-    // }
+    // TODO
 // ---------------------------------------------
 }
 

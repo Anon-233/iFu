@@ -40,10 +40,17 @@ class BimPredictor extends Module with HasBimParameters {
 
 // ---------------------------------------------
 //      Predict Logic
-    val s0_tag = fetchIdx(io.s0pc)
+    // val s0_valid = io.s0valid
+    // val s0_idx   = fetchIdx(io.s0pc)
+    val s1_valid = RegNext(io.s0valid)
+    val s1_idx   = RegNext(fetchIdx(io.s0pc))
 
-    // s0 send request, s1 get response, s2 use response
-    val s2_bim = RegNext(VecInit(bim_ram.read(s0_tag.asUInt,io.s0valid).map(_.asTypeOf(UInt(2.W)))))
+    // val s2_bim = RegNext(VecInit(
+    //     bim_ram.read(s0_idx.asUInt, s0_valid).map(_.asTypeOf(UInt(2.W)))
+    // ))
+    val s2_bim = VecInit(
+        bim_ram.read(s1_idx.asUInt, s1_valid).map(_.asTypeOf(UInt(2.W)))
+    )
 
     // val s2_valid = RegNext(RegNext(io.s0valid))
 
@@ -91,7 +98,7 @@ class BimPredictor extends Module with HasBimParameters {
         val update_pc  = s1_update.bits.pc + (w << 2).U
         val update_idx = fetchIdx(update_pc)
 
-        when(
+        when (
             s1_update.bits.brMask(w) ||
             (s1_update.bits.cfiIdx.valid && s1_update.bits.cfiIdx.bits === w.U)
         ) {
@@ -129,5 +136,10 @@ class BimPredictor extends Module with HasBimParameters {
             wr_bypass_enq_idx := WrapInc(wr_bypass_enq_idx, nWrBypassEntries)
         }
     }
+// ---------------------------------------------
+
+// ---------------------------------------------
+//      Performance Counter
+    // TODO
 // ---------------------------------------------
 }
