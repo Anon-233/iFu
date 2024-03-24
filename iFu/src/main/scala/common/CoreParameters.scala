@@ -29,8 +29,10 @@ class ICacheParameters {
 class FrontendParameters{
     val fetchWidth: Int                = 8
     val fetchBytes: Int                = fetchWidth * 4
-    val numFTQEntries: Int             = 40
-    val numFetchBufferEntries: Int     = 32
+    // val numFTQEntries: Int             = 40
+    val numFTQEntries: Int              = 16
+    // val numFetchBufferEntries: Int     = 32
+    val numFetchBufferEntries: Int      = 16
     val iCacheParams: ICacheParameters = new ICacheParameters
     val bpdParams: BPUParameters       = new BPUParameters
     val bankWidth: Int                 = fetchWidth / iCacheParams.nBanks
