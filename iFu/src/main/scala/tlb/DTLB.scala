@@ -137,6 +137,8 @@ class DTLB extends CoreModule(){
           (dmw0_en && (csr_regs.dmw0_mat === 0.U)) ||
           (dmw1_en && (csr_regs.dmw1_mat === 0.U))
 
+        dontTouch(dmw0_en)
+        dontTouch(dmw1_en)
     }
 }
 

@@ -98,26 +98,26 @@ class IssueUnitAgeOrdered (
         }
     }
 
-    val (cntVal, cntWrap) = Counter(true.B, 1000)
+    // val (cntVal, cntWrap) = Counter(true.B, 1000)
 
-    val iss_busy_instrs = RegInit(0.U(64.W))
-    iss_busy_instrs := iss_busy_instrs + numAvailable
-    when (cntWrap) {
-        printf("iss_busy_instrs_%d: %d\n", issParams.iqType.U, iss_busy_instrs)
-        iss_busy_instrs := 0.U
-    }
+    // val iss_busy_instrs = RegInit(0.U(64.W))
+    // iss_busy_instrs := iss_busy_instrs + numAvailable
+    // when (cntWrap) {
+    //     printf("iss_busy_instrs_%d: %d\n", issParams.iqType.U, iss_busy_instrs)
+    //     iss_busy_instrs := 0.U
+    // }
 
-    val iss_request_instrs = RegInit(0.U(64.W))
-    iss_request_instrs := iss_request_instrs + PopCount(requests)
-    when (cntWrap) {
-        printf("iss_request_instrs_%d: %d\n", issParams.iqType.U, iss_request_instrs)
-        iss_request_instrs := 0.U
-    }
+    // val iss_request_instrs = RegInit(0.U(64.W))
+    // iss_request_instrs := iss_request_instrs + PopCount(requests)
+    // when (cntWrap) {
+    //     printf("iss_request_instrs_%d: %d\n", issParams.iqType.U, iss_request_instrs)
+    //     iss_request_instrs := 0.U
+    // }
 
-    val iss_slot_killed = RegInit(0.U(64.W))
-    iss_slot_killed := iss_slot_killed + PopCount(issueSlots.map(_.killed_by_branch))
-    when (cntWrap) {
-        printf("iss_slot_killed_%d: %d\n", issParams.iqType.U, iss_slot_killed)
-        iss_slot_killed := 0.U
-    }
+    // val iss_slot_killed = RegInit(0.U(64.W))
+    // iss_slot_killed := iss_slot_killed + PopCount(issueSlots.map(_.killed_by_branch))
+    // when (cntWrap) {
+    //     printf("iss_slot_killed_%d: %d\n", issParams.iqType.U, iss_slot_killed)
+    //     iss_slot_killed := 0.U
+    // }
 }

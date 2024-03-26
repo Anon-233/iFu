@@ -685,7 +685,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         }
 
     }.elsewhen(s2state === mmioreq){
-        // 查pipeline，lsu发送的时候0号或1号是mmio请求，不会同时发两个
+        // 查pipeline，要求lsu发送的时候0号或1号是mmio请求，不会同时发两个
 
         val mmioreq = Mux(s2valid(0), s2req(0), s2req(1))
         // mmiou必须空闲
