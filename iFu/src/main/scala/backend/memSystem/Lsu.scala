@@ -601,22 +601,14 @@ class Lsu extends CoreModule {
                 stq_execute_head
             )
             stq(stq_execute_head).bits.succeeded := false.B // TODO: do we need this?
+
         }.elsewhen(will_fire_load_wakeup(w)) {
             dmem_req(w).valid := true.B
             dmem_req(w).bits.addr := ldq_wakeup_e.bits.addr.bits
             dmem_req(w).bits.uop := ldq_wakeup_e.bits.uop
             dmem_req(w).bits.is_uncacheable := ldq_wakeup_e.bits.is_uncacheable
             s0_executing_loads(ldq_wakeup_idx) := dmem_req_fire(w)
-
-
-
             assert(!ldq_wakeup_e.bits.executed && !ldq_wakeup_e.bits.addr_is_virtual)
-        }
-        when(dmem_req(memWidth-1).bits.is_uncacheable) {
-            for(w <- 0 until memWidth-1) {
-                dmem_req(w).valid       := false.B
-                can_fire_store_commit(w):= false.B
-            }
         }
         //-------------------------------------------------------------
         // Write Addr into the LAQ/SAQ
@@ -665,7 +657,18 @@ class Lsu extends CoreModule {
                 "[lsu] Incoming store is overwriting a valid data entry")
         }
     }
-
+    // 优先级：store的uncachebale请求 > load的uncacheable请求
+    when(dmem_req(0).bits.is_uncacheable) {
+        // 当store指令的线有uncacheable请求时，独占所有线
+        for (w <- 1 until memWidth) {
+            dmem_req(w).valid := false.B
+        }
+    }.elsewhen(dmem_req(memWidth - 1).bits.is_uncacheable) {
+        // 当load的uncacheable的线有uncacheable请求时，独占所有线
+        for (w <- 0 until memWidth - 1) {
+            dmem_req(w).valid := false.B
+        }
+    }
     //-------------------------------------------------------------
     //-------------------------------------------------------------
     // Cache Access Cycle (Mem)
