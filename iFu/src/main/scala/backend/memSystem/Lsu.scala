@@ -520,13 +520,6 @@ class Lsu extends CoreModule {
 
             assert(!ldq_wakeup_e.bits.executed && !ldq_wakeup_e.bits.addr_is_virtual)
         }
-
-        when (dmem_req(memWidth-1).bits.is_uncacheable) {
-            for(w <- 0 until memWidth - 1) {
-                dmem_req(w).valid        := false.B
-                can_fire_store_commit(w) := false.B
-            }
-        }
         //-------------------------------------------------------------
         // Write Addr into the LAQ/SAQ
         when (will_fire_load_incoming(w)) {
@@ -562,6 +555,19 @@ class Lsu extends CoreModule {
 
             assert(!(stq(sidx).bits.data.valid),
                 "[lsu] Incoming store is overwriting a valid data entry")
+        }
+    }
+
+    // 优先级：store的uncachebale请求 > load的uncacheable请求
+    when(dmem_req(0).bits.is_uncacheable) {
+        // 当store指令的线有uncacheable请求时，独占所有线
+        for (w <- 1 until memWidth) {
+            dmem_req(w).valid := false.B
+        }
+    }.elsewhen(dmem_req(memWidth - 1).bits.is_uncacheable) {
+        // 当load的uncacheable的线有uncacheable请求时，独占所有线
+        for (w <- 0 until memWidth - 1) {
+            dmem_req(w).valid := false.B
         }
     }
 
