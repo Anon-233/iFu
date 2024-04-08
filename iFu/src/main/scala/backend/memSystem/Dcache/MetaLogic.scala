@@ -91,7 +91,6 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     })
 
     
-
     for(w <- 0 until memWidth){
         io.lsuRead(w).resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
     }

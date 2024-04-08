@@ -433,6 +433,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             replayDataRead.req.bits.pos := s1pos
             replayDataRead.req.bits.offset := getWordOffset(s1req(0).addr)
         }
+        
     }.elsewhen(s1state === mshrread){
 
         when(mshrMetaRead.resp.valid){
@@ -756,6 +757,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // TODO simplify the IO channel of DCacheData and DCacheMeta(DONE)
 
     // TODO mmio(DONE)
-    // TODO reconstrcut the DCache(
+    // TODO reconstrcut the DCache(DONE)
     // TODO lr/sc
 }

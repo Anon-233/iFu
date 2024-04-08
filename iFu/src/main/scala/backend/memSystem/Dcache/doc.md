@@ -1,188 +1,118 @@
-
-(重构dcache之后)
-1.15
-关于转发的问题：
-对于syncReadMem，在verilator同周期读写可以内部转发，reg不自带内部转发
-因此在wordData和Meta类中都加了转发检查机制
-在wordData中，当周期判断，下周期转发
-```scala
-  // bypass
-    val bypass = Wire(Vec(memWidth, Bool()))
-    for (w <- 0 until memWidth) {
-        // 当周期判断，下周期转发
-        bypass(w) := rvalid(w) && wvalid && (ridx1v(w) === widx1v)
-        when (RegNext(bypass(w))) {
-            io.read(w).resp.bits.data := RegNext(wreq.data)
-        }
-    }
-
-```
-
-在meta中
-```scala
-// bypass
-    val bypass = Wire(Vec(memWidth, Bool()))
-    for (w <- 0 until memWidth) {
-        // 当周期判断，下周期转发
-        bypass(w) := rvalid(w) && wvalid && (ridx(w) === widx)
-        when (RegNext(bypass(w))) {
-            // 看看write操作对应位有修改吗，如果有，用写的值，没有的话，还是保留原来读到的rmetaSet的值
-            io.read(w).resp.bits.rmetaSet(wpos).valid := Mux(RegNext(wreq.setvalid.valid), RegNext(wreq.setvalid.bits), rmetaSet(w)(wpos).valid)
-            io.read(w).resp.bits.rmetaSet(wpos).dirty := Mux(RegNext(wreq.setdirty.valid), RegNext(wreq.setdirty.bits), rmetaSet(w)(wpos).dirty)
-            io.read(w).resp.bits.rmetaSet(wpos).readOnly := Mux(RegNext(wreq.setreadOnly.valid), RegNext(wreq.setreadOnly.bits), rmetaSet(w)(wpos).readOnly)
-            io.read(w).resp.bits.rmetaSet(wpos).tag := Mux(RegNext(wreq.setTag.valid), RegNext(wreq.setTag.bits), rmetaSet(w)(wpos).tag)
-        }
-    }
-```
-
-这里的RegNext是为当周期判断下周期用设置的
+### NonBlockingDcache
+非阻塞cache在这里负责处理lsu的请求，以及一些对于cache，总线资源的维护。
 
 
-2. 关于mshr的FakefirstMiss
+#### 1. 内部模块组件
+- meta : 用于存储cache的meta信息，包括valid，tag，dirty等信息
 
-当一个refill进行到最后一个，进行到s2的时候，会
-- 写回newmeta
-- 并且通告mshr对应的一表项，一表项当周期给对应二表项激活一次，下周期就被清掉了
-直到被清掉，这个表项还是waiting状态
+- data : 用于存储cache的数据信息，一维展平,可以优化时序
 
-在这个周期之前运行到s2的二次miss都可以正常匹配，正常工作，正常被激活
-在这个时候由于设置了meta内部转发，s0的同地址快读已经可以命中了
+- mshr :用于存储cache指令的miss信息，包括miss的地址，miss的状态等信息
 
-唯独此时的s1被判断成了miss，
-一个周期后，当他s2进表的时候对应的表一项早就没了，因此他以为自己是首次miss
-导致了fakefirstmiss的出现，这会导致重新refill，破坏缓存一致性
+- wfu : Write&Fetch Unit，连接着总线，用于处理对脏cache行写回内存，以及从内存中取新的行到cache中
 
-解决方法：做一个一周期之前信息的转发，如果发现一周期之前有一个fetchReady，
-并且那时对应的块地址和当前的地址一样，就视为一个secondMiss，存入即激活(fastWakeUp机制)
+- mmiou : 同样连接着总线，用于处理lsu发进来的mmio请求，包括读写
 
+以及几个辅助模块
+- wordWrite:用于处理粒度写
+- MissArbiter:两个流水线发生了miss请求，仲裁谁放进mshr
 
-3.brmask , kill 的检查
+#### 2. 内部流水线
+流水线有状态对应的任务是
+- lsu ：普通的lsu访存请求(无mmio)，包括读写。
+s0:接到请求，将idx送入meta进行命中的判断
+s1:接到hit与否，如果hit，就将命中后的pos送入data
+s2:
+    若命中，此时data会返回那个字，进行处理
+        如果是ld指令，就将数据resp回lsu
+        如果是st指令
+            如果mshr没有正在等待的st指令，就正常做，将数据按粒度处理之后写回data，然后将那一行meta的dirty标记为true
+            如果mshr有st指令，那就说明前面的st指令还在等待自己完成，后面的不要去做，按照storefailed的方式返回
+    若miss经过missAribiter的处理，将miss的请求存入mshr中，等待有机会发出replay
 
-s1，s2 都要检查是不是kill了,目前s2valid是
-```scala
-for(w <- 0 until memWidth){
-        s2valid(w) := RegNext(s1valid(w) &&
-                            !(s1state === lsu && (isStore(s1req(w)) && s2StoreFailed)) && 
-                            !(s1state === lsu && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop))) &&
-                            !(s1state === replay && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)))
-                            )
-}
-```
-这只考虑了s1的kill情况，在s2的时候也要当周期更新brmask之后检查一下
+- mshrread : 处理mshr指令的第一步，向wfu发请求
+s0:按miss的地址去meta里面寻一个可替换的行
+s1:meta将这个寻得的pos以及其他有关信息(要去fetch的自己的地址，以及可能写回内存的脏行的地址)送入wfu
+s2:无
 
+- wb : wfu不存一整条cache行，而是"现用现取",wb代表wfu要从向内存写回的行那里拿一个字——因此一次对cache行的写回是需要16，32等周期数的
+s0:由于wfu里面已经得知了要写回内存的行以及具体想要的哪一个字，s0不需要进meta再寻地址，不做任何操作
+s1:将位置信息送入data
+s2：data读取到这个字，送给wfu
+    一个小机制：
+    如果这个字的偏移是那一行的第一个字，说明这个时候要正式开始写回了，将这个行对应meta的readOnly标记为true，此时可以服务ld，但是不可以服务st（标志是st指令即使命中也返回miss）。
 
+- refill: wfu执行fetch状态从内存中拿出的新行的某个字，写入cache
+s0:由于wfu已经得知了要写入的行的位置，s0不需要进meta再寻地址，不做任何操作
+s1:只需要按照指定的位置写回就好，因此也不需要读取data
+s2:将那个字写入data
+    两个特殊情况
+    如果refill了第一个字进去,说明这个行既有老的字,又有新的字,这个时候要直接作废掉这个meta行
+    如果是fetchReady的时候,也就是写好了最后一个字,这个时候将新的meta行写回meta,同时通告mshr取好的地址以及pos信息,使其可以激活对应的可能等待的请求
 
-4. 有关指令miss之后的行为
-- miss之后在s2经过mshr判断能不能存进来，是firstmiss还是secondmiss，需不需要快启动
-
-- 之后总线空闲的时候会发出mshrread请求，这个请求在s0传入地址，s1从meta中返回可被替换的行号，（替换前后idx肯定相同，不用专门传）
-
-
-
-5. 对于mshrreplay可能导致的乱序
-在refill的最后一个周期，由于内部转发，此时s0的一个用到该meta的指令会认为自己命中，这可以多做一个乱序ld
-
-问题：在一个storemiss ， 进了mshr，lsu会从下一个st指令一直重发，这里应该不允许做完（保证顺序！）
-
-解决此问题需要利用的机制是，s1判断，如果mshr里面有store，就判为miss，然后再以s2的时候hasStore接不了而引起重发
-<!-- 这个不好 -->
-
-
-然而，如果refill最后一个到第二周期，是一个曾经miss的store指令发起的，就会导致这个store在下个周期才能被replay
-
-然而下个周期：
-replay到s0的时候，s2的storemiss发现没有hasStore，就可以存进去，s1上个周期被meta内部转发判为命中，如果s1此时是后面重发的st指令，这会导致s1乱序
+- replay: mshr中的miss请求被激活,重新发出来执行
+s0:由于已经知道对应的全部位置信息,因此不需要meta参与
+s1:将位置信息送入data
+s2:读或写操作,将返回的resp通过0号返回lsu即可.
 
 
+- mmioreq:mmio请求,lsu发送mmio的时候,保证两条流水线里面只有一条在处理mmio,另一条什么都不做
+s0:无
+s1:无
+s2:将mmio请求送入mmiou,mmiou开始处理
 
-作出改动：首先一个一表项直到fetchReady后的两周期才会被清掉，多留两个周期的"影子"，然后，所有s1判断到mshr.io.hasStore的st会被判为miss
+- mmioresp:mmio回复,mmiou处理完毕,回复lsu
+s0:会从mmiou发出一条req,这条req里面的data和uop就是最后要送给resp的,这里以"req"的形式出现只是载体
+s1:无
+s2:将resp通过0号流水线送回给lsu
 
-- refill，fetchReady，s1的miss，一周期之后进去，一表项还在，根据影子判断是secondMiss
-- refill，fetchReady，s0的超前命中st，一周期之后，一表项还在，hasStore还是为高，自己被判为miss，两周期之后，一表项还在，自己装不进去，会发回nack，导致重发
-
-这两个特殊的周期由此解决、
-
-从某种意义上讲，这里当且仅当两周期之后第一个真正的st的replay才被算做完，那时候才算一表项被清，也正常
-
-移除fakeFirstMiss，保留快速唤醒，将hasStore转变为一二表项共同的判断逻辑
-并且这两个特殊的存活周期中该表项会变成ready，并且记录下replay的pos，
-如果在特殊周期有二次命中，肯定不能从头开始等（那一个一表项马上消失，等不来的），必须快速唤醒，并且从那个一表项拿replaypos
-
-6. 对上面乱序的补充
-判断st乱序的情况不能只看mshr的hasStore,还要看流水线里面有无比他前面的store，如果有，自己要按miss论处，判断逻辑在s1，因此hasStore要看mshr和s2里面的store
-
-```scala
-    // mshr有store，或者s2里面有一个即将失败的store请求，还在s1的store就要把自己判断为miss
-    val hasStore = mshrs.io.hasStore || (s2valid(0) &&isStore(s2req(0)) && !s2hit(0)) 
-
-    s1hit(w) := Mux(isStore(s1req(w)) && hasStore, false.B, true.B)
-```
-
-7. reseting
-dcache一共64*8*16个字需要很多个周期才reset为0，这期间如果请求已经发过来了，就可能被reset覆盖掉！
-因此先不做数据的reset试一下
+#### 3. 一些细节
+- 和lsu的ready交流
+3.1 io.lsu.req.ready的意思lsu一定会认为发送进来了,因此当一些情况不想让lsu发送进来的时候,要将ready置为false,这些主要包括一些内部事务,以及不满足条件的情况:1.lsu想发st指令,但刚刚发生了storeFailed,需要lsu的st队列调整之后重发.2.lsu想发送mmio.但是当前的axi总线繁忙.
 
 
-8. 
-把这里的req.valid变成了req.fire，否则lsu没发这边已经开始拿过来做了就会导致问题发生
-```scala
-// 流水线里面有mmioresp的时候，下一个fire的请求不要进来
-lsuMMIOValid := io.lsu.req.fire && lsuhasMMIO && axiReady
-lsuNormalValid := io.lsu.req.fire && !lsuhasMMIO && io.lsu.req.ready
-```
+- 状态优先级
+    wb和refill最高,因为wb一旦开始,必须保证从cache行读字的速度,比axi总线向内存写回要快,否则会出现数据混乱的情况.
+    然后是mmio的req和resp
+    再之后是replay,因为replay信号等了很久了,优先处理
+    再之后是mshrread,因为mshrread是为了给replay提供激活wfu功能的
+    再之后,在所有总线相关和处理miss指令之后,是普通的lsu请求
 
-9. 有关fenceClear的meta行处理
-目前写回脏行之后不动其他位,只做dirty位
-如果仅仅在写回脏行之后清掉meta的dirty位,那以后有个对该行的uncacheable的写请求,就会造成不一致
-但是上述操作本身就是具有破坏缓存一致性的风险,这应该是不会发生的
+- axi线的互斥
+由于只有一条axi线,而可能用到axi的有wfu和mmiou,因此要记录axi的状态,如果其中一个单元在忙,或者流水线中s1s2有即将动用两个单元的请求,那么就标记为忙,不允许其他axi请求来.
 
 
-fence之后必须彻底清除掉这一行
+- kill机制
+iskilledbyBranch,会在s0,s1,s2来检查
+storeFailed,会在s0,s1检查
+lsu的s1_kill,会kill掉当前s1的请求
 
-原因在于st miss
-在fence写回脏行的时候,会变成readOnly状态,如果有store 这一行,会进mshr,等所谓的脏位清零,
-然而接下来mshrread不会匹配,一定会找个invalid的路作为自己refill的路----即使此时那一行"还在",等他refill完,他那就有两个项,以后的命中判断就出问题了
+- 分支预测处理
+在每级流水线处理分支预测错误,随时准备判断kill的信号.
+在每级流水线及时更新,GetNewBrMask
 
-因此在fence结束必须彻底清除掉那一行,这样以后的命中判断才可以正常按照新拿来的那一行进行
+---
+接下来是meta和data相关内容
+### MetaLogic
+处理meta逻辑,首先约定所有状态,都需要在s0发起读,s2和data一起发起写,否则会有复杂的冲突
+读的case
+- lsu_R: lsu普通的读指令,拿着s1返回的metaSet来对tag比较,判断命中与否,特别地对于readOnly的行,如果是st指令,也会返回miss
+- replay_R:无具体工作
+- mshr_R: 替换算法找到路号,已经对应的被换掉的行,送给wfu自行判断需不需要藏位写回
 
-在普通的替换策略是不需要担心,因为如果那被替换的一行变成readonly,就意味着它在wb,它一定会在wb后fetch被销毁掉,等st来mshrread,这一行就被新的覆盖了
-这时是正常的寻路替换
+写的case
+全部都是将写的请求传递给meta数据即可
 
-                                                            
-10. TODO: 协调lsu的信号控制:如果仅仅是isunique,就只判断stqEmpty,只有fence指令才会给dcache发force_order,才会判断dcache的ordered
+### Meta
+meta的数据,以Set存储,接收读写,实现了内部转发
+存在一个写的机制:每一个字段(valid,dirty,tag等)都有valid和bits,只有对应位的valid为高,才能将bits的数值写进去.
 
-11. 对于mshr的fenceClear:
-不需要,unique亮起来的时候,此时后端所有的指令都是一定要完成的,不用清什么ld之类的
+### DataLogic
+逻辑比较简单,无论读写都是直接将请求传递给data数据即可
 
+### WordData
+这里的data是一维的,会将idx,pos,和字偏移算出一个一维的idx,进行读或者写,单次读或写都是一个字
+同样地也实现了内部转发.
 
+### MSHR
 
-12. 资源节约 priority Encoder 是否真的需要？
-当前的位置信息使用优先级编码器，方便debug,但是这里会不会造成LUT过多的浪费？
-以及这篇文章所说的
-https://zhuanlan.zhihu.com/p/650745488
-是不是错误将我们的BRAM识别成了LUT？
-
-已解决,关键问题是物理寄存器过多导致寄存器重命名和寄存器堆转发逻辑
-
-
-
-13. 对于store指令的二次miss欺骗问题
-一个store进了mshr，发现一表里面有一个ld，于是自己进了二表等待唤醒，但问题是
-那个ld指令可能会被分支kill掉，于是就只剩store指令留在二表项，再也无法被唤醒
-
-一个解决方案是，st指令必须作为一二表项同时去存储
-上面这个并不能解决根本,因为ld依赖ld的情况也会出现
-
-最后的解决方案,由于一表项只负责指导fetch地址,没必要传入brupdate检测kill掉,因为不知道自己代表的块地址有没有后面二次miss的在等着用.即使被kill了,他也要坚持把自己这个地址取完(即使可能取了没有任何其他人等着用)
-而二表项才是负责产生replay信号的,传入brupdate,如果要kill,就在这里kill.这样就不会出现上面的问题了
-
-
-14. 当前TODO
-给Dcache行扩充大小，一拍只有16个，但是要实现refillCycle = 4 之类连续发起四次AXI请求
-
-15. 修改了hasDirty的生成逻辑，如果是个seq的bool，reduce（_|_）需要的逻辑门很多，而一开始定义成Vec，之后asUInt.orR就可以转化成verilog里面的缩位逻辑了
-
-16. 记录参数影响，目前stq16 ldq 16  Rob 64 issunit 减半，
-ds影响不大，ipc还是1.27
-
-17. 之前设readOnly和fixed都是Mem，这会随机初始化，可能导致fixed为真一直换不出去。现在改成了RegInit，这样就不会随机初始化了
