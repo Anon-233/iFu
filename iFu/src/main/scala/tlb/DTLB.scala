@@ -120,6 +120,9 @@ class DTLB extends CoreModule(){
     val csr_regs = io.dtlb_csr_context
     val da_mode = csr_regs.crmd_da && !csr_regs.crmd_pg
     val pg_mode = !csr_regs.crmd_da && csr_regs.crmd_pg
+    if(!FPGAPlatform)dontTouch(csr_regs)
+    if(!FPGAPlatform)dontTouch(da_mode)
+    if(!FPGAPlatform)dontTouch(pg_mode)
     for (w <- 0 until memWidth) {
         val dmw0_en = (
             (
@@ -137,7 +140,8 @@ class DTLB extends CoreModule(){
             (io.req(w).bits.vaddr(31, 29) === csr_regs.dmw1_vseg) &&
             pg_mode
         )
-
+        if(!FPGAPlatform)dontTouch(dmw0_en)
+        if(!FPGAPlatform)dontTouch(dmw1_en)
         io.resp(w).is_uncacheable := (
             (da_mode && (csr_regs.crmd_datm === 0.U)) ||
             (dmw0_en && (csr_regs.dmw0_mat === 0.U))  ||

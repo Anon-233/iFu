@@ -6,6 +6,7 @@ import chisel3.util._
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
+import scala.collection.View.Fill
 
 
 class MMIOUnit extends Module  with HasDcacheParameters{
@@ -31,10 +32,9 @@ class MMIOUnit extends Module  with HasDcacheParameters{
 
     io.mmioResp := 0.U.asTypeOf(Valid(new DCacheReq))
 
-
     io.cbusReq.valid := state === fetch || state === wb
     io.cbusReq.isStore := state === wb
-    io.cbusReq.mask := Mux(state === wb , 0xf.U , 0x0.U)
+    io.cbusReq.mask := Mux(state === fetch, 0.U, mmioReq.mask)
     io.cbusReq.axiLen := MLEN1
     io.cbusReq.axiBurstType := AXI_BURST_INCR
     io.cbusReq.size := MSIZE4
@@ -67,8 +67,16 @@ class MMIOUnit extends Module  with HasDcacheParameters{
 
     }.elsewhen(state === wb){
         io.cbusReq.addr := mmioReq.addr
-        io.cbusReq.data := mmioReq.data
-
+        // 根据粒度, 造写入的数据,例如写入字节,始终要写入的是低8位,但是mask的不同决定写入位置不一样
+        // 因此,如果st.b就是四份最低字节
+        // 如果st.h就是两份低半字,st.w才是一份字
+        // 然后根据mask让axi那边对应写
+                                        // byte
+        io.cbusReq.data := Mux(mmioReq.uop.mem_size === 0.U, Fill(4, mmioReq.data(7, 0)),
+                                        // half
+                            Mux(mmioReq.uop.mem_size === 1.U, Fill(2, mmioReq.data(15, 0)), 
+                                        // word
+                                                                    mmioReq.data))
         when(io.cbusResp.ready){
             assert(io.cbusResp.isLast, "mmio write must be single word")
             io.mmioResp.valid := true.B
