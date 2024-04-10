@@ -278,12 +278,18 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
 
 case class TageParams(
     //                                           nRows, tagSz, histLength
-    tableInfo: Seq[Tuple3[Int,Int,Int]] = Seq(  ( 128,    7,        2),
-                                                ( 128,    7,        4),
-                                                ( 256,    8,        8),
-                                                ( 256,    8,        16),
-                                                ( 128,    9,        32),
-                                                ( 128,    9,        64))
+    // tableInfo: Seq[Tuple3[Int,Int,Int]] = Seq(  ( 128,    7,        2),
+    //                                             ( 128,    7,        4),
+    //                                             ( 256,    8,        8),
+    //                                             ( 256,    8,        16),
+    //                                             ( 128,    9,        32),
+    //                                             ( 128,    9,        64))
+    tableInfo: Seq[Tuple3[Int,Int,Int]] = Seq(  ( 32,    7,        2),
+                                                ( 32,    7,        4),
+                                                ( 64,    8,        8),
+                                                ( 64,    8,        16),
+                                                ( 32,    9,        32),
+                                                ( 32,    9,        64))
 )
 
 
