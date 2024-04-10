@@ -67,7 +67,8 @@ class BTBPredictor extends Module with HasBtbParameters{
     val s0_tag_idx = fetchIdx(io.s0pc)
 
     val s1_valid   = RegNext(io.s0valid)
-    val s1_tag_idx = RegNext(fetchIdx(io.s0pc))
+    val s1_pc      = RegNext(io.s0pc)
+    val s1_tag_idx = fetchIdx(s1_pc)
 
     // stage 1: read btb, meta, ebtb, and prepare hit signals
     val s1_btb = VecInit(btb.map(b => VecInit(
