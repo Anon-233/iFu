@@ -1,60 +1,63 @@
 package iFu.frontend
 
-import chisel3._
-import chisel3.util._
-import iFu.frontend.FrontendUtils._
-import iFu.util._
 import scala.math.min
 
+import chisel3._
+import chisel3.util._
 
+import iFu.frontend.FrontendUtils._
+import iFu.util._
 
-// 传出去的Meta
-class TagePredictMeta extends Bundle with HasTageParameters{
-    val provider      = Valid(UInt(log2Ceil(tageNTables).W))
-    val altDiffers   = Output(Bool())
-    val providerU    = Output(UInt(2.W))
-    val providerCtr  = Output(UInt(3.W))
-    val allocate      = Valid(UInt(log2Ceil(tageNTables).W))
+class TagePredictMeta extends Bundle with HasTageParameters {
+    val provider    = Valid(UInt(log2Ceil(tageNTables).W))
+    val altDiffers  = Output(Bool())
+    val providerU   = Output(UInt(2.W))
+    val providerCtr = Output(UInt(3.W))
+    val allocate    = Valid(UInt(log2Ceil(tageNTables).W))
 }
 
-// 单个表的定义
-class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPeriod: Int) 
-        extends Module with HasTageParameters 
-{
-
-    val io = IO(new Bundle{
-        val f1valid = Input(Bool())
-        val f1pc = Input(UInt(vaddrBits.W))
-        val f1gHist = Input(UInt(globalHistoryLength.W))
-
-        val f3resp = Output(Vec(bankWidth, Valid(new TageResp)))
-
-        val updateMask = Input(Vec(bankWidth, Bool()))
-        val updateTaken = Input(Vec(bankWidth, Bool()))
-        val updateAlloc = Input(Vec(bankWidth, Bool()))
-        val updateOldCtr = Input(Vec(bankWidth, UInt(3.W)))
-
-        val updatepc = Input(UInt(vaddrBits.W))
-        val updateHist = Input(UInt(globalHistoryLength.W))
-
-        val updateUMask = Input(Vec(bankWidth, Bool()))
-        val updateU = Input(Vec(bankWidth, UInt(2.W)))
-    }) 
-
-    // 单个表返回类型
-    class TageResp extends Bundle {
-    val u = UInt(2.W)
-    val ctr = UInt(3.W)
-    }
-
-    // 单个表的行的定义
-    class TageEntry extends Bundle {
-        val tag = UInt(tagSz.W)
-        val ctr = UInt(3.W)
+class TageTable (    // uBitPeriod -> the period of clearing u bits
+    val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPeriod: Int
+) extends Module with HasTageParameters {
+// ---------------------------------------------
+//      Class Definitions
+    class TageEntry extends Bundle with HasTageParameters {
         val valid = Bool()
+        val tag   = UInt(tagSz.W)
+        val pred  = UInt(3.W)   // 3-bit counter
     }
 
-    // 通过全局历史和表的行数，计算出折叠后的历史
+    class TageResp extends Bundle {
+        val pred = UInt(3.W)
+        val u    = UInt(2.W)
+    }
+
+    class TAGETableIO extends Bundle with HasBtbParameters {
+        val s1_valid        = Input(Bool())
+        val s1_pc           = Input(UInt(vaddrBits.W))
+        val s1_ghist        = Input(UInt(globalHistoryLength.W))
+
+        val s3_resp         = Output(Vec(bankWidth, Valid(new TageResp)))
+
+        val update_mask     = Input(Vec(bankWidth, Bool()))
+        val update_taken    = Input(Vec(bankWidth, Bool()))
+        val update_alloc    = Input(Vec(bankWidth, Bool()))
+        val update_old_pred = Input(Vec(bankWidth, UInt(3.W)))
+        val update_pc       = Input(UInt(vaddrBits.W))
+        val update_hist     = Input(UInt(globalHistoryLength.W))
+        val update_u_mask   = Input(Vec(bankWidth, Bool()))
+        val update_u        = Input(Vec(bankWidth, UInt(2.W)))
+    }
+// ---------------------------------------------
+
+    val io = IO(new TAGETableIO)
+
+    val hi_us = SyncReadMem(nRows, Vec(bankWidth, Bool()))
+    val lo_us = SyncReadMem(nRows, Vec(bankWidth, Bool()))
+    val table = SyncReadMem(nRows, Vec(bankWidth, new TageEntry))
+
+// ---------------------------------------------
+//      Helper functions
     def computeFoldedHist(hist: UInt, l: Int): UInt = {
         val nChunks = (globalHistoryLength + l - 1) / l
         val hist_chunks = (0 until nChunks) map { i =>
@@ -63,7 +66,6 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
         hist_chunks.reduce(_ ^ _)
     }
 
-    // 通过pc和全局历史计算出行号和tag
     def computeTagandHash(unhashed_idx: UInt, hist: UInt): (UInt, UInt) = {
         val idx_history = computeFoldedHist(hist, log2Ceil(nRows))
         val idx = (unhashed_idx ^ idx_history)(log2Ceil(nRows) - 1, 0)
@@ -72,224 +74,200 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
         (idx, tag)
     }
 
-// ctr的更新
     def inc_ctr(ctr: UInt, taken: Bool): UInt = {
-    Mux(!taken, Mux(ctr === 0.U, 0.U, ctr - 1.U),
-                Mux(ctr === 7.U, 7.U, ctr + 1.U))
-    }
-
-// 初始化
-    val reseting = RegInit(true.B)
-    val resetIdx = RegInit(0.U(log2Ceil(nRows).W))
-    when(reseting){
-        resetIdx := resetIdx + 1.U
-    }
-    when(resetIdx === (nRows-1).U){
-        reseting := false.B
-    }
-
-
-    val tageEntrySz = tagSz + 1 + 3
-
-    val (s1HashIdx , s1tag) = computeTagandHash(fetchIdx(io.f1pc).asUInt,io.f1gHist)
-
-
-// 存储结构
-    // 存储高位和低位的u位
-    val HIU = SyncReadMem(nRows,Vec(bankWidth, Bool()))
-    val LOU  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
-
-    // 存储表项的行
-    val table  = SyncReadMem(nRows, Vec(bankWidth, new TageEntry()))
-
-    val s2tag = RegNext(s1tag)
-
-
-    // 根据s1的信息,在s2读出各信息,同时判断命中情况
-    val s2rtage = VecInit( table.read(s1HashIdx,io.f1valid).map(_.asTypeOf(new TageEntry)) )
-    val s2rHIU = HIU.read(s1HashIdx,io.f1valid)
-    val s2rLOU = LOU.read(s1HashIdx,io.f1valid)
-    val s2rhits = VecInit(s2rtage.map(t => t.valid && t.tag === s2tag))
-
-// f3阶段返回给外面预测结果
-    for (w <- 0 until bankWidth){
-        io.f3resp(w).valid := RegNext(s2rhits(w))
-        io.f3resp(w).bits.ctr := RegNext(s2rtage(w).ctr)
-        io.f3resp(w).bits.u := RegNext(Cat(s2rHIU(w),s2rLOU(w)))
-    }
-
-// 清除u位的计数器
-    val clearUCnt = RegInit(0.U((log2Ceil(uBitPeriod) + log2Ceil(nRows) +1).W))
-    when (reseting){
-        clearUCnt := 1.U
-    }.otherwise{
-        clearUCnt := clearUCnt + 1.U
-    }
-
-// 这里用到的uBitPeriod是一个全局参数，表示多少个周期清除一次u位
-    val clearingU = clearUCnt(log2Ceil(uBitPeriod) - 1 , 0 ) === 0.U
-    val clearingHIU = clearingU && clearUCnt(log2Ceil(uBitPeriod) + log2Ceil(nRows)) === 1.U
-    val clearingLOU = clearingU && clearUCnt(log2Ceil(uBitPeriod) + log2Ceil(nRows)) === 0.U
-    val clearingUIdx = clearUCnt >> log2Ceil(uBitPeriod)
-
-    val ( updateIdx , upDatetag ) = computeTagandHash(fetchIdx(io.updatepc).asUInt,io.updateHist)
-
-    val updatewData = Wire(Vec(bankWidth, new TageEntry()))
-    val updateHIwData = Wire(Vec(bankWidth, Bool()))
-    val updateLOwData = Wire(Vec(bankWidth, Bool()))
-
-// reset 全部置零
-    when(reseting){
-        table.write(
-        resetIdx,
-        VecInit(Seq.fill(bankWidth)(0.U.asTypeOf(new TageEntry()))),
-        VecInit(Seq.fill(bankWidth)(true.B))
-        )  
-        HIU.write(
-        resetIdx,
-        VecInit(Seq.fill(bankWidth)(false.B)),
-        VecInit(Seq.fill(bankWidth)(true.B))
-        )
-        LOU.write(
-        resetIdx,
-        VecInit(Seq.fill(bankWidth)(false.B)),
-        VecInit(Seq.fill(bankWidth)(true.B))
-        )
-// 除此之外,如果到了特定的清除u位的周期,也要清除u位
-    }.elsewhen(clearingHIU||clearingLOU){
-        when(clearingHIU){
-            HIU.write(
-            clearingUIdx.asUInt,
-            VecInit(Seq.fill(bankWidth)(false.B)),
-            VecInit(Seq.fill(bankWidth)(true.B))
-            )
-        }
-        when(clearingLOU){
-            LOU.write(
-            clearingUIdx.asUInt,
-            VecInit(Seq.fill(bankWidth)(false.B)),
-            VecInit(Seq.fill(bankWidth)(true.B))
-            )
-        }
-
-//其他情况下正常进行更新写入 
-    }.otherwise{
-        table.write(
-        updateIdx,
-        updatewData,
-        io.updateMask
-        )
-        HIU.write(
-        updateIdx,
-        updateHIwData,
-        io.updateUMask
-        )
-        LOU.write(
-        updateIdx,
-        updateLOwData,
-        io.updateUMask
+        Mux(!taken,
+            Mux(ctr === 0.U, 0.U, ctr - 1.U),
+            Mux(ctr === 7.U, 7.U, ctr + 1.U)
         )
     }
+// ---------------------------------------------
 
-    //此外设置wrBypass,由于表里面信息以mem存储,主要用于解决WAR冲突
+// ---------------------------------------------
+//      Reset Logic
+    val reset_en  = RegInit(true.B)
+    val reset_idx = RegInit(0.U(log2Ceil(nRows).W))
+    when (reset_en) {
+        reset_idx := reset_idx + 1.U
+    }
+    when (reset_idx === (nRows - 1).U) {
+        reset_en := false.B
+    }
+// ---------------------------------------------
 
-    val wrBypassTag = Reg(Vec(nWrBypassEntries, UInt(tagSz.W)))
-    val wrBypassIdx = Reg(Vec(nWrBypassEntries, UInt(log2Ceil(nRows).W)))
-    val wrBypass = Reg(Vec(nWrBypassEntries, Vec(bankWidth, UInt(3.W))))
-    val wrBypassEnqIdx = RegInit(0.U(log2Ceil(nWrBypassEntries).W))
+// ---------------------------------------------
+//      Predict Logic
+    val (s1_hash_idx, s1_tag) = computeTagandHash(fetchIdx(io.s1_pc), io.s1_ghist)
 
-    val wrBypassHits = VecInit((0 until nWrBypassEntries) map {i =>
-        !reseting &&
-        wrBypassIdx(i) === updateIdx &&
-        wrBypassTag(i) === upDatetag
+    val s2_tag = RegNext(s1_tag)
+
+    val s2_tage = VecInit(
+        table.read(s1_hash_idx, io.s1_valid).map {_.asTypeOf(new TageEntry)}
+    )
+    val s2_hi_us = hi_us.read(s1_hash_idx, io.s1_valid)
+    val s2_lo_us = lo_us.read(s1_hash_idx, io.s1_valid)
+
+    val s2_hits = VecInit(s2_tage.map(t => t.valid && t.tag === s2_tag))
+
+    for (w <- 0 until bankWidth) {
+        io.s3_resp(w).valid     := RegNext(s2_hits(w))
+        io.s3_resp(w).bits.pred := RegNext(s2_tage(w).pred)
+        io.s3_resp(w).bits.u    := RegNext(Cat(s2_hi_us(w), s2_lo_us(w)))
+    }
+// ---------------------------------------------
+
+// ---------------------------------------------
+//      Update Logic
+    val clear_u_cnt = RegInit(0.U((log2Ceil(uBitPeriod) + log2Ceil(nRows) + 1).W))
+    when (reset_en) {
+        clear_u_cnt := 1.U
+    } .otherwise {
+        clear_u_cnt := clear_u_cnt + 1.U
+    }
+
+    val clearing_u     = clear_u_cnt(log2Ceil(uBitPeriod) - 1, 0) === 0.U
+    val clearing_hi_us = clearing_u && clear_u_cnt(log2Ceil(uBitPeriod) + log2Ceil(nRows)) === 1.U
+    val clearing_lo_us = clearing_u && clear_u_cnt(log2Ceil(uBitPeriod) + log2Ceil(nRows)) === 0.U
+    val clearing_u_idx = clear_u_cnt >> log2Ceil(uBitPeriod)
+
+    val (update_idx, update_tag) = computeTagandHash(fetchIdx(io.update_pc), io.update_hist)
+
+    val update_hi_us_data = Wire(Vec(bankWidth, Bool()))
+    val update_lo_us_data = Wire(Vec(bankWidth, Bool()))
+    val update_table_data = Wire(Vec(bankWidth, new TageEntry()))
+
+    val wr_bypass_tag     = Reg(Vec(nWrBypassEntries, UInt(tagSz.W)))
+    val wr_bypass_idx     = Reg(Vec(nWrBypassEntries, UInt(log2Ceil(nRows).W)))
+    val wr_bypass_pred    = Reg(Vec(nWrBypassEntries, Vec(bankWidth, UInt(3.W))))
+    val wr_bypass_enq_idx = RegInit(0.U(log2Ceil(nWrBypassEntries).W))
+
+    val wr_bypass_hits = VecInit((0 until nWrBypassEntries).map { i =>
+        !reset_en &&
+        wr_bypass_idx(i) === update_idx &&
+        wr_bypass_tag(i) === update_tag
     })
 
-    val wrBypassHit = wrBypassHits.reduce(_||_)
-    val wrBypassHitIdx = PriorityEncoder(wrBypassHits)
+    val wr_bypass_hit     = wr_bypass_hits.reduce(_||_)
+    val wr_bypass_hit_idx = PriorityEncoder(wr_bypass_hits)
 
-    for(w <- 0 until bankWidth){
-        updatewData(w).ctr := Mux(io.updateAlloc(w),
-            // 如果它是被分配要写入的,ctr需要初始化
-            Mux(io.updateTaken(w), 4.U, 3.U),
-
-            // 否则进行更新
-            // 这里涉及到了u位的更新,是要基于最新的u信息,如果本周期更新信号前面有什么update的信息改变了u,这时
-            // 由于读写延迟1周期,此时可以获取到的最新的信息一定存在于wrBypass里面,所以要从wrBypass里面读取
-            Mux(wrBypassHit,
-            inc_ctr(wrBypass(wrBypassHitIdx)(w), io.updateTaken(w)),
-            inc_ctr(io.updateOldCtr(w), io.updateTaken(w)))
+    for (w <- 0 until bankWidth) {
+        update_hi_us_data(w)       := io.update_u(w)(1)
+        update_lo_us_data(w)       := io.update_u(w)(0)
+        update_table_data(w).pred  := Mux(
+            io.update_alloc(w),
+            Mux(io.update_taken(w), 4.U, 3.U),
+            Mux(
+                wr_bypass_hit,
+                inc_ctr(wr_bypass_pred(wr_bypass_hit_idx)(w), io.update_taken(w)),
+                inc_ctr(io.update_old_pred(w), io.update_taken(w))
             )
-
-        updatewData(w).valid := true.B
-        updatewData(w).tag := upDatetag
-        updateHIwData(w) := io.updateU(w)(1)
-        updateLOwData(w) := io.updateU(w)(0)
+        )
+        update_table_data(w).valid := true.B
+        update_table_data(w).tag   := update_tag
     }
 
-    when(io.updateMask.reduce(_||_)){
-        // 更新信息传来,如果有命中,把wrbypass中他那一项一起更新了
-        when (wrBypassHit){
-            wrBypass(wrBypassHitIdx) := VecInit(updatewData.map(_.ctr))
-
-        // 如果没有命中,就把它放到wrBypass里面以备之后的冲突使用
-        }.otherwise{
-            wrBypass(wrBypassEnqIdx) := VecInit(updatewData.map(_.ctr))
-            wrBypassTag(wrBypassEnqIdx) := upDatetag
-            wrBypassIdx(wrBypassEnqIdx) := updateIdx
-            wrBypassEnqIdx := WrapInc(wrBypassEnqIdx, nWrBypassEntries)
+    when (io.update_mask.reduce(_||_)) {
+        when (wr_bypass_hit) {
+            wr_bypass_pred(wr_bypass_hit_idx) := VecInit(update_table_data.map(_.pred))
+        } .otherwise {
+            wr_bypass_pred(wr_bypass_enq_idx) := VecInit(update_table_data.map(_.pred))
+            wr_bypass_tag(wr_bypass_enq_idx)  := update_tag
+            wr_bypass_idx(wr_bypass_enq_idx)  := update_idx
+            wr_bypass_enq_idx := WrapInc(wr_bypass_enq_idx, nWrBypassEntries)
         }
     }
 
+    hi_us.write(
+        Mux(reset_en,       reset_idx, 
+        Mux(clearing_hi_us, clearing_u_idx.asUInt,
+                            update_idx)
+        ),
+        Mux(reset_en,       VecInit(Seq.fill(bankWidth) { false.B }),
+        Mux(clearing_hi_us, VecInit(Seq.fill(bankWidth) { false.B }),
+                            update_hi_us_data)
+        ),
+        Mux(reset_en,       VecInit(Seq.fill(bankWidth) { true.B }),
+        Mux(clearing_hi_us, VecInit(Seq.fill(bankWidth) { true.B }),
+                            io.update_u_mask)
+        )
+    )
+    lo_us.write(
+        Mux(reset_en,       reset_idx, 
+        Mux(clearing_lo_us, clearing_u_idx.asUInt,
+                            update_idx)
+        ),
+        Mux(reset_en,       VecInit(Seq.fill(bankWidth) { false.B }),
+        Mux(clearing_lo_us, VecInit(Seq.fill(bankWidth) { false.B }),
+                            update_lo_us_data)
+        ),
+        Mux(reset_en,       VecInit(Seq.fill(bankWidth) { true.B }),
+        Mux(clearing_lo_us, VecInit(Seq.fill(bankWidth) { true.B }),
+                            io.update_u_mask)
+        )
+    )
+    table.write(
+        Mux(reset_en, reset_idx, update_idx),
+        Mux(reset_en,
+            VecInit(Seq.fill(bankWidth) { 0.U.asTypeOf(new TageEntry) }),
+            update_table_data
+        ),
+        Mux(reset_en,
+            VecInit(Seq.fill(bankWidth) { true.B }),
+            io.update_mask
+        )
+    )
+// ---------------------------------------------
 }
 
-
-case class TageParams(
-    //                                           nRows, tagSz, histLength
-    tableInfo: Seq[Tuple3[Int,Int,Int]] = Seq(  ( 128,    7,        2),
-                                                ( 128,    7,        4),
-                                                ( 256,    8,        8),
-                                                ( 256,    8,        16),
-                                                ( 128,    9,        32),
-                                                ( 128,    9,        64))
+case class TageParams (
+    tableInfo: Seq[Tuple3[Int,Int,Int]] = Seq(
+    //   nRows, tagSz, histLength
+        (  128,     7,         2),  
+        (  128,     7,         4),
+        (  256,     8,         8),
+        (  256,     8,        16),
+        (  128,     9,        32),
+        (  128,     9,        64),
+    )
 )
 
+class TAGEIO extends Bundle with HasTageParameters {
+    val f1valid         = Input(Bool())
+    val f1pc            = Input(UInt(vaddrBits.W))
+    val f1gHist         = Input(UInt(globalHistoryLength.W))
+    val previousf3Taken = Input(Vec(bankWidth, Bool()))
 
-class TagePredictor(params: TageParams = TageParams())extends Module with HasTageParameters{
-    
-    val io = IO(new Bundle{
-        val f1valid = Input(Bool())
-        val f1pc = Input(UInt(vaddrBits.W))
-        val f1gHist = Input(UInt(globalHistoryLength.W))
+    val f3taken         = Output(Vec(bankWidth, Bool()))
 
-        val f1update = Input(Valid(new BankedUpdateInfo))
+    val f3meta          = Output(Vec(bankWidth , new TagePredictMeta))
 
-        val f3meta = Output(Vec (bankWidth , new TagePredictMeta))
-        val f3taken = Output(Vec(bankWidth, Bool()))
+    val f1update        = Input(Valid(new BankedUpdateInfo))
+}
 
-        val previousf3Taken = Input(Vec(bankWidth, Bool()))
-    })
+class TagePredictor (
+    params: TageParams = TageParams()
+) extends Module with HasTageParameters {
+    val io = IO(new TAGEIO)
 
-    def inc_u(u: UInt, alt_differs: Bool, mispredict: Bool): UInt = {
-    Mux(!alt_differs, u,
-    Mux(mispredict, Mux(u === 0.U, 0.U, u - 1.U),
-                    Mux(u === 3.U, 3.U, u + 1.U)))
-    }
-
-    val clockcnt = RegInit((0.U)(10.W))
-    clockcnt := clockcnt + 1.U
-
-// 6个表,越往后的表信息越完善置信度越高
-    val tageTables = params.tableInfo.map{
+    val tage_tables = params.tableInfo.map {
         case (nRows, tagSz, histLength) => {
             val t = Module(new TageTable(nRows, tagSz, histLength, tageUBitPeriod))
-            t.io.f1valid := io.f1valid
-            t.io.f1pc := io.f1pc
-            t.io.f1gHist := io.f1gHist
+            t.io.s1_valid := io.f1valid
+            t.io.s1_pc    := io.f1pc
+            t.io.s1_ghist := io.f1gHist
             t
         }
     }
 
-    val tableResps = VecInit(tageTables.map(_.io.f3resp))
+// ---------------------------------------------
+//      Helper functions
+    def inc_u(u: UInt, alt_differs: Bool, mispredict: Bool): UInt = {
+        Mux(!alt_differs, u,
+        Mux(mispredict, Mux(u === 0.U, 0.U, u - 1.U),
+                        Mux(u === 3.U, 3.U, u + 1.U)))
+    }
+// ---------------------------------------------
+
+    val table_resps = VecInit(tage_tables.map(_.io.s3_resp))
 
     val s1updateMeta = VecInit(io.f1update.bits.meta.map(_.tageMeta))
     val s1updateMispredictMask = UIntToOH(io.f1update.bits.cfiIdx.bits)&
@@ -303,15 +281,10 @@ class TagePredictor(params: TageParams = TageParams())extends Module with HasTag
     val s1updateAlloc = Wire(Vec(tageNTables, Vec(bankWidth, Bool())))
     val s1updateU = Wire(Vec(tageNTables, Vec(bankWidth, UInt(2.W))))
 
-    s1updateTaken := DontCare
-    s1updateOldCtr := DontCare
-    s1updateAlloc := DontCare
-    s1updateU := DontCare
+    val f3meta = Wire(Vec(bankWidth, new TagePredictMeta))
+    io.f3meta := f3meta
 
-    val f3meta = Wire(Vec(bankWidth , new TagePredictMeta))
-
-    for (w <- 0 until bankWidth){
-
+    for (w <- 0 until bankWidth) {
         // 可供选择的预测信息
         var altPred = io.previousf3Taken(w)
         // 如果有表命中,最后面那个表预测时,给他提供的一个可选择的预测信息
@@ -322,11 +295,10 @@ class TagePredictor(params: TageParams = TageParams())extends Module with HasTag
         io.f3taken(w) := io.previousf3Taken(w)
 
         for (i <- 0 until tageNTables) {
-            val hit = tableResps(i)(w).valid
-            val ctr = tableResps(i)(w).bits.ctr
-            when(hit){
-                // 3或4太过中间值,置信度不高,故采取备选项altPred , 其他情况的话就使用ctr(2)作为预测(567和012)
-                io.f3taken(w) := Mux( ctr === 3.U || ctr === 4.U, altPred , ctr(2))
+            val hit  = table_resps(i)(w).valid
+            val pred = table_resps(i)(w).bits.pred
+            when (hit) {
+                io.f3taken(w) := Mux(pred === 3.U || pred === 4.U, altPred , pred(2))
                 final_altpred := altPred
             }
             // 记录是否有表项命中
@@ -334,21 +306,20 @@ class TagePredictor(params: TageParams = TageParams())extends Module with HasTag
             // 记录最后一个命中表项的表号,
             provider = Mux(hit, i.U, provider)
             // 作为备选项,如果有命中他每次提供的都是最近的前一个命中表号,如果没有就是previousf3Taken,也即预测前的值
-            altPred = Mux(hit, ctr(2), altPred)
+            altPred = Mux(hit, pred(2), altPred)
         }
 
-        
         // 完善meta信息
         f3meta(w).provider.valid := provided
         f3meta(w).provider.bits := provider
         f3meta(w).altDiffers := final_altpred =/= io.f3taken(w)
-        f3meta(w).providerU := tableResps(provider)(w).bits.u
-        f3meta(w).providerCtr := tableResps(provider)(w).bits.ctr
+        f3meta(w).providerU := table_resps(provider)(w).bits.u
+        f3meta(w).providerCtr := table_resps(provider)(w).bits.pred
 
         // 如果有表找到作为最终的provider，那么同时意味着这个表之后的更大的表都没有命中，所以这个表之后的表都可以被分配
         // 分配位置的条件是：1.表没有命中 2.表的u位为0 3.表不是provider
         val allocatableSlots = (
-            VecInit(tableResps.map(r => !r(w).valid && r(w).bits.u === 0.U)).asUInt &
+            VecInit(table_resps.map(r => !r(w).valid && r(w).bits.u === 0.U)).asUInt &
               (~(MaskLower(UIntToOH(provider))& Fill(tageNTables, provided))).asUInt
         )
 
@@ -374,9 +345,8 @@ class TagePredictor(params: TageParams = TageParams())extends Module with HasTag
             io.f1update.bits.cfiTaken
         )
 
-    // 对包里面的跳转指令并且是发生了commit的指令进行有关信息更新
+        // 对包里面的跳转指令并且是发生了commit的指令进行有关信息更新
         when (io.f1update.bits.brMask(w) && io.f1update.valid && io.f1update.bits.isCommitUpdate){
-
             // 如果当时确实找到了一个provider表,那么就更新这个表对应的信息
             when (s1updateMeta(w).provider.valid){
                 val provider = s1updateMeta(w).provider.bits
@@ -401,8 +371,6 @@ class TagePredictor(params: TageParams = TageParams())extends Module with HasTag
     val s1update = io.f1update
     // commit的有效更新
     when (s1update.valid && s1update.bits.isCommitUpdate && s1update.bits.cfiIdx.valid){
-
-
         val idx = s1update.bits.cfiIdx.bits
         val allocate = s1updateMeta(idx).allocate
         // 如果存在分配的表,那么就更新这个表的信息
@@ -425,27 +393,19 @@ class TagePredictor(params: TageParams = TageParams())extends Module with HasTag
         }
     }
 
-    // 将汇总好的更新信息传给对应的表
-    for (i <- 0 until tageNTables){
+    for (i <- 0 until tageNTables) {
         for ( w <- 0 until bankWidth){
-            tageTables(i).io.updateMask(w) := RegNext(s1updateMask(i)(w))
+            tage_tables(i).io.update_mask(w) := RegNext(s1updateMask(i)(w))
             
-            tageTables(i).io.updateTaken(w) := RegNext(s1updateTaken(i)(w))
-            tageTables(i).io.updateOldCtr(w) := RegNext(s1updateOldCtr(i)(w))
-            tageTables(i).io.updateAlloc(w) := RegNext(s1updateAlloc(i)(w))
+            tage_tables(i).io.update_taken(w) := RegNext(s1updateTaken(i)(w))
+            tage_tables(i).io.update_old_pred(w) := RegNext(s1updateOldCtr(i)(w))
+            tage_tables(i).io.update_alloc(w) := RegNext(s1updateAlloc(i)(w))
 
-            tageTables(i).io.updateU(w) := RegNext(s1updateU(i)(w))
-            tageTables(i).io.updateUMask(w) := RegNext(s1updateUMask(i)(w))
+            tage_tables(i).io.update_u(w) := RegNext(s1updateU(i)(w))
+            tage_tables(i).io.update_u_mask(w) := RegNext(s1updateUMask(i)(w))
         }
 
-        tageTables(i).io.updatepc := RegNext(io.f1update.bits.pc)
-        tageTables(i).io.updateHist := RegNext(io.f1update.bits.gHist.asUInt)
-        // globalhistoty的类里面除了history外还有几位其他的变量，真正用的是前GlobalHistoryLength位的Uint
-    }   
-
-    io.f3meta := f3meta
-
+        tage_tables(i).io.update_pc := RegNext(io.f1update.bits.pc)
+        tage_tables(i).io.update_hist := RegNext(io.f1update.bits.gHist.asUInt)
+    }
 }
-
-
-
