@@ -63,63 +63,64 @@ class BTBPredictor extends Module with HasBtbParameters{
 
 // ---------------------------------------------
 //      Predict Logic
+    val s0_valid   = io.s0valid
+    val s0_tag_idx = fetchIdx(io.s0pc)
+
     val s1_valid   = RegNext(io.s0valid)
     val s1_tag_idx = RegNext(fetchIdx(io.s0pc))
 
-    val s2_valid = RegNext(s1_valid)
-    val s2_pc    = RegNext(RegNext(io.s0pc))
-
-    val s2_btb  = VecInit(btb.map(b => VecInit(
-        b.read(s1_tag_idx.asUInt, s1_valid).map(_.asTypeOf(new BTBEntry))
+    // stage 1: read btb, meta, ebtb, and prepare hit signals
+    val s1_btb = VecInit(btb.map(b => VecInit(
+        b.read(s0_tag_idx.asUInt, s0_valid).map(_.asTypeOf(new BTBEntry))
     )))
-    val s2_meta = VecInit(meta.map(m => VecInit(
-        m.read(s1_tag_idx.asUInt, s1_valid).map(_.asTypeOf(new BTBMeta))
+    val s1_meta = VecInit(meta.map(m => VecInit(
+        m.read(s0_tag_idx.asUInt, s0_valid).map(_.asTypeOf(new BTBMeta))
     )))
-    val s2_ebtb = ebtb.read(s1_tag_idx.asUInt, s1_valid)
+    val s1_ebtb = ebtb.read(s0_tag_idx.asUInt, s0_valid)
 
-    val s2_tag = RegNext(s1_tag_idx >> log2Ceil(nSets))
-    val s2_hit_OHs = VecInit((0 until bankWidth) map { i =>
+    val s1_tag = s1_tag_idx >> log2Ceil(nSets)
+    val s1_hit_OHs = VecInit((0 until bankWidth) map { i =>
         VecInit((0 until nWays) map { w =>
-            s2_meta(w)(i).tag === s2_tag.asUInt
+            s1_meta(w)(i).tag === s1_tag.asUInt
         })
     })
-    val s2_hits = s2_hit_OHs.map(_.asUInt.orR)
-    val s2_hit_ways = s2_hit_OHs.map(oh => PriorityEncoder(oh))
+    val s1_hits = s1_hit_OHs.map(_.asUInt.orR)
+    val s1_hit_ways = s1_hit_OHs.map(oh => PriorityEncoder(oh))
 
     for (w <- 0 until bankWidth) {
-        val resp_valid = !reset_en && s2_valid && s2_hits(w)
-        val entry_meta = s2_meta(s2_hit_ways(w))(w)
-        val entry_btb  = s2_btb(s2_hit_ways(w))(w)
-
-        val is_br  = resp_valid && entry_meta.is_br
-        val is_jal = resp_valid && !entry_meta.is_br
-
+        // s1 stage
+        val resp_valid = !reset_en && s1_valid && s1_hits(w)
+        val entry_meta = s1_meta(s1_hit_ways(w))(w)
+        val entry_btb  = s1_btb(s1_hit_ways(w))(w)
+        // s2 stage
+        val is_br  = RegNext(resp_valid && entry_meta.is_br)
+        val is_jal = RegNext(resp_valid && !entry_meta.is_br)
         io.s2br(w)          := is_br
         io.s2jal(w)         := is_jal
         io.s2taken(w)       := is_jal
-        io.s2targs(w).valid := resp_valid
-        io.s2targs(w).bits  := Mux(entry_btb.extended,
-                s2_ebtb,
-                ((s2_pc | (w << 2).asUInt).asSInt + entry_btb.offset.asSInt).asUInt
-        )
+        io.s2targs(w).valid := RegNext(resp_valid)
+        io.s2targs(w).bits  := RegNext(Mux(entry_btb.extended,
+                s1_ebtb,
+                ((s1_pc | (w << 2).asUInt).asSInt + entry_btb.offset.asSInt).asUInt
+        ))
     }
 // ---------------------------------------------
 
 // ---------------------------------------------
 //      Prepare Meta for Update
-    val repl_way_update_en = s2_valid && !s2_hits.reduce(_||_)
+    val repl_way_update_en = s1_valid && !s1_hits.reduce(_||_)
     val repl_way = LFSR(nWays, repl_way_update_en)(log2Ceil(nWays) - 1, 0)
 
-    val s2_update_info = Wire(Vec(bankWidth, new BTBPredictMeta))
+    val s1_update_info = Wire(Vec(bankWidth, new BTBPredictMeta))
     for (w <- 0 until bankWidth) {
-        s2_update_info(w).hit := s2_hits(w)
-        s2_update_info(w).writeWay := Mux(
-            s2_hits(w),
-            s2_hit_ways(w),
+        s1_update_info(w).hit := s1_hits(w)
+        s1_update_info(w).writeWay := Mux(
+            s1_hits(w),
+            s1_hit_ways(w),
             repl_way
         )
     }
-    io.s3meta := RegNext(s2_update_info)
+    io.s3meta := RegNext(RegNext(s1_update_info))
 // ---------------------------------------------
 
 // ---------------------------------------------

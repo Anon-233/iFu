@@ -40,17 +40,12 @@ class BimPredictor extends Module with HasBimParameters {
 
 // ---------------------------------------------
 //      Predict Logic
-    // val s0_valid = io.s0valid
-    // val s0_idx   = fetchIdx(io.s0pc)
-    val s1_valid = RegNext(io.s0valid)
-    val s1_idx   = RegNext(fetchIdx(io.s0pc))
+    val s0_valid = io.s0valid
+    val s0_idx   = fetchIdx(io.s0pc)
 
-    // val s2_bim = RegNext(VecInit(
-    //     bim_ram.read(s0_idx.asUInt, s0_valid).map(_.asTypeOf(UInt(2.W)))
-    // ))
-    val s2_bim = VecInit(
-        bim_ram.read(s1_idx.asUInt, s1_valid).map(_.asTypeOf(UInt(2.W)))
-    )
+    val s2_bim = RegNext(VecInit(
+        bim_ram.read(s0_idx.asUInt, s0_valid).map(_.asTypeOf(UInt(2.W)))
+    ))
 
     // val s2_valid = RegNext(RegNext(io.s0valid))
 
