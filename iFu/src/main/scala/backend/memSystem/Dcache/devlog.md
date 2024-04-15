@@ -136,7 +136,6 @@ lsuNormalValid := io.lsu.req.fire && !lsuhasMMIO && io.lsu.req.ready
 如果仅仅在写回脏行之后清掉meta的dirty位,那以后有个对该行的uncacheable的写请求,就会造成不一致
 但是上述操作本身就是具有破坏缓存一致性的风险,这应该是不会发生的
 
-
 fence之后必须彻底清除掉这一行
 
 原因在于st miss
@@ -186,3 +185,13 @@ https://zhuanlan.zhihu.com/p/650745488
 ds影响不大，ipc还是1.27
 
 17. 之前设readOnly和fixed都是Mem，这会随机初始化，可能导致fixed为真一直换不出去。现在改成了RegInit，这样就不会随机初始化了
+
+
+
+18. 逻辑优化
+收到fetchReady的时候
+原来的设计是,对于一表项，需要晚两个周期被reset
+原因是
+fetchReady到s2的时候才会给mshr，这个时候，s0,s1都有其他的事务了，如果这条指令是miss重填好的st指令，那么当他进入s0的时候，s1，s2那些lsu发过来的在他之后的的st指令就会被先做完，这是不允许的，因此s2的时候，有一条说正常做完的st指令要看mshr里面有没有hasStore，配合上一表项两周期的驻留，就可以保证这个指令不会提前做完，而是再一次去重发。
+
+但是完全可以在s0就判断出来送给mshr去让他下个周期replay，就不会有这个问题，并且当s2refill完成的时候，如没有更高优先级的东西，s1正好执行到那条replay的东西读数据，此时s2写最后一个字,被内部转发保证了数据的正确性使得逻辑更加清晰了.

@@ -31,7 +31,7 @@ class MSHRdata extends CoreBundle with HasDcacheParameters{
 }
 
 
-class MSHR extends CoreModule with HasDcacheParameters {
+class MSHREntry extends CoreModule with HasDcacheParameters {
     val io = IO{new Bundle{
         // 写入请求111
         val req = Flipped(Decoupled(new DCacheReq))
@@ -207,8 +207,8 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         })
 
     // if(!FPGAPlatform)dontTouch(io)
-    val firstMSHRs = VecInit((Seq.fill(nFirstMSHRs)(Module(new MSHR))).map(_.io))
-    val secondMSHRs = VecInit((Seq.fill(nSecondMSHRs)(Module(new MSHR))).map(_.io))
+    val firstMSHRs = VecInit((Seq.fill(nFirstMSHRs)(Module(new MSHREntry))).map(_.io))
+    val secondMSHRs = VecInit((Seq.fill(nSecondMSHRs)(Module(new MSHREntry))).map(_.io))
 
     //记录一表match的信息
     // 一表中的每一项是否match
@@ -340,10 +340,11 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         // 非首次miss，只写入二表，id是一表它对应的那一项的id
             secondMSHRs(allocSecondMSHR).id := firstNewMatchway
             secondMSHRs(allocSecondMSHR).req.valid := io.req.valid
-            // 如果自己匹配了一个已经处于active状态的一表项，就直接唤醒它
-            val matchActive = firstMSHRs(firstNewMatchway).active
+            // 如果自己匹配的那个表项就在这个周期触发了被唤醒的逻辑(下个周期就会被刷没了)，那么二表项存入的时候采取快速唤醒
+            // 这里信号的意思是匹配到了这个周期就被唤醒的一表项
+            val matchActiveFirst = io.fetchReady && fetchedBlockAddrMatches(firstNewMatchway)/* firstMSHRs(firstNewMatchway).active */
             
-            when(matchActive){
+            when(matchActiveFirst){
                 // 快速唤醒
                 secondMSHRs(allocSecondMSHR).fastWakeUp := true.B
                 // 一表项在唤醒的时候会将自己变成ready并且记录下pos,此时直接找一表项去要pos
@@ -361,7 +362,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     // 如果一个fetch取好了，就把它从一表中删掉，然后激活二表中的对应项，等待之后用到它的时候一项一项的拿
     when(io.fetchReady){
         // 删除first表中的fetch地址项(改为两个周期以后再清除，他们会变成ready状态待两个周期
-        // firstMSHRs(firstFetchMatchway) := true.B
+        firstMSHRs(firstFetchMatchway).reset := true.B
         // 激活second表中的fetch地址项,同时告诉二表这一行所在的位置
         for(i <- 0 until nSecondMSHRs) {
             when(secondMSHRs(i).getID === firstFetchMatchway){
@@ -370,11 +371,6 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
             }
         }
     }
-
-    // 晚两个周期删除
-    val lateReset = RegNext(RegNext(io.fetchReady))
-    val lateResetWay = RegNext(RegNext(firstFetchMatchway))
-    firstMSHRs(lateResetWay).reset := lateReset
 
     // 传出新的fetch地址(如果有的话)
     val fetchable = haswait
@@ -410,7 +406,6 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     }.otherwise{
         io.replay.valid := false.B
         io.replaypos := 0.U
-
     }
 
 }

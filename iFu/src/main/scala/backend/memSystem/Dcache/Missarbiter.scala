@@ -46,10 +46,9 @@ class Missarbiter extends CoreModule with HasDcacheParameters {
     io.sendNack(0) := Mux(io.mshrReq.ready, false.B, true.B)
 
     // 特别的如果是store指令，还要判断store是否成功
-    when( isStore(io.req(0))){
+    when(isStore(io.req(0))){
       io.storeFailed := !io.mshrReq.ready
     }
-
 
   }.elsewhen(!wantaccess(0) && wantaccess(1)){
     

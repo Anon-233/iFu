@@ -349,7 +349,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
 
     }.elsewhen(s0state === refill){
-
+        when(s0fetchReady){
+            // 通告地址，以及refill到的行号
+            mshrs.io.fetchReady := s0fetchReady
+            mshrs.io.fetchedBlockAddr := getBlockAddr(s0activateAddr)
+            mshrs.io.fetchedpos := s0pos
+        }
 
     }.elsewhen(s0state === wb){
         
@@ -531,43 +536,28 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 sendNack(w):= false.B
 
                 when(isStore(s2req(w))){
-                    when(mshrs.io.hasStore){
-                        // 如果这个即将想要完成的store指令发现mshr里面还有store指令
-                        // (重填结束的下一周期，store的replay先于其他内容
-                        // 充填结束后的两个周期其他st都会被这个hasStore约束不会超前执行
-                        // 自己不能先于其执行，因此按照storeFailed反馈
-                        sendResp(w):= false.B
-                        sendNack(w):= s2valid(w)
+                    // meta,data写操作
+                    // meta拉高dirty位
+                    lsuMetaWrite.req.valid := s2valid(w)
+                    lsuMetaWrite.req.bits.idx := getIdx(s2req(w).addr)
+                    lsuMetaWrite.req.bits.pos := s2hitpos(w)
 
-                        s2StoreFailed := s2valid(w)
-                        io.lsu.resp(w).bits.data := DontCare
-                        io.lsu.resp(w).bits.uop := s2req(w).uop
-                    }.otherwise{
-                        // 正常操作
-
-                        // meta,data写操作
-                        // meta拉高dirty位
-                        lsuMetaWrite.req.valid := s2valid(w)
-                        lsuMetaWrite.req.bits.idx := getIdx(s2req(w).addr)
-                        lsuMetaWrite.req.bits.pos := s2hitpos(w)
-
-                        lsuMetaWrite.req.bits.setdirty.valid := true.B
-                        lsuMetaWrite.req.bits.setdirty.bits := true.B
-                        
-                        //data 执行写操作
-                        val rdata = lsuDataRead(w).resp.bits.data
-                        val wdata = WordWrite(s2req(w) , rdata)
+                    lsuMetaWrite.req.bits.setdirty.valid := true.B
+                    lsuMetaWrite.req.bits.setdirty.bits := true.B
+                    
+                    //data 执行写操作
+                    val rdata = lsuDataRead(w).resp.bits.data
+                    val wdata = WordWrite(s2req(w) , rdata)
 
 
-                        lsuDataWrite.req.valid := s2valid(w)
-                        lsuDataWrite.req.bits.idx := getIdx(s2req(w).addr)
-                        lsuDataWrite.req.bits.pos := s2hitpos(w)
-                        lsuDataWrite.req.bits.offset := getWordOffset(s2req(w).addr)
-                        lsuDataWrite.req.bits.data := wdata
+                    lsuDataWrite.req.valid := s2valid(w)
+                    lsuDataWrite.req.bits.idx := getIdx(s2req(w).addr)
+                    lsuDataWrite.req.bits.pos := s2hitpos(w)
+                    lsuDataWrite.req.bits.offset := getWordOffset(s2req(w).addr)
+                    lsuDataWrite.req.bits.data := wdata
 
-                        io.lsu.resp(w).bits.data := DontCare
-                        io.lsu.resp(w).bits.uop := s2req(w).uop
-                        }
+                    io.lsu.resp(w).bits.data := DontCare
+                    io.lsu.resp(w).bits.uop := s2req(w).uop
 
                 }.otherwise{
                     // load，现在的meta,data自带转发功能不用特别判断什么
@@ -659,9 +649,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // s2fetchReady 的时候,所有data将要写完了,这个时候可以将新的meta写入
         when(s2fetchReady){
             // 通告地址，以及refill到的行号
-            mshrs.io.fetchReady := s2fetchReady
-            mshrs.io.fetchedBlockAddr := getBlockAddr(s2activateAddr)
-            mshrs.io.fetchedpos := s2pos
+            // mshrs.io.fetchReady := s2fetchReady
+            // mshrs.io.fetchedBlockAddr := getBlockAddr(s2activateAddr)
+            // mshrs.io.fetchedpos := s2pos
             // 告诉axiMetaWrite要写入的行号
             axiMetaWrite.req.valid := s2valid(0)
             axiMetaWrite.req.bits.idx := getIdx(s2req(0).addr)
