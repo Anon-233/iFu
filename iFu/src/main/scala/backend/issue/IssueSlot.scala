@@ -5,13 +5,13 @@ import chisel3.util._
 
 import iFu.common._
 import iFu.common.Consts._
-import  iFu.util._
+import iFu.util._
 
 class IssueSlotIO(val numWakeupPorts: Int) extends CoreBundle {
     val ftqSz = frontendParams.numFTQEntries
 
     val valid       = Output(Bool())
-    val willBeValid = Output(Bool())    // ???
+    val willBeValid = Output(Bool())
 
     val request = Output(Bool())
     val grant   = Input(Bool())
@@ -28,31 +28,13 @@ class IssueSlotIO(val numWakeupPorts: Int) extends CoreBundle {
     val inUop  = Flipped(Valid(new MicroOp))
     val outUop = Output(new MicroOp)    // passed to next slot uop
     val uop    = Output(new MicroOp)    // issued uop
-
-    val killed_by_branch = Output(Bool())
 }
 
 class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     val io = IO(new IssueSlotIO(numWakeupPorts))
 
     val state = RegInit(s_invalid)
-    val slotUop = RegInit(NullMicroOp)
-    val p1 = RegInit(false.B)
-    val p2 = RegInit(false.B)
-    val ppred = RegInit(false.B)
-    val p1Poisoned = RegInit(false.B)
-    val p2Poisoned = RegInit(false.B)
-
-    val nextState = WireInit(state)
-    val nextUop = Mux(io.inUop.valid, io.inUop.bits, slotUop)
-    val nextUopc = WireInit(slotUop.uopc)
-    val nextLrs1Rtype = WireInit(slotUop.lrs1_rtype)
-    val nextLrs2Rtype = WireInit(slotUop.lrs2_rtype)
-    p1Poisoned := false.B
-    p2Poisoned := false.B
-    val nextP1Poisoned = Mux(io.inUop.valid, io.inUop.bits.iw_p1_poisoned, p1Poisoned)
-    val nextP2Poisoned = Mux(io.inUop.valid, io.inUop.bits.iw_p2_poisoned, p2Poisoned)
-
+    val next_state = WireInit(state)
     when (io.kill) {
         state := s_invalid
     } .elsewhen (io.inUop.valid) {
@@ -60,137 +42,132 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     } .elsewhen (io.clear) {
         state := s_invalid
     } .otherwise {
-        state := nextState
+        state := next_state
     }
 
-    when (io.kill) {
-        nextState := s_invalid
+    val slot_uop = Reg(new MicroOp)
+    val next_uop = WireInit(UpdateBrMask(io.brUpdate, slot_uop))
+    when (io.inUop.valid) {
+        slot_uop := io.inUop.bits
+    } .otherwise {
+        slot_uop := next_uop
+    }
+
+    io.valid  := isValid(state)
+    io.outUop := next_uop
+
+    val p1          = RegInit(false.B)
+    val p2          = RegInit(false.B)
+    val p1_poisoned = RegInit(false.B)
+    val p2_poisoned = RegInit(false.B)
+    val ppred       = RegInit(false.B)
+
+    next_uop.iwState        := next_state
+    next_uop.prs1_busy      := !p1
+    next_uop.prs2_busy      := !p2
+    next_uop.ppred_busy     := !ppred
+    next_uop.iw_p1_poisoned := p1_poisoned
+    next_uop.iw_p2_poisoned := p2_poisoned
+
+    val killed = IsKilledByBranch(io.brUpdate, slot_uop)
+    when (io.kill || killed) {
+        next_state := s_invalid
     } .elsewhen (
         (io.grant && (state === s_valid_1)) ||
         (io.grant && (state === s_valid_2) && p1 && p2)
     ) {
-        when (!(io.ldSpecMiss && (p1Poisoned || p2Poisoned))) {
-            nextState := s_invalid
+        when (!(io.ldSpecMiss && (p1_poisoned || p2_poisoned))) {
+            next_state := s_invalid
         }
     } .elsewhen (io.grant && (state === s_valid_2)) {
-        when (!(io.ldSpecMiss && (p1Poisoned || p2Poisoned))) {
-            nextState := s_valid_1
+        when (!(io.ldSpecMiss && (p1_poisoned || p2_poisoned))) {
+            next_state := s_valid_1
             when (p1) {
-                slotUop.uopc := uopSTD
-                nextUopc := uopSTD
-                slotUop.lrs1_rtype := RT_X
-                nextLrs1Rtype := RT_X
+                next_uop.uopc := uopSTD
+                next_uop.lrs1_rtype := RT_X
             } .otherwise {
-                // slotUop.uopc := uopSTA
-                // nextUopc := uopSTA
-                slotUop.lrs2_rtype := RT_X
-                nextLrs2Rtype := RT_X
+                next_uop.lrs2_rtype := RT_X
             }
         }
     }
 
     when (io.inUop.valid) {
-        slotUop := io.inUop.bits
+        p1    := !io.inUop.bits.prs1_busy
+        p2    := !io.inUop.bits.prs2_busy
+        ppred := !io.inUop.bits.ppred_busy
     }
+    p1_poisoned := false.B
+    p2_poisoned := false.B
 
-    val nextP1 = WireInit(p1)
-    val nextP2 = WireInit(p2)
-    val nextPpred = WireInit(ppred)
+    val in_uop = Mux(io.inUop.valid, io.inUop.bits, slot_uop)
+    val in_uop_p1_poisoned = Mux(
+        io.inUop.valid, io.inUop.bits.iw_p1_poisoned, p1_poisoned
+    )
+    val in_uop_p2_poisoned = Mux(
+        io.inUop.valid, io.inUop.bits.iw_p2_poisoned, p2_poisoned
+    )
+    when (io.ldSpecMiss && in_uop_p1_poisoned) { p1 := false.B }
+    when (io.ldSpecMiss && in_uop_p2_poisoned) { p2 := false.B }
 
-    when (io.inUop.valid) {
-        p1 := !(io.inUop.bits.prs1_busy)
-        p2 := !(io.inUop.bits.prs2_busy)
-        ppred := !(io.inUop.bits.ppred_busy)
+    val prs1_matches = io.wakeupPorts.map {
+        w => w.bits.pdst === in_uop.prs1
     }
-
-    when (io.ldSpecMiss && nextP1Poisoned) { p1 := false.B }
-    when (io.ldSpecMiss && nextP2Poisoned) { p2 := false.B }
-
-    for (i <- 0 until numWakeupPorts) {
-        when (io.wakeupPorts(i).valid && (io.wakeupPorts(i).bits.pdst === nextUop.prs1)) {
-            p1 := true.B
-        }
-        when (io.wakeupPorts(i).valid && (io.wakeupPorts(i).bits.pdst === nextUop.prs2)) {
-            p2 := true.B
-        }
+    val prs2_matches = io.wakeupPorts.map {
+        w => w.bits.pdst === in_uop.prs2
     }
-    when (io.predWakeupPorts.valid && io.predWakeupPorts.bits === nextUop.ppred) {
-        ppred := true.B
+    val ppred_match = io.predWakeupPorts.bits === in_uop.ppred
+    val prs1_specmatchs = io.specLdWakeupPorts.map {
+        w => w.bits === in_uop.prs1 && in_uop.lrs1_rtype === RT_FIX
     }
-
-    for (w <- 0 until memWidth) {
-        when (
-            io.specLdWakeupPorts(w).valid &&
-            io.specLdWakeupPorts(w).bits === nextUop.prs1 &&
-            nextUop.lrs1_rtype === RT_FIX
-        ) {
-            p1 := true.B
-            p1Poisoned := true.B
-        }
-        when (
-            io.specLdWakeupPorts(w).valid &&
-            io.specLdWakeupPorts(w).bits === nextUop.prs2 &&
-            nextUop.lrs2_rtype === RT_FIX
-        ) {
-            p2 := true.B
-            p2Poisoned := true.B
-        }
+    val prs2_specmatchs = io.specLdWakeupPorts.map {
+        w => w.bits === in_uop.prs2 && in_uop.lrs2_rtype === RT_FIX
     }
-
-    val nextBrMask = GetNewBrMask(io.brUpdate, slotUop)
-
-    when (IsKilledByBranch(io.brUpdate, slotUop)) {
-        nextState := s_invalid
+    val prs1_wakeups = (io.wakeupPorts zip prs1_matches).map {
+        case (w, m) => w.valid && m
     }
-    io.killed_by_branch := IsKilledByBranch(io.brUpdate, slotUop)
-
-    when (!io.inUop.valid) {
-        slotUop.brMask := nextBrMask
+    val prs2_wakeups = (io.wakeupPorts zip prs2_matches).map {
+        case (w, m) => w.valid && m
     }
+    val ppred_wakeup = io.predWakeupPorts.valid && ppred_match
+    val prs1_specwakeups = (io.specLdWakeupPorts zip prs1_specmatchs).map {
+        case (w, m) => w.valid && m
+    }
+    val prs2_specwakeups = (io.specLdWakeupPorts zip prs2_specmatchs).map {
+        case (w, m) => w.valid && m
+    }
+    val prs1_normalwakeup = prs1_wakeups.reduce(_||_)
+    val prs2_normalwakeup = prs2_wakeups.reduce(_||_)
+    val prs1_specwakeup   = prs1_specwakeups.reduce(_||_)
+    val prs2_specwakeup   = prs2_specwakeups.reduce(_||_)
+    when (prs1_normalwakeup || prs1_specwakeup) { p1 := true.B }
+    when (prs2_normalwakeup || prs2_specwakeup) { p2 := true.B }
+    when (prs1_specwakeup) { p1_poisoned := true.B }
+    when (prs2_specwakeup) { p2_poisoned := true.B }
+    when (ppred_wakeup) { ppred := true.B }
 
     when (state === s_valid_1) {
         io.request := p1 && p2 && ppred && !io.kill
-    }.elsewhen (state === s_valid_2) {
+    } .elsewhen (state === s_valid_2) {
         io.request := (p1 || p2) && ppred && !io.kill
-    }.otherwise {
+    } .otherwise {
         io.request := false.B
     }
 
-    // maybe bug-fix
-    // when (io.ldSpecMiss && (p1Poisoned || p2Poisoned)) {
-    //     io.request := false.B
-    // }
-
-    io.valid := isValid(state)
-    io.uop := slotUop
-    io.uop.iw_p1_poisoned := p1Poisoned
-    io.uop.iw_p2_poisoned := p2Poisoned
-
-    val mayVacate = io.grant && ((state === s_valid_1) || (state === s_valid_2) && p1 && p2 && ppred)
-    val squashGrant = io.ldSpecMiss && (p1Poisoned || p2Poisoned)
-    io.willBeValid := isValid(state) && !(mayVacate && !squashGrant)
-
-    io.outUop := slotUop
-    io.outUop.iwState := nextState
-    io.outUop.uopc := nextUopc
-    io.outUop.lrs1_rtype := nextLrs1Rtype
-    io.outUop.lrs2_rtype := nextLrs2Rtype
-    io.outUop.brMask := nextBrMask
-    io.outUop.prs1_busy := !p1
-    io.outUop.prs2_busy := !p2
-    io.outUop.ppred_busy := !ppred
-    io.outUop.iw_p1_poisoned := p1Poisoned
-    io.outUop.iw_p2_poisoned := p2Poisoned
-
+    io.uop := slot_uop
+    io.uop.iw_p1_poisoned := p1_poisoned
+    io.uop.iw_p2_poisoned := p2_poisoned
     when (state === s_valid_2) {
         when (p1 && p2 && ppred) {
             ;
-        }.elsewhen (p1 && ppred) {
-            io.uop.uopc := slotUop.uopc // uopSTA
+        } .elsewhen (p1 && ppred) {
             io.uop.lrs2_rtype := RT_X
-        }.elsewhen (p2 && ppred) {
+        } .elsewhen (p2 && ppred) {
             io.uop.uopc := uopSTD
             io.uop.lrs1_rtype := RT_X
         }
     }
+
+    val may_vacate = io.grant && ((state === s_valid_1) || (state === s_valid_2) && p1 && p2 && ppred)
+    val squash_grant = io.ldSpecMiss && (p1_poisoned || p2_poisoned)
+    io.willBeValid := isValid(state) && !(may_vacate && !squash_grant)
 }
