@@ -54,6 +54,8 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
         val valid = Bool()
     }
 
+    val tageEntrySz = tagSz + 1 + 3
+
     // 通过全局历史和表的行数，计算出折叠后的历史
     def computeFoldedHist(hist: UInt, l: Int): UInt = {
         val nChunks = (globalHistoryLength + l - 1) / l
@@ -88,9 +90,6 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
         reseting := false.B
     }
 
-
-    val tageEntrySz = tagSz + 1 + 3
-
     val (s1HashIdx , s1tag) = computeTagandHash(fetchIdx(io.f1pc).asUInt,io.f1gHist)
 
 
@@ -100,7 +99,7 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
     val LOU  = SyncReadMem(nRows, Vec(bankWidth, Bool()))
 
     // 存储表项的行
-    val table  = SyncReadMem(nRows, Vec(bankWidth, new TageEntry()))
+    val table  = SyncReadMem(nRows, Vec(bankWidth, UInt(tageEntrySz.W)))
 
     val s2tag = RegNext(s1tag)
 
@@ -138,62 +137,9 @@ class TageTable(val nRows: Int, val tagSz: Int, val histLength: Int, val uBitPer
     val updateHIwData = Wire(Vec(bankWidth, Bool()))
     val updateLOwData = Wire(Vec(bankWidth, Bool()))
 
-// reset 全部置零
-//     when(reseting){
-//         table.write(
-//         resetIdx,
-//         VecInit(Seq.fill(bankWidth)(0.U.asTypeOf(new TageEntry()))),
-//         VecInit(Seq.fill(bankWidth)(true.B))
-//         )  
-//         HIU.write(
-//         resetIdx,
-//         VecInit(Seq.fill(bankWidth)(false.B)),
-//         VecInit(Seq.fill(bankWidth)(true.B))
-//         )
-//         LOU.write(
-//         resetIdx,
-//         VecInit(Seq.fill(bankWidth)(false.B)),
-//         VecInit(Seq.fill(bankWidth)(true.B))
-//         )
-// // 除此之外,如果到了特定的清除u位的周期,也要清除u位
-//     }.elsewhen(clearingHIU||clearingLOU){
-//         when(clearingHIU){
-//             HIU.write(
-//             clearingUIdx.asUInt,
-//             VecInit(Seq.fill(bankWidth)(false.B)),
-//             VecInit(Seq.fill(bankWidth)(true.B))
-//             )
-//         }
-//         when(clearingLOU){
-//             LOU.write(
-//             clearingUIdx.asUInt,
-//             VecInit(Seq.fill(bankWidth)(false.B)),
-//             VecInit(Seq.fill(bankWidth)(true.B))
-//             )
-//         }
-
-// //其他情况下正常进行更新写入 
-//     }.otherwise{
-//         table.write(
-//         updateIdx,
-//         updatewData,
-//         io.updateMask
-//         )
-//         HIU.write(
-//         updateIdx,
-//         updateHIwData,
-//         io.updateUMask
-//         )
-//         LOU.write(
-//         updateIdx,
-//         updateLOwData,
-//         io.updateUMask
-//         )
-//     }
-
     table.write(
         Mux(reseting, resetIdx, updateIdx),
-        Mux(reseting, VecInit(Seq.fill(bankWidth)(0.U.asTypeOf(new TageEntry()))), updatewData),
+        Mux(reseting, VecInit(Seq.fill(bankWidth)(0.U(tageEntrySz.W))), VecInit(updatewData.map(_.asUInt))),
         Mux(reseting, VecInit(Seq.fill(bankWidth)(true.B)), io.updateMask)
     )
     HIU.write(
@@ -287,9 +233,9 @@ case class TageParams(
     tableInfo: Seq[Tuple3[Int,Int,Int]] = Seq(  ( 32,    7,        2),
                                                 ( 32,    7,        4),
                                                 ( 64,    8,        8),
-                                                ( 64,    8,        16),
-                                                ( 32,    9,        32),
-                                                ( 32,    9,        64))
+                                                /* ( 64,    8,        16), */
+                                                ( 32,    9,        32)
+                                                /* ( 32,    9,        64) */)
 )
 
 
@@ -317,7 +263,7 @@ class TagePredictor(params: TageParams = TageParams())extends Module with HasTag
     val clockcnt = RegInit((0.U)(10.W))
     clockcnt := clockcnt + 1.U
 
-// 6个表,越往后的表信息越完善置信度越高
+// 多个表,越往后的表信息越完善置信度越高
     val tageTables = params.tableInfo.map{
         case (nRows, tagSz, histLength) => {
             val t = Module(new TageTable(nRows, tagSz, histLength, tageUBitPeriod))
