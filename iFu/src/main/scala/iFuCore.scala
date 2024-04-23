@@ -154,18 +154,21 @@ class iFuCore extends CoreModule {
     brUpdate.b2 := b2
 
     for ((b, a) <- brinfos zip exe_units.alu_units) {
-        b.valid := a.io.brinfo.valid && !rob.io.flush.valid
         b := a.io.brinfo
+        b.valid := a.io.brinfo.valid && !rob.io.flush.valid
     }
     b1.resolveMask := brinfos.map(x => x.valid << x.uop.brTag).reduce(_|_)
-    b1.mispredictMask := brinfos.map(x => (x.valid && x.mispredict) << x.uop.brTag).reduce(_|_)
+    b1.mispredictMask := brinfos.map(x =>
+        (x.valid && x.mispredict && !rob.io.flush.valid) << x.uop.brTag
+    ).reduce(_|_)
 
     var mispredict_val = false.B
     var oldest_mispredict = brinfos(0)
     for (b <- brinfos) {
+        val mispred = b.valid && b.mispredict && !RegNext(rob.io.flush.valid)
         val use_this_mispredict = !mispredict_val ||
-            b.valid && b.mispredict && IsOlder(b.uop.robIdx, oldest_mispredict.uop.robIdx, rob.io.rob_head_idx)
-        mispredict_val = mispredict_val || (b.valid && b.mispredict)
+            mispred && IsOlder(b.uop.robIdx, oldest_mispredict.uop.robIdx, rob.io.rob_head_idx)
+        mispredict_val = mispredict_val || mispred
         oldest_mispredict = Mux(use_this_mispredict, b, oldest_mispredict)
     }
 
