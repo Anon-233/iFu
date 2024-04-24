@@ -36,9 +36,8 @@ class LSUExeIO extends CoreBundle {
 }
 
 class LSUTLBDataIO extends CoreBundle {
-    val r_req   = Vec(memWidth, Decoupled(new TLBDataRReq))
+    val r_req   = Vec(memWidth, Valid(new TLBDataRReq))
     val r_resp  = Vec(memWidth, Flipped(Valid(new TLBDataRResp)))
-    val w_req   = new DecoupledIO(new TLBDataWReq)
 }
 /**
  * 输入dispatch阶段的uop，commit的信息，rob，brupdate
@@ -66,7 +65,7 @@ class LSUCoreIO extends CoreBundle {
 
     val clr_bsy     = Output(Vec(memWidth,Valid(UInt(robAddrSz.W))))    // TODO
 
-//    val clr_unsafe  = Output(Vec(memWidth, Valid(UInt(robAddrSz.W))))
+    // val clr_unsafe  = Output(Vec(memWidth, Valid(UInt(robAddrSz.W))))
 
     val fence_dmem  = Input(Bool())
 
@@ -84,7 +83,6 @@ class LSUCoreIO extends CoreBundle {
 
     val tlb_data    = new LSUTLBDataIO
 
-
     // for performance analysis
     val ldq_valids = Output(Vec(lsuParameters.numLDQEntries, Bool()))
     val stq_valids = Output(Vec(lsuParameters.numSTQEntries, Bool()))
@@ -92,7 +90,7 @@ class LSUCoreIO extends CoreBundle {
 }
 
 class LSUCsrIO extends CoreBundle {
-    val dtlb_csr_reg        = Input(new DTLBCsrContext)
+    val dtlb_csr_ctx = Input(new DTLBCsrContext)
 }
 
 class LSUIO extends CoreBundle {
@@ -1232,11 +1230,10 @@ class Lsu extends CoreModule {
         }
     }
 
-    dtlb.io.dtlb_csr_context := io.csr.dtlb_csr_reg
+    dtlb.io.dtlb_csr_context := io.csr.dtlb_csr_ctx
     dtlb.io.r_resp           := io.core.tlb_data.r_resp
 
     io.core.tlb_data.r_req   <> dtlb.io.r_req
-    io.core.tlb_data.w_req   <> dtlb.io.w_req
 
     //-------------------------------------------------------------
     // Live Store Mask

@@ -133,26 +133,32 @@ object XDecode extends DecodeTable  {
     )
 }
 
-//object TLBDeocde extends DecodeTable {
-//    val table: Array[(BitPat, List[BitPat])] = Array(
-//                //
-//                //    is val inst?                                                                          bypassable
-//                //        | micro-code                                             uses_ldg                      | is_br
-//                //        |    |           iq-type                                    | uses_stq                 |  | is_pc2epc
-//                //        |    |              |   func unit                           |  |  is_amo               |  |  | is_unique(clear pipeline for it)
-//                //        |    |              |       |    dst_type                   |  |  |  is_fence          |  |  |  | flush_on_commit
-//                //        |    |              |       |       |    rs1_type           |  |  |  |  is_fencei      |  |  |  |  |
-//                //        |    |              |       |       |       |               |  |  |  |  |              |  |  |  |  |
-//                //        |    |              |       |       |       |    rs2_type   |  |  |  |  |              |  |  |  |  |
-//                //        |    |              |       |       |       |       |       |  |  |  |  |  mem_cmd     |  |  |  |  |
-//                //        |    |              |       |       |       |       |       |  |  |  |  |     |        |  |  |  |  |
-//         TLBSRCH  -> List(Y, uopTLBSRCH),
-//         TLBFILL  -> List(Y, uopTLBFILL),
-//         TLBRD    -> List(Y, uopTLBRD),
-//         TLBWR    -> List(Y, uopTLBWR),
-//         INVTLB   -> List(Y, uopINVTLB)
-//     )
-//}
+object TLBDeocde extends DecodeTable {
+   val table: Array[(BitPat, List[BitPat])] = Array(
+               //
+               //    is val inst?                                                                          bypassable
+               //        | micro-code                                             uses_ldg                     | is_br
+               //        |    |           iq-type                                   | uses_stq                 |  | is_pc2epc
+               //        |    |              |   func unit                          |  |  is_amo               |  |  | is_unique(clear pipeline for it)
+               //        |    |              |       |    dst_type                  |  |  |  is_fence          |  |  |  | flush_on_commit
+               //        |    |              |       |       |    rs1_type          |  |  |  |  is_fencei      |  |  |  |  |
+               //        |    |              |       |       |       |              |  |  |  |  |              |  |  |  |  |
+               //        |    |              |       |       |       |    rs2_type  |  |  |  |  |              |  |  |  |  |
+               //        |    |              |       |       |       |       |      |  |  |  |  |  mem_cmd     |  |  |  |  |
+               //        |    |              |       |       |       |       |      |  |  |  |  |     |        |  |  |  |  |
+        TLBSRCH  -> List(Y, uopTLBSRCH   , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , N, N, N, N, N,/* M_X,*/    N, N, N, Y, Y),
+        TLBFILL  -> List(Y, uopTLBFILL   , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , N, N, N, N, N,/* M_X,*/    N, N, N, Y, Y),
+        TLBRD    -> List(Y, uopTLBRD     , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , N, N, N, N, N,/* M_X,*/    N, N, N, Y, Y),
+        TLBWR    -> List(Y, uopTLBWR     , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , N, N, N, N, N,/* M_X,*/    N, N, N, Y, Y),
+        INVTLB0  -> List(Y, uopINVTLB    , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_FIX, N, N, N, N, N,/* M_X,*/    N, N, N, Y, Y),
+        INVTLB1  -> List(Y, uopINVTLB    , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_FIX, N, N, N, N, N,/* M_X,*/    N, N, N, Y, Y),
+        INVTLB2  -> List(Y, uopINVTLB    , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_FIX, N, N, N, N, N,/* M_X,*/    N, N, N, Y, Y),
+        INVTLB3  -> List(Y, uopINVTLB    , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_FIX, N, N, N, N, N,/* M_X,*/    N, N, N, Y, Y),
+        INVTLB4  -> List(Y, uopINVTLB    , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_FIX, N, N, N, N, N,/* M_X,*/    N, N, N, Y, Y),
+        INVTLB5  -> List(Y, uopINVTLB    , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_FIX, N, N, N, N, N,/* M_X,*/    N, N, N, Y, Y),
+        INVTLB6  -> List(Y, uopINVTLB    , IQT_INT, FU_CSR, RT_X  , RT_FIX, RT_FIX, N, N, N, N, N,/* M_X,*/    N, N, N, Y, Y),
+    )
+}
 
 object CSRDecode extends DecodeTable {
     val table: Array[(BitPat, List[BitPat])] = Array(
@@ -212,23 +218,24 @@ object CntDecode extends DecodeTable {
    )
 }
 
-//object WeirdDecode extends DecodeTable {
-//    val table: Array[(BitPat, List[BitPat])] = Array(
-//                //
-//                //    is val inst?                                                                        bypassable
-//                //        | micro-code                                            uses_ldg                      | is_br
-//                //        |    |           iq-type                                   | uses_stq                 |  | is_pc2epc
-//                //        |    |              |   func unit                          |  |  is_amo               |  |  | is_unique(clear pipeline for it)
-//                //        |    |              |       |    dst_type                  |  |  |  is_fence          |  |  |  | flush_on_commit
-//                //        |    |              |       |       |    rs1_type          |  |  |  |  is_fencei      |  |  |  |  |
-//                //        |    |              |       |       |       |              |  |  |  |  |              |  |  |  |  |
-//                //        |    |              |       |       |       |    rs2_type  |  |  |  |  |              |  |  |  |  |
-//                //        |    |              |       |       |       |       |      |  |  |  |  |  mem_cmd     |  |  |  |  |
-//                //        |    |              |       |       |       |       |      |  |  |  |  |     |        |  |  |  |  |
-//        IDLE      -> List(Y, uopIDLE),
-//        CACOP     -> List(Y, uopCACOP     , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, N, N, N, N, /*M_X,*/    N, N, N, N, N)
-//    )
-//}
+object WeirdDecode extends DecodeTable {
+   val table: Array[(BitPat, List[BitPat])] = Array(
+               //
+               //    is val inst?                                                                        bypassable
+               //        | micro-code                                            uses_ldg                      | is_br
+               //        |    |           iq-type                                   | uses_stq                 |  | is_pc2epc
+               //        |    |              |   func unit                          |  |  is_amo               |  |  | is_unique(clear pipeline for it)
+               //        |    |              |       |    dst_type                  |  |  |  is_fence          |  |  |  | flush_on_commit
+               //        |    |              |       |       |    rs1_type          |  |  |  |  is_fencei      |  |  |  |  |
+               //        |    |              |       |       |       |              |  |  |  |  |              |  |  |  |  |
+               //        |    |              |       |       |       |    rs2_type  |  |  |  |  |              |  |  |  |  |
+               //        |    |              |       |       |       |       |      |  |  |  |  |  mem_cmd     |  |  |  |  |
+               //        |    |              |       |       |       |       |      |  |  |  |  |     |        |  |  |  |  |
+    //    IDLE      -> List(Y, uopIDLE),
+    //    CACOP     -> List(Y, uopCACOP     , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, N, N, N, N, /*M_X,*/    N, N, N, N, N)
+        CACOP    -> List(Y, uopCSRRD    , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , N, N, N, N, N,/* M_X,*/    N, N, N, Y, Y),
+   )
+}
 
 class DecodeUnitIO() extends CoreBundle {
     val enq = new Bundle { val uop = Input(new MicroOp()) }
@@ -246,6 +253,8 @@ class DecodeUnit extends CoreModule {
     var decode_table = XDecode.table
     decode_table ++= CSRDecode.table
     decode_table ++= CntDecode.table
+    decode_table ++= TLBDeocde.table
+    decode_table ++= WeirdDecode.table
 
     val inst = uop.instr
     val cs = Wire(new CtrlSigs).decode(inst, decode_table)
@@ -269,12 +278,13 @@ class DecodeUnit extends CoreModule {
             xcpt_cause := BRK
         }
     } .elsewhen (id_illegal_insn) {
-        xcpt_cause := INE
         xcpt_valid := true.B
+        xcpt_cause := INE
     }
     /*uop.mem_cmd         := cs.mem_cmd*/
     uop.mem_size := inst(23, 22)
     uop.mem_signed := !inst(25)
+    uop.tlb_op := inst(4, 0)
     uop.use_ldq := cs.uses_ldq
     uop.use_stq := cs.uses_stq
     uop.is_amo := cs.is_amo

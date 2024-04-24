@@ -45,12 +45,17 @@ object Consts {
     val Y = BitPat("b1")
     val N = BitPat("b0")
 
-    val CSR_SZ = 3
+    val CSR_SZ = 4
     val CSR_N  = 0.U(CSR_SZ.W)  // 非CSR指令
     val CSR_R  = 1.U(CSR_SZ.W)  // csrrd
     val CSR_W  = 2.U(CSR_SZ.W)  // csrwr
     val CSR_M  = 3.U(CSR_SZ.W)  // csrxchg
     val CSR_E  = 4.U(CSR_SZ.W)  // ertn
+    val TLB_S  = 5.U(CSR_SZ.W)  // tlbsrch
+    val TLB_R  = 6.U(CSR_SZ.W)  // tlbrd
+    val TLB_W  = 7.U(CSR_SZ.W)  // tlbwr
+    val TLB_F  = 8.U(CSR_SZ.W)  // tlbfill
+    val TLB_I  = 9.U(CSR_SZ.W)  // invtlb
 
     val BSRC_SZ = 2
     val BSRC_1  = 0.U(BSRC_SZ.W) // 1-cycle branch pred

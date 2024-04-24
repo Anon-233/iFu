@@ -94,16 +94,14 @@ class iFuCore extends CoreModule {
     val csr         = Module(new CSRFile)
     val tlb_data    = Module(new TLBDataManager)
 
-    tlb_data.io.csr_context         := csr.io.tlb_data_csr_reg
-    // tlb_data.io.r_req(0)
-    tlb_data.io.r_req(0)            <> DontCare //TODO 删除
-    tlb_data.io.r_req(1)            <> lsu.io.core.tlb_data.r_req(0)
-    tlb_data.io.r_req(2)            <> lsu.io.core.tlb_data.r_req(1)
-    tlb_data.io.w_req               <> lsu.io.core.tlb_data.w_req
+    tlb_data.io.csr      <> csr.io.tlb_data
+    tlb_data.io.r_req(0) <> DontCare //TODO 删除
+    tlb_data.io.r_req(1) <> lsu.io.core.tlb_data.r_req(0)
+    tlb_data.io.r_req(2) <> lsu.io.core.tlb_data.r_req(1)
 
-    lsu.io.core.tlb_data.r_resp(0)       <> tlb_data.io.r_resp(1)
-    lsu.io.core.tlb_data.r_resp(1)       <> tlb_data.io.r_resp(2)
-    lsu.io.csr.dtlb_csr_reg         := csr.io.dtlb_csr_reg
+    lsu.io.core.tlb_data.r_resp(0) <> tlb_data.io.r_resp(1)
+    lsu.io.core.tlb_data.r_resp(1) <> tlb_data.io.r_resp(2)
+    lsu.io.csr.dtlb_csr_ctx        := csr.io.dtlb_csr_ctx
 
 /*-----------------------------*/
 
@@ -684,12 +682,13 @@ class iFuCore extends CoreModule {
     //--------------------------CSR--------------------------------
     //-------------------------------------------------------------
     val csr_exe_unit = exe_units.csr_unit
-    val csr_rw_cmd = csr_exe_unit.io.iresp.bits.uop.ctrl.csr_cmd
+    val csr_rw_cmd = csr_exe_unit.io.iresp.bits.csr_cmd
 
     csr.io.ext_int := io.ext_int
-    csr.io.addr := csr_exe_unit.io.iresp.bits.uop.csrAddr
-    csr.io.rd := csr_exe_unit.io.iresp.bits.rd
-    csr.io.rj := csr_exe_unit.io.iresp.bits.rj
+    csr.io.addr    := csr_exe_unit.io.iresp.bits.csr_addr
+    csr.io.tlb_op  := csr_exe_unit.io.iresp.bits.tlb_op
+    csr.io.r1      := csr_exe_unit.io.iresp.bits.csr_r1
+    csr.io.r2      := csr_exe_unit.io.iresp.bits.csr_r2
 
     csr.io.cmd := csr_rw_cmd
     csr.io.exevalid := csr_exe_unit.io.iresp.valid
@@ -877,9 +876,12 @@ class iFuCore extends CoreModule {
 
         val instr_commits = Module(new InstrCommits)
         val rawCommit = WireInit(0.U.asTypeOf(new InstrCommit))
+        instr_commits.io.exception := RegNext(rob.io.com_xcpt.valid)
         instr_commits.io.rawCommit := rawCommit
+        instr_commits.io.fill_idx  := tlb_data.io.fill_idx
 
         for (w <- 0 until robParameters.retireWidth) {
+            rawCommit.debug_uopc(w)  := rob.io.commit.uops(w).uopc
             rawCommit.debug_pc(w)    := rob.io.commit.uops(w).debug_pc
             rawCommit.debug_ldst(w)  := rob.io.commit.uops(w).ldst
             rawCommit.debug_insts(w) := rob.io.commit.uops(w).debug_inst

@@ -167,6 +167,23 @@ object CntRRdDecode extends RRdDecodeConstants {
         )
 }
 
+object TLBRRdDecode extends RRdDecodeConstants {
+    val table: Array[(BitPat, List[BitPat])] =
+        Array[(BitPat, List[BitPat])](
+                   //                  br type
+                   //                    |  use alu pipe               op1 sel   op2 sel
+                   //                    |    |  use muldiv pipe         |         |        immsel       csr_cmd
+                   //                    |    |  |  use mem pipe         |         |        |      rf wen   |
+                   //                    |    |  |  |     alu fcn        |         |        |        |      |
+                   //                    |    |  |  |       |            |         |        |        |      |
+            BitPat(uopTLBSRCH) -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, TLB_S),
+            BitPat(uopTLBFILL) -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, TLB_F),
+            BitPat(uopTLBRD)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, TLB_R),
+            BitPat(uopTLBWR)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, TLB_W),
+            BitPat(uopINVTLB)  -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_RS2 , immX  , REN_0, TLB_I),
+        )
+}
+
 class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
     val io = IO(new CoreBundle {
         val iss_valid = Input(Bool())
@@ -183,7 +200,10 @@ class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
     if (supportedUnits.jmp)    dec_table ++= JmpRRdDecode.table
     if (supportedUnits.mem)    dec_table ++= MemRRdDecode.table
     if (supportedUnits.muldiv) dec_table ++= MulDivRRdDecode.table
-    if (supportedUnits.csr)    dec_table ++= CsrRRdDecode.table
+    if (supportedUnits.csr) {
+        dec_table ++= CsrRRdDecode.table
+        dec_table ++= TLBRRdDecode.table
+    }
     if (supportedUnits.cnt)    dec_table ++= CntRRdDecode.table
     val rrd_cs = Wire(new RRdCtrlSigs).decode(io.rrd_uop.uopc, dec_table)
 

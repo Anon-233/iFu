@@ -6,8 +6,6 @@ import chisel3.util._
 import iFu.common._
 import iFu.common.Consts._
 import iFu.common.CauseCode._
-//
-//第一步，
 
 class DTLBCsrContext extends CoreBundle(){
     val crmd_da     = Bool()
@@ -48,12 +46,10 @@ class DTLBResp extends CoreBundle(){
 class DTLBIO extends CoreBundle(){
     val req         = Vec(memWidth, Flipped(Decoupled(new DTLBReq)))
     val resp        = Vec(memWidth, new DTLBResp)
-    val r_req       = Vec(memWidth, Decoupled(new TLBDataRReq))
+    val r_req       = Vec(memWidth, Valid(new TLBDataRReq))
     val r_resp      = Vec(memWidth, Flipped(Valid(new TLBDataRResp)))
-    val w_req       = Decoupled(new TLBDataWReq)
-    // val w_resp = Input(Valid(new WResp))
     val dtlb_csr_context = Input(new DTLBCsrContext)
-    val tlb_data_context = Input(new TLBDataCsrContext)
+    val tlb_data_context = Input(new TLBDataCSRContext)
     val kill = Input(Bool())
 
 }
@@ -61,11 +57,7 @@ class DTLBIO extends CoreBundle(){
 class DTLB extends CoreModule(){
     val io = IO(new DTLBIO)
     io <> DontCare  //TODO 删除
-    // when(io.req(0).bits.is_tlb_inst){
-    //     io.w_req.valid      := true.B
-    //     io.w_req.bits.vaddr := io.req(0).bits.vaddr
-    //     io.w_req.bits.cmd   := io.req(0).bits.cmd
-    // }
+
     for(w <- 0 until memWidth){
         io.resp(w)          := 0.U.asTypeOf(new DTLBResp)
         io.resp(w).paddr    := io.req(w).bits.vaddr

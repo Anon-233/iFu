@@ -49,8 +49,6 @@ class MicroOp extends CoreBundle {
 
     val immPacked: UInt = UInt(26.W)
 
-    // val csrAddr: UInt = UInt(/*TODO*/)
-
     val robIdx: UInt = UInt(robAddrSz.W)
     val ldqIdx: UInt = UInt(ldqAddrSz.W)
     val stqIdx: UInt = UInt(stqAddrSz.W)
@@ -69,7 +67,7 @@ class MicroOp extends CoreBundle {
     val instr_misalign : Bool = Bool()
     val ctrl = new CtrlSignals
 
-    val csrAddr: UInt = UInt(14.W)
+    val tlb_op: UInt = UInt(5.W)
 
     val use_ldq: Bool = Bool()
     val use_stq: Bool = Bool()
