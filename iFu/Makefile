@@ -2,27 +2,19 @@ default: compile
 
 base_dir = $(abspath .)
 src_dir = $(base_dir)/src/main
-gen_dir = $(base_dir)/build
-out_dir = $(base_dir)/outputs
-
-SPLIT = true
+gen_dir = $(base_dir)/gen
 
 SBT = sbt
 
-CLI = scala-cli
+compile: $(gen_dir)/iFuCore.sv
 
-compile: $(gen_dir)/iFuCore.v
-
-$(gen_dir)/iFuCore.v: $(wildcard $(src_dir)/scala/*.scala)
-	$(SBT) "run $(gen_dir) $(SPLIT)"
-
-split:
-	make SPLIT=false
+$(gen_dir)/iFuCore.sv: $(shell find $(src_dir) -name '*.scala')
+	$(SBT) "run $(gen_dir)"
 
 log:
-	make split > ./log
+	make > ./log
 
 clean:
-	rm -rf $(gen_dir)/iFuCore.* $(out_dir) test_run_dir
+	rm -rf $(gen_dir)/iFuCore.*
 
-.PHONY: clean log split
+.PHONY: clean log
