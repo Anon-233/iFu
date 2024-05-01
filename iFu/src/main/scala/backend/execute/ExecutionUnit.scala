@@ -3,48 +3,44 @@ package iFu.backend
 import chisel3._
 import chisel3.util._
 
+import scala.collection.mutable.ArrayBuffer
+
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
+
 import iFu.frontend.GetPCFromFtqIO
 
-import scala.collection.mutable.ArrayBuffer
-
 abstract class ExecutionUnit (
-    val readsIrf         : Boolean       = false,
-    val writesIrf        : Boolean       = false,
-    val writesMemIrf     : Boolean       = false,
-    val bypassable       : Boolean       = false,
-    val alwaysBypassable : Boolean       = false,
-    val hasMem           : Boolean       = false,
-    val hasCSR           : Boolean       = false,
-    val hasJmpUnit       : Boolean       = false,
-    val hasAlu           : Boolean       = false,
-    val hasMul           : Boolean       = false,
-    val hasDiv           : Boolean       = false,
-    val hasCnt           : Boolean       = false,
-    val numStages        : Int
+    val readsIrf: Boolean         = false,
+    val writesIrf: Boolean        = false,
+    val writesMemIrf: Boolean     = false,
+    val bypassable: Boolean       = false,
+    val alwaysBypassable: Boolean = false,
+    val hasMem: Boolean           = false,
+    val hasCSR: Boolean           = false,
+    val hasJmpUnit: Boolean       = false,
+    val hasAlu: Boolean           = false,
+    val hasMul: Boolean           = false,
+    val hasDiv: Boolean           = false,
+    val hasCnt: Boolean           = false,
+    val numStages: Int
 ) extends CoreModule {
-    val io = IO(new Bundle {
-        val fu_types = Output(Bits(FUC_SZ.W))
+    val io = IO(new Bundle{
+        val fu_types  = Output(Bits(FUC_SZ.W))
 
-        val req      = Flipped(new DecoupledIO(new FuncUnitReq))
+        val req       = Flipped(new DecoupledIO(new FuncUnitReq))
 
-        val iresp    = if (writesIrf)   new DecoupledIO(new ExeUnitResp) else null
+        val iresp     = if (writesIrf) new DecoupledIO(new ExeUnitResp) else null
         val mem_iresp = if (writesMemIrf) new DecoupledIO(new ExeUnitResp) else null
 
-        val bypass   = Output(Vec(numStages, Valid(new ExeUnitResp)))
-        val brupdate = Input(new BrUpdateInfo)
+        val bypass    = Output(Vec(numStages, Valid(new ExeUnitResp)))
+        val brupdate  = Input(new BrUpdateInfo)
 
-        val brinfo     = if (hasAlu) Output(new BrResolutionInfo) else null
-        val getFtqPc = if (hasJmpUnit) Flipped(new GetPCFromFtqIO) else null
-        // val status     = Input(new freechips.rocketchip.rocket.MStatus())
+        val brinfo    = if (hasAlu) Output(new BrResolutionInfo) else null
+        val getFtqPc  = if (hasJmpUnit) Flipped(new GetPCFromFtqIO) else null
 
-        // only used by the mem unit
-        val lsu_io = if (hasMem) Flipped(new LSUExeIO) else null
-        // val bp = if (hasMem) Input(Vec(nBreakpoints, new BP)) else null
-        // val mcontext = if (hasMem) Input(UInt(coreParams.mcontextWidth.W)) else null
-        // val scontext = if (hasMem) Input(UInt(coreParams.scontextWidth.W)) else null
+        val lsu_io    = if (hasMem) Flipped(new LSUExeIO) else null
     })
     io <> DontCare
     if (writesIrf) {
@@ -61,25 +57,24 @@ abstract class ExecutionUnit (
             alu    = hasAlu,
             jmp    = hasJmpUnit,
             mem    = hasMem,
-            muldiv = hasMul || hasDiv,
+            muldiv = hasMul || hasDiv,  // should we split these up?
             csr    = hasCSR,
             cnt    = hasCnt
-            // val tlb: Boolean    = false
         )
     }
 }
 
-class ALUExeUnit(
-    hasJmpUnit : Boolean = false,
-    hasCSR     : Boolean = false,
-    hasAlu     : Boolean = true,
-    hasMul     : Boolean = false,
-    hasDiv     : Boolean = false,
-    hasCnt     : Boolean = false,
-    hasIfpu    : Boolean = false,
-    hasMem     : Boolean = false,
-    hasRocc    : Boolean = false
-) extends ExecutionUnit(
+class ALUExeUnit (
+    hasJmpUnit: Boolean = false,
+    hasCSR: Boolean     = false,
+    hasAlu: Boolean     = true ,    // ALU is always supported
+    hasMul: Boolean     = false,
+    hasDiv: Boolean     = false,
+    hasCnt: Boolean     = false,
+    hasIfpu: Boolean    = false,
+    hasMem: Boolean     = false,
+    hasRocc: Boolean    = false
+) extends ExecutionUnit (
     readsIrf         = true,
     writesIrf        = hasAlu || hasMul || hasDiv || hasCnt,
     writesMemIrf     = hasMem,
@@ -94,18 +89,17 @@ class ALUExeUnit(
     hasCnt           = hasCnt,
     numStages        = if (hasAlu && hasMul) 3 else if (hasAlu) 1 else 0
 ) {
-
     val div_busy  = WireInit(false.B)
 
     val iresp_fu_units = ArrayBuffer[FuncUnit]()
 
-    io.fu_types := Mux(hasAlu.B, FU_ALU, 0.U)              |
-                   Mux(hasMul.B, FU_MUL, 0.U)              |
+    io.fu_types := Mux(hasAlu.B,              FU_ALU, 0.U) |
+                   Mux(hasMul.B,              FU_MUL, 0.U) |
                    Mux(!div_busy && hasDiv.B, FU_DIV, 0.U) |
-                   Mux(hasCnt.B, FU_CNT, 0.U)              |
-                   Mux(hasCSR.B, FU_CSR, 0.U)              |
-                   Mux(hasJmpUnit.B, FU_JMP, 0.U)          |
-                   Mux(hasMem.B, FU_MEM, 0.U)
+                   Mux(hasCnt.B,              FU_CNT, 0.U) |
+                   Mux(hasCSR.B,              FU_CSR, 0.U) |
+                   Mux(hasJmpUnit.B,          FU_JMP, 0.U) |
+                   Mux(hasMem.B,              FU_MEM, 0.U)
 
     // ALU Unit -------------------------------
     var alu: ALUUnit = null
@@ -136,9 +130,7 @@ class ALUExeUnit(
     // Counter Unit ---------------------------
     var cnt: CntUnit = null
     if (hasCnt) {
-        cnt = Module(new CntUnit(
-            numStages = numStages
-        ))
+        cnt = Module(new CntUnit(numStages = numStages))
         cnt.io.req <> DontCare
         cnt.io.req.valid := io.req.valid && io.req.bits.uop.fu_code_is(FU_CNT)
         cnt.io.req.bits.uop     := io.req.bits.uop
@@ -185,8 +177,7 @@ class ALUExeUnit(
         div.io.req.bits.rs2Data := io.req.bits.rs2Data
         div.io.brUpdate         := io.brupdate
         div.io.req.bits.kill    := io.req.bits.kill
-        // 不知道会不会死锁...
-        div.io.resp.ready := !(iresp_fu_units.map(_.io.resp.valid).reduce(_|_))
+        div.io.resp.ready       := !(iresp_fu_units.map(_.io.resp.valid).reduce(_|_))
 
         div_resp_val := div.io.resp.valid
         div_busy     := !div.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV))
@@ -203,10 +194,6 @@ class ALUExeUnit(
         maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
         maddrcalc.io.req.bits   := io.req.bits
         maddrcalc.io.brUpdate     <> io.brupdate
-        // maddrcalc.io.status     := io.status
-        // maddrcalc.io.bp         := io.bp
-        // maddrcalc.io.mcontext   := io.mcontext
-        // maddrcalc.io.scontext   := io.scontext
         maddrcalc.io.resp.ready := true.B
 
         io.lsu_io.req := maddrcalc.io.resp
