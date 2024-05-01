@@ -191,6 +191,13 @@ class ALUUnit(
     brInfo.targetOffset := imm
     io.brInfo := brInfo
 
+    val rMispred = Reg(Vec(numStages, Bool()))
+    rMispred(0) := mispredict
+    for (i <- 1 until numStages) {
+        rMispred(i) := rMispred(i - 1)
+    }
+    io.resp.bits.uop.debug_mispred := rMispred(numStages - 1)
+
     val rData = Reg(Vec(numStages, UInt(xLen.W)))
     val rPred = Reg(Vec(numStages, Bool()))
     val aluOut = Mux(

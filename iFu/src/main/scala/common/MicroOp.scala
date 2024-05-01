@@ -84,8 +84,9 @@ class MicroOp extends CoreBundle {
     val is_unique: Bool = Bool()
     val flush_on_commit: Bool = Bool()
 
-    val debug_inst: UInt = UInt(coreInstrBits.W)
-    val debug_pc : UInt = UInt(32.W)
+    val debug_inst: UInt    = if (!FPGAPlatform) UInt(coreInstrBits.W) else null
+    val debug_pc: UInt      = if (!FPGAPlatform) UInt(32.W) else null
+    val debug_mispred: Bool = if (!FPGAPlatform) Bool() else null
 
     def is_sfb_br: Bool             = isBr && isSFB
     def is_sfb_shadow: Bool         = isSFB && !isBr
