@@ -36,7 +36,7 @@ class LSUExeIO extends CoreBundle {
 }
 
 class LSUTLBDataIO extends CoreBundle {
-    val r_req   = Vec(memWidth, Valid(new TLBDataRReq))
+    val r_req   = Vec(memWidth, Output(new TLBDataRReq))
     val r_resp  = Vec(memWidth, Flipped(Valid(new TLBDataRResp)))
 }
 /**
@@ -488,18 +488,19 @@ class Lsu extends CoreModule {
     val dtlb = Module(new DTLB)
     dtlb.io <> DontCare
     for (w <- 0 until memWidth) {
-        dtlb.io.req(w).valid := exe_tlb_valid(w)
-        dtlb.io.req(w).bits.vaddr := exe_tlb_vaddr(w)
-        dtlb.io.req(w).bits.size := exe_size(w)
+        dtlb.io.req(w).vaddr := exe_tlb_vaddr(w)
+        dtlb.io.req(w).size := exe_size(w)
+        dtlb.io.req(w).use_stq := exe_req(w).bits.uop.use_stq
+        dtlb.io.req(w).use_ldq := exe_req(w).bits.uop.use_ldq
     }
     // exceptions
 
     // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
     val tlb_xcpt_valids = RegNext(widthMap(w =>
-        (dtlb.io.resp(w).exception.valid &&
-                !io.core.exception &&
-                !IsKilledByBranch(io.core.brupdate, exe_tlb_uop(w))
-    )))
+            exe_tlb_valid(w) &&
+            dtlb.io.resp(w).exception.valid &&
+            !io.core.exception &&
+            !IsKilledByBranch(io.core.brupdate, exe_tlb_uop(w))))
     val tlb_xcpt_uops = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, exe_tlb_uop(w))))
     val tlb_xcpt_causes = RegNext(widthMap(w =>
         dtlb.io.resp(w).exception.bits.xcpt_cause
@@ -535,7 +536,7 @@ class Lsu extends CoreModule {
         oldest_xcpt_rob_idx = Mux(is_older, tlb_xcpt_uops(w).robIdx, oldest_xcpt_rob_idx)
     }
     //TODO:可能不需要这里的miss,
-    val exe_tlb_xcpt = widthMap(w => dtlb.io.req(w).valid && (dtlb.io.resp(w).exception.valid || !dtlb.io.req(w).ready))
+    val exe_tlb_xcpt = widthMap(w => exe_tlb_valid(w) && dtlb.io.resp(w).exception.valid)
     val exe_tlb_paddr = widthMap(w => dtlb.io.resp(w).paddr)
     val exe_tlb_uncacheable = widthMap(w => dtlb.io.resp(w).is_uncacheable)
     for (w <- 0 until memWidth) {

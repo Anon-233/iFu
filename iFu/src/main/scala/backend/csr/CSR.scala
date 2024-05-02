@@ -154,6 +154,7 @@ class CSRFileIO extends CoreBundle {
     val r2       = Input(UInt(32.W))
 
     val dtlb_csr_ctx = Output(new DTLBCsrContext)
+    val itlb_csr_ctx = Output(new ITLBCsrContext)
     val tlb_data     = Flipped(new TLBDataCSRIO)
 }
 
@@ -437,8 +438,25 @@ class CSRFile extends CoreModule {
     io.dtlb_csr_ctx.dmw0_plv3 := csrReg.dmw0.plv3
     io.dtlb_csr_ctx.dmw1_plv0 := csrReg.dmw1.plv0
     io.dtlb_csr_ctx.dmw1_plv3 := csrReg.dmw1.plv3
+    io.dtlb_csr_ctx.dmw0_pseg := csrReg.dmw0.pseg
     io.dtlb_csr_ctx.dmw0_vseg := csrReg.dmw0.vseg
+    io.dtlb_csr_ctx.dmw1_pseg := csrReg.dmw1.pseg
     io.dtlb_csr_ctx.dmw1_vseg := csrReg.dmw1.vseg
+
+    io.itlb_csr_ctx.crmd_da := csrReg.crmd.da
+    io.itlb_csr_ctx.crmd_pg := csrReg.crmd.pg
+    io.itlb_csr_ctx.crmd_datm := csrReg.crmd.datm
+    io.itlb_csr_ctx.crmd_plv := csrReg.crmd.plv
+    io.itlb_csr_ctx.dmw0_mat := csrReg.dmw0.mat
+    io.itlb_csr_ctx.dmw1_mat := csrReg.dmw1.mat
+    io.itlb_csr_ctx.dmw0_plv0 := csrReg.dmw0.plv0
+    io.itlb_csr_ctx.dmw0_plv3 := csrReg.dmw0.plv3
+    io.itlb_csr_ctx.dmw1_plv0 := csrReg.dmw1.plv0
+    io.itlb_csr_ctx.dmw1_plv3 := csrReg.dmw1.plv3
+    io.itlb_csr_ctx.dmw0_pseg := csrReg.dmw0.pseg
+    io.itlb_csr_ctx.dmw0_vseg := csrReg.dmw0.vseg
+    io.itlb_csr_ctx.dmw1_pseg := csrReg.dmw1.pseg
+    io.itlb_csr_ctx.dmw1_vseg := csrReg.dmw1.vseg
 
     io.tlb_data.csr_ctx.asid_asid    := csrReg.asid.asid
     io.tlb_data.csr_ctx.tlbidx_index := csrReg.tlbidx.index

@@ -16,7 +16,7 @@ class TLBMeta extends CoreBundle {
 }
 
 class TLBSingleData extends CoreBundle {
-    val ppn = UInt((vaddrBits - 12).W)
+    val ppn = UInt((paddrBits - 12).W)
     val plv = UInt(2.W)
     val mat = UInt(2.W)
     val d   = Bool()
@@ -26,16 +26,23 @@ class TLBSingleData extends CoreBundle {
 class TLBEntry extends CoreBundle {
     val meta = new TLBMeta
     val data = Vec(2, new TLBSingleData)
+
+    def matches(vppn: UInt, asid: UInt): Bool = {
+        meta.e &&
+            (meta.g || meta.asid === asid) &&
+            Mux(meta.ps === 12.U,
+                meta.vppn === vppn,
+                meta.vppn(18, 10) === vppn(18, 10)
+            )
+    }
 }
 
 class TLBDataRReq extends CoreBundle {
     val vaddr       = UInt(vaddrBits.W)
-    val index       = UInt(log2Ceil(TLB_NUM).W) // 当is_tlb_rd为真时，需要index
 }
 
 class TLBDataRResp extends CoreBundle {
-    val data    = Vec(2, new TLBSingleData)
-    val hit_idx = UInt(log2Ceil(TLB_NUM).W)
+    val entry   = new TLBEntry
 }
 
 class TLBDataCSRContext extends CoreBundle {
@@ -78,7 +85,7 @@ class TLBDataCSRIO extends CoreBundle {
 
 class TLBDataManagerIO extends CoreBundle {
     val csr    = new TLBDataCSRIO
-    val r_req  = Vec(memWidth + 1, Flipped(Valid(new TLBDataRReq)))
+    val r_req  = Vec(memWidth + 1, Input(new TLBDataRReq))
     val r_resp = Vec(memWidth + 1, Valid(new TLBDataRResp))
     val fill_idx = if (!FPGAPlatform) Output(UInt(log2Ceil(TLB_NUM).W)) else null
 }
@@ -92,20 +99,18 @@ class TLBDataManager extends CoreModule {
     // the valid bit TLBMeta.e is random initialized now
     // because we assume that user will call invtlb before using TLB
     val tlb_entries = Reg(Vec(TLB_NUM, new TLBEntry))
-// --------------------------------------------------------
 
-// --------------------------------------------------------
     val csr_ctx = io.csr.csr_ctx
+// --------------------------------------------------------
+    for (w <- 0 until memWidth + 1) {
+        val matchOH = tlb_entries.map(_.matches(io.r_req(w).vaddr(vaddrBits-1, 13), csr_ctx.asid_asid))
+        io.r_resp(w).valid := matchOH.reduce(_||_)
+        io.r_resp(w).bits.entry := Mux1H(matchOH, tlb_entries)
+    }
+// --------------------------------------------------------
     val instr = io.csr.instr
     when (instr.cmd === TLB_S) {
-        val matches = VecInit(tlb_entries.map(entry =>
-            entry.meta.e &&
-            (entry.meta.g || entry.meta.asid === csr_ctx.asid_asid) &&
-            Mux(entry.meta.ps === 12.U,
-                entry.meta.vppn === csr_ctx.tlbehi_vppn,
-                entry.meta.vppn(18, 10) === csr_ctx.tlbehi_vppn(18, 10)
-            )
-        ))
+        val matches = VecInit(tlb_entries.map(_.matches(csr_ctx.tlbehi_vppn, csr_ctx.asid_asid)))
         io.csr.sch_idx.valid := matches.asUInt.orR
         io.csr.sch_idx.bits := OHToUInt(matches)
     } .elsewhen (instr.cmd === TLB_R) {

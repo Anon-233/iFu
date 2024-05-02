@@ -306,7 +306,7 @@ class DecodeUnit extends CoreModule {
     uop.lrs2 := inst(14, 10)
     uop.vaddrWriteEnable := false.B
 
-    when(xcpt_valid && (xcpt_cause === ADEF || xcpt_cause === ALE)){
+    when(xcpt_valid && (xcpt_cause === PIF || xcpt_cause === PPI || xcpt_cause === ADEF || xcpt_cause === TLBR)){
         uop.vaddrWriteEnable := true.B
     }
     uop.xcpt_valid := xcpt_valid
