@@ -170,6 +170,9 @@ class CSRFile extends CoreModule {
     val csrRegNxt = Wire(new CSRReg)
     val csrReg    = RegNext(csrRegNxt, init = csrRst)
 
+    csrRegNxt := csrReg
+    csrRegNxt.estat.is9_2 := io.ext_int
+
 // --------------------------------------------------------
 // below code is for read
     io.rdata := MuxLookup(io.addr, 0.U)(Seq(
@@ -209,15 +212,27 @@ class CSRFile extends CoreModule {
 // --------------------------------------------------------
 
 // --------------------------------------------------------
+// below code is for timer interrupt
+    when(csrReg.tcfg.en.asBool) {
+        when(csrReg.tval =/= 0.U) { // decrement timer if it is not zero
+            csrRegNxt.tval := csrReg.tval - 1.U
+        }.otherwise { // set interrupt if timer is zero
+            when(csrReg.tcfg.periodic.asBool) {
+                csrRegNxt.tval := Cat(csrReg.tcfg.initval, 0.U(2.W))
+            }.otherwise {
+                csrRegNxt.tval := -1.S(TIMER_LENGTH.W).asUInt
+            }
+            csrRegNxt.estat.is_11 := 1.U(1.W) // set timer interrupt flag bit
+        }
+    }
+
+// --------------------------------------------------------
 // below code is for write
     val wen = io.exevalid && (io.cmd === CSR_W || io.cmd === CSR_M)
     val write_data = Mux(io.cmd === CSR_W,
         io.r1,
         (io.r1 & io.r2) | (io.rdata & (~io.r2).asUInt)
     )
-
-    csrRegNxt := csrReg
-    csrRegNxt.estat.is9_2 := io.ext_int
 
     when(wen && !io.exception && io.cmd =/= CSR_E){
         switch (io.addr) {
@@ -420,21 +435,6 @@ class CSRFile extends CoreModule {
     when (io.interrupt)     { idle_en := false.B }
     io.idle := idle_en
 // --------------------------------------------------------
-
-// --------------------------------------------------------
-// below code is for timer interrupt
-    when (csrReg.tcfg.en.asBool) {
-        when (csrReg.tval =/= 0.U) {    // decrement timer if it is not zero
-            csrRegNxt.tval := csrReg.tval - 1.U
-        } .otherwise {  // set interrupt if timer is zero
-            when (csrReg.tcfg.periodic.asBool) {
-                csrRegNxt.tval := Cat(csrReg.tcfg.initval, 0.U(2.W))
-            } .otherwise {
-                csrRegNxt.tval := -1.S(TIMER_LENGTH.W).asUInt
-            }
-            csrRegNxt.estat.is_11 := 1.U(1.W)   // set timer interrupt flag bit
-        }
-    }
 
 // --------------------------------------------------------
 // below code is for tlb
