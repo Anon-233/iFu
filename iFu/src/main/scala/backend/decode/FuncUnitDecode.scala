@@ -132,7 +132,7 @@ object MemRRdDecode extends RRdDecodeConstants {
             BitPat(uopSTA)      -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS12, REN_0, CSR_N),
             BitPat(uopSTD)      -> List(BR_N  , N, N, Y, aluFn.FN_X    , OP1_RS1, OP2_RS2 , immS12, REN_0, CSR_N),
             BitPat(uopLLW)      -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS14, REN_0, CSR_N),
-            BitPat(uopAMO_AG)   -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_ZERO, immS14, REN_0, CSR_N)
+            BitPat(uopSC_AG)    -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_ZERO, immS14, REN_0, CSR_N)
         )
 }
 
@@ -214,12 +214,8 @@ class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
     io.rrd_uop.ctrl.imm_sel := rrd_cs.imm_sel
     io.rrd_uop.ctrl.op_fcn  := rrd_cs.op_fcn.asUInt
     io.rrd_uop.ctrl.is_load := io.rrd_uop.uopc === uopLD
-    io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopAMO_AG
+    io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopSC_AG
     io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype === RT_FIX)
-
-    when (io.rrd_uop.uopc === uopAMO_AG /*|| (io.rrd_uop.uopc === uopLD && io.rrd_uop.mem_cmd === M_XLL)*/) {
-        io.rrd_uop.immPacked := 0.U         //TODO:为什么为0？
-    }
 
     io.rrd_valid := io.iss_valid
     io.rrd_uop.ctrl.csr_cmd := rrd_cs.csr_cmd

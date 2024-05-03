@@ -153,8 +153,6 @@ class Lsu extends CoreModule {
     /** ************************************ */
     val dcache  = Module(new NonBlockingDcache)
     /** *********************************** */
-    dcache.io.lsu.resp(0).bits.uop.is_sc := DontCare
-    dcache.io.lsu.resp(1).bits.uop.is_sc := DontCare
     io.core.exe(0).iresp := DontCare
     io.core.exe(1).iresp := DontCare
     /** ************************************ */

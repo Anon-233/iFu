@@ -78,7 +78,7 @@ object XDecode extends DecodeTable  {
         NEMU_TRAP -> List(Y, uopNOP      , IQT_INT, FU_X  , RT_X  , RT_X  , RT_X  , N, N, N, N,  N, N, /*M_X  ,*/  N, N, N, N, N),
 
         LLW       -> List(Y, uopLLW      , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , Y, N, Y, N,  N, N, /*M_XLL,*/  N, N, N, Y, Y),
-        SCW       -> List(Y, uopAMO_AG   , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , N, Y, N, Y,  N, N, /*M_XSC,*/  N, N, N, Y, Y),
+        SCW       -> List(Y, uopSC_AG    , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , N, Y, N, Y,  N, N, /*M_XSC,*/  N, N, N, Y, Y),
         PRELD     -> List(Y, uopNOP      , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_X  , N, N, N, N,  N, N, /*M_X  ,*/  N, N, N, N, N),
         DBAR      -> List(Y, uopNOP      , IQT_MEM, FU_MEM, RT_X  , RT_X  , RT_X  , N, Y, N, N,  Y, N, /*M_X  ,*/  N, N, N, Y, Y),
         IBAR      -> List(Y, uopNOP      , IQT_MEM, FU_X  , RT_X  , RT_X  , RT_X  , N, N, N, N,  N, Y, /*M_X  ,*/  N, N, N, Y, Y),
