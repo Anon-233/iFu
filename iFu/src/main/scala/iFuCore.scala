@@ -811,7 +811,7 @@ class iFuCore extends CoreModule {
     var cnt = 0
     for (i <- 0 until memWidth) {
         val mem_uop = mem_resps(i).bits.uop
-        rob.io.wb_resps(cnt).valid  := mem_resps(i).valid && !(mem_uop.use_stq && !mem_uop.is_amo)
+        rob.io.wb_resps(cnt).valid  := mem_resps(i).valid && !(mem_uop.use_stq && !mem_uop.is_sc)
         rob.io.wb_resps(cnt).bits   := mem_resps(i).bits
         rob.io.debug_wb_valids(cnt) := mem_resps(i).valid && mem_uop.dst_rtype =/= RT_X
         rob.io.debug_wb_wdata(cnt)  := mem_resps(i).bits.data
@@ -827,7 +827,7 @@ class iFuCore extends CoreModule {
             val wb_uop = resp.bits.uop
             val data   = resp.bits.data
 
-            rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.use_stq && !wb_uop.is_amo)
+            rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.use_stq && !wb_uop.is_sc)
             rob.io.wb_resps(cnt).bits  := resp.bits
             rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
              if (eu.hasCSR) {

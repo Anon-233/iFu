@@ -153,8 +153,8 @@ class Lsu extends CoreModule {
     /** ************************************ */
     val dcache  = Module(new NonBlockingDcache)
     /** *********************************** */
-    dcache.io.lsu.resp(0).bits.uop.is_amo := DontCare
-    dcache.io.lsu.resp(1).bits.uop.is_amo := DontCare
+    dcache.io.lsu.resp(0).bits.uop.is_sc := DontCare
+    dcache.io.lsu.resp(1).bits.uop.is_sc := DontCare
     io.core.exe(0).iresp := DontCare
     io.core.exe(1).iresp := DontCare
     /** ************************************ */
@@ -395,12 +395,10 @@ class Lsu extends CoreModule {
         !stq_commit_e.bits.uop.xcpt_valid && // TODO
                 !stq_commit_e.bits.succeeded &&
         (stq_commit_e.bits.committed ||     // 被 ROB 提交
-        (stq_commit_e.bits.uop.is_amo && // 是 AMO 指令
+        (stq_commit_e.bits.uop.is_sc &&
         stq_commit_e.bits.addr.valid && // 地址准备好了
         !stq_commit_e.bits.addr_is_virtual &&   // TLB 没有miss
         stq_commit_e.bits.data.valid))   // 数据准备好了
-
-
     ))
     //---------------------------------------------------------
     // Controller logic. Arbitrate which request actually fires
@@ -712,8 +710,8 @@ class Lsu extends CoreModule {
 
         when(fired_stad_incoming(w)) {
             clr_bsy_valid(w) := mem_stq_incoming_e(w).valid &&
-                                !mem_tlb_xcpt(w)                       &&
-                                !mem_stq_incoming_e(w).bits.uop.is_amo &&
+                                !mem_tlb_xcpt(w)                      &&
+                                !mem_stq_incoming_e(w).bits.uop.is_sc &&
                                 !IsKilledByBranch(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
             clr_bsy_rob_idx(w) := mem_stq_incoming_e(w).bits.uop.robIdx
             clr_bsy_brmask(w) := GetNewBrMask(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
@@ -721,7 +719,7 @@ class Lsu extends CoreModule {
             clr_bsy_valid(w) := mem_stq_incoming_e(w).valid &&
                 mem_stq_incoming_e(w).bits.data.valid &&
                 !mem_tlb_xcpt(w) &&
-                !mem_stq_incoming_e(w).bits.uop.is_amo &&
+                !mem_stq_incoming_e(w).bits.uop.is_sc &&
                 !IsKilledByBranch(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
             clr_bsy_rob_idx(w) := mem_stq_incoming_e(w).bits.uop.robIdx
             clr_bsy_brmask(w) := GetNewBrMask(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
@@ -729,7 +727,7 @@ class Lsu extends CoreModule {
             clr_bsy_valid(w) := mem_stq_incoming_e(w).valid &&
                 mem_stq_incoming_e(w).bits.addr.valid &&
                 !mem_stq_incoming_e(w).bits.addr_is_virtual &&
-                !mem_stq_incoming_e(w).bits.uop.is_amo &&
+                !mem_stq_incoming_e(w).bits.uop.is_sc &&
                 !IsKilledByBranch(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
             clr_bsy_rob_idx(w) := mem_stq_incoming_e(w).bits.uop.robIdx
             clr_bsy_brmask(w) := GetNewBrMask(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
@@ -873,7 +871,7 @@ class Lsu extends CoreModule {
                     ldst_addr_matches(w)(i) := true.B
                     dcache.io.lsu.s1_kill(w) := RegNext(dmem_req_fire(w))
                     s1_set_execute(lcam_ldq_idx(w)) := false.B
-                } .elsewhen(s_uop.is_fence || s_uop.is_amo) {
+                } .elsewhen(s_uop.is_fence || s_uop.is_sc) {
                     ldst_addr_matches(w)(i) := true.B
                     dcache.io.lsu.s1_kill(w) := RegNext(dmem_req_fire(w))
                     s1_set_execute(lcam_ldq_idx(w)) := false.B
@@ -1030,7 +1028,7 @@ class Lsu extends CoreModule {
                 ldq(ldq_idx).bits.succeeded := io.core.exe(w).iresp.valid
             } .elsewhen(dcache.io.lsu.resp(w).bits.uop.use_stq) {
                 stq(dcache.io.lsu.resp(w).bits.uop.stqIdx).bits.succeeded := true.B
-                when(dcache.io.lsu.resp(w).bits.uop.is_amo) {
+                when(dcache.io.lsu.resp(w).bits.uop.is_sc) {
                     dmem_resp_fired(w) := true.B
                     io.core.exe(w).iresp.valid := true.B
                     io.core.exe(w).iresp.bits.uop := stq(dcache.io.lsu.resp(w).bits.uop.stqIdx).bits.uop

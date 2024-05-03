@@ -14,16 +14,16 @@ trait DecodeTable {
     val DC1 = BitPat.dontCare(1)
     def decode_default: List[BitPat] =
     //
-    //       is val inst?                                                   bypassable
-    //       |    micro-code                       uses_ldg                 |  is_br
-    //       |    |  iq-type                       |  uses_stq              |  |  is_pc2epc
-    //       |    |     |     func unit            |  |  is_amo             |  |  |  is_unique(clear pipeline for it)
-    //       |    |     |      |     dst_type      |  |  |  is_fence        |  |  |  |  flush_on_commit
-    //       |    |     |      |     |    rs1_typ  |  |  |  |  is_fencei    |  |  |  |  |
-    //       |    |     |      |     |    |        |  |  |  |  |            |  |  |  |  |
-    //       |    |     |      |     |    | rs2_typ|  |  |  |  |            |  |  |  |  |
-    //       |    |     |      |     |    |    |   |  |  |  |  |  mem_cmd   |  |  |  |  |
-        List(N, uopX, IQT_X, FU_X, RT_X, DC1, DC1, X, X, X, X, N, /*M_X,*/ X, X, N, N, X)
+    //       is val inst?                                                       bypassable
+    //       |    micro-code                       uses_ldg                     |  is_br
+    //       |    |  iq-type                       |  uses_stq                  |  |  is_pc2epc
+    //       |    |     |     func unit            |  |  is_ll                  |  |  |  is_unique(clear pipeline for it)
+    //       |    |     |      |     dst_type      |  |  |      is_fence        |  |  |  |  flush_on_commit
+    //       |    |     |      |     |    rs1_typ  |  |  | is_sc|  is_fencei    |  |  |  |  |
+    //       |    |     |      |     |    |        |  |  |  |   |  |            |  |  |  |  |
+    //       |    |     |      |     |    | rs2_typ|  |  |  |   |  |            |  |  |  |  |
+    //       |    |     |      |     |    |    |   |  |  |  |   |  |  mem_cmd   |  |  |  |  |
+        List(N, uopX, IQT_X, FU_X, RT_X, DC1, DC1, X, X, X, N,  X, N, /*M_X,*/ X, X, N, N, X)
 
     val table: Array[(BitPat, List[BitPat])]
 }
