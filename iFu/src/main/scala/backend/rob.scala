@@ -455,6 +455,8 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     val instr_cnt = RegInit(0.U(cnt_len.W))
     val br_instr_cnt = RegInit(0.U(cnt_len.W))
     val br_mispred_cnt = RegInit(0.U(cnt_len.W))
+    val ld_instr_cnt = RegInit(0.U(cnt_len.W))
+    val st_instr_cnt = RegInit(0.U(cnt_len.W))
 
     cyc_cnt := cyc_cnt + 1.U    // inc 1 every cycle
     instr_cnt := instr_cnt + PopCount(io.commit.arch_valids)    // inc 1 every committed instruction
@@ -465,6 +467,14 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     br_mispred_cnt := br_mispred_cnt + PopCount(
         (io.commit.arch_valids zip io.commit.uops) map {
         case (v, uop) => v && (uop.isBr || uop.isJal || uop.isJalr) && uop.debug_mispred
+    })
+    ld_instr_cnt := ld_instr_cnt + PopCount(
+        (io.commit.arch_valids zip io.commit.uops) map {
+        case (v, uop) => v && uop.use_ldq
+    })
+    st_instr_cnt := st_instr_cnt + PopCount(
+        (io.commit.arch_valids zip io.commit.uops) map {
+        case (v, uop) => v && uop.use_stq
     })
 
     val last_cyc = (io.commit.valids zip io.commit.uops).map {
@@ -477,6 +487,8 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         printf("Instruction count:        %d\n", instr_cnt)
         printf("Branch instruction count: %d\n", br_instr_cnt)
         printf("Branch mispredict count:  %d\n", br_mispred_cnt)
+        printf("Load instruction count:   %d\n", ld_instr_cnt)
+        printf("Store instruction count:  %d\n", st_instr_cnt)
         printf("====================================================\n")
     }
 }
