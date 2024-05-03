@@ -78,7 +78,8 @@ class MicroOp extends CoreBundle {
 
     val is_fence: Bool  = Bool()
     val is_fencei: Bool = Bool()
-    val is_amo: Bool    = Bool()
+    val is_ll: Bool     = Bool()
+    val is_sc: Bool     = Bool()
 
     val is_sys_pc2epc: Bool = Bool()
     val is_unique: Bool = Bool()
