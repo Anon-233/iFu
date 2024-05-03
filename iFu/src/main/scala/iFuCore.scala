@@ -102,7 +102,7 @@ class iFuCore extends CoreModule {
     ifu.io.core.tlb_data.r_resp    := tlb_data.io.r_resp(0)
     lsu.io.core.tlb_data.r_resp(0) := tlb_data.io.r_resp(1)
     lsu.io.core.tlb_data.r_resp(1) := tlb_data.io.r_resp(2)
-    lsu.io.csr.dtlb_csr_ctx        := csr.io.dtlb_csr_ctx
+    lsu.io.csr                     := csr.io.lsu_csr_ctx
     ifu.io.core.csr.itlb_csr_cxt   := csr.io.itlb_csr_ctx
 
 /*-----------------------------*/

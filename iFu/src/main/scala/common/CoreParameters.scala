@@ -93,6 +93,10 @@ class DcacheParameters {
 
     def isUncacheable(req : DCacheReq): Bool = req.is_uncacheable
 
+    def isLL(req : DCacheReq) : Bool = req.uop.is_ll
+
+    def isSC(req : DCacheReq) : Bool = req.uop.is_sc
+
 }
 
 case class IssueParams(

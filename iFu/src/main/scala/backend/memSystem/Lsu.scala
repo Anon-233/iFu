@@ -91,6 +91,7 @@ class LSUCoreIO extends CoreBundle {
 
 class LSUCsrIO extends CoreBundle {
     val dtlb_csr_ctx = Input(new DTLBCsrContext)
+    val llbit        = Input(Bool())
 }
 
 class LSUIO extends CoreBundle {
@@ -1228,8 +1229,9 @@ class Lsu extends CoreModule {
     }
 
     dtlb.io.dtlb_csr_context := io.csr.dtlb_csr_ctx
-    dtlb.io.r_resp           := io.core.tlb_data.r_resp
+    dcache.io.lsu.llbit      := io.csr.llbit
 
+    dtlb.io.r_resp           := io.core.tlb_data.r_resp
     io.core.tlb_data.r_req   <> dtlb.io.r_req
 
     //-------------------------------------------------------------

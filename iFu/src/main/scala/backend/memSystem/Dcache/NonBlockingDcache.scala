@@ -33,6 +33,9 @@ trait HasDcacheParameters extends HasCoreParameters{
 
     def isMMIO(req : DCacheReq): Bool  = dcacheParameters.isMMIO(req)
 
+    def isLL(req : DCacheReq): Bool  = dcacheParameters.isLL(req)
+
+    def isSC(req: DCacheReq): Bool = dcacheParameters.isSC(req)
 }
 
 class DCacheBundle  extends CoreBundle with HasDcacheParameters{
@@ -316,7 +319,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     //最后一个refill进行到s2到告诉mshr去激活(将表1的waiting转成ready)
     val s0activateAddr = wfu.io.fetchedAddrOut
 
-
     // TODO prefetch
 
     
@@ -550,7 +552,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                     val wdata = WordWrite(s2req(w) , rdata)
 
 
-                    lsuDataWrite.req.valid := s2valid(w)
+                    lsuDataWrite.req.valid := Mux(isSC(s2req(w)) , s2valid(w) && io.lsu.llbit , s2valid(w))
                     lsuDataWrite.req.bits.idx := getIdx(s2req(w).addr)
                     lsuDataWrite.req.bits.pos := s2hitpos(w)
                     lsuDataWrite.req.bits.offset := getWordOffset(s2req(w).addr)
@@ -562,7 +564,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 }.otherwise{
                     // load，现在的meta,data自带转发功能不用特别判断什么
                     
-                    io.lsu.resp(w).bits.data := lsuDataRead(w).resp.bits.data
+//                    io.lsu.resp(w).bits.data := lsuDataRead(w).resp.bits.data
+                    io.lsu.resp(w).bits.data := Mux(isLL(s2req(w)), io.lsu.llbit.asUInt , lsuDataRead(w).resp.bits.data)
                     io.lsu.resp(w).bits.uop := s2req(w).uop
                 }
             }
@@ -588,7 +591,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             val replay_rdata = replayDataRead.resp.bits.data
             val replay_wdata = WordWrite(s2req(0), replay_rdata)
             // data执行写操作
-            replayDataWrite.req.valid := s2valid(0)
+            replayDataWrite.req.valid := Mux(isSC(s2req(0)) , s2valid(0) && io.lsu.llbit , s2valid(0))
             replayDataWrite.req.bits.idx := getIdx(s2req(0).addr)
             replayDataWrite.req.bits.pos := s2pos
             replayDataWrite.req.bits.offset := getWordOffset(s2req(0).addr)
@@ -598,7 +601,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             io.lsu.resp(0).bits.uop := s2req(0).uop
         }.otherwise {
             // 准备resp
-            io.lsu.resp(0).bits.data := replayDataRead.resp.bits.data
+            io.lsu.resp(0).bits.data := Mux(isLL(s2req(0)), io.lsu.llbit.asUInt , replayDataRead.resp.bits.data)
             io.lsu.resp(0).bits.uop := s2req(0).uop
         }
 
@@ -628,7 +631,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     }.elsewhen(s2state === refill){
 
-        // 去写data
+        // 去写data,这里不是st请求，而是refill的内部事务，因此不需要做llbit的判断
         axiDataWrite.req.valid := s2valid(0)
         axiDataWrite.req.bits.idx := getIdx(s2req(0).addr)
         axiDataWrite.req.bits.pos := s2pos
@@ -689,8 +692,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         
         // 装载newDataLine的0号数据作为可能的读操作的resp的data
         for(w <- 0 until memWidth){
-            // DcacheReq类作为载体
-            io.lsu.resp(0).bits.data := s2req(0).data
+            // DcacheReq类,req的uop还是那个请求的uop，但是如果是一个ld指令，那么这里的data（原store的写入数据）将作为读取到的data的载体
+            io.lsu.resp(0).bits.data := Mux(isLL(s2req(0)), io.lsu.llbit.asUInt , s2req(0).data)
             io.lsu.resp(0).bits.uop := s2req(0).uop
         }
         // 选择0号做回复
