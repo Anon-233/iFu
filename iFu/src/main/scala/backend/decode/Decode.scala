@@ -53,7 +53,7 @@ class CtrlSigs extends Bundle {
         val decoder = DecodeLogic(instr, XDecode.decode_default, table) //返回一个List[BitPat] 若匹配不到，则返回默认值
         val sigs = Seq(
             legal, uopc, iq_type, fu_code, dst_type, rs1_type,
-            rs2_type, uses_ldq, uses_stq, is_ll,
+            rs2_type, uses_ldq, uses_stq, is_ll, is_sc,
             is_dbar, is_ibar, /*mem_cmd, */bypassable,
             is_br, is_sys_pc2epc, inst_unique, flush_on_commit
         )
