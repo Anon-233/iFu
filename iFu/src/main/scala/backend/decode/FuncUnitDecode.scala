@@ -213,7 +213,7 @@ class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
     io.rrd_uop.ctrl.op2_sel := rrd_cs.op2_sel
     io.rrd_uop.ctrl.imm_sel := rrd_cs.imm_sel
     io.rrd_uop.ctrl.op_fcn  := rrd_cs.op_fcn.asUInt
-    io.rrd_uop.ctrl.is_load := io.rrd_uop.uopc === uopLD
+    io.rrd_uop.ctrl.is_load := io.rrd_uop.uopc === uopLD  || io.rrd_uop.uopc === uopLLW
     io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopSC_AG
     io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype === RT_FIX)
 
