@@ -196,8 +196,6 @@ class iFuCore extends CoreModule {
     for (i <- 0 until memWidth) {
         mem_units(i).io.lsu_io <> lsu.io.core.exe(i)
     }
-    
-    // csr.io.inst foreach { c => c := DontCare }
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
@@ -340,11 +338,8 @@ class iFuCore extends CoreModule {
     for (w <- 0 until coreWidth) {
         dec_valids(w) :=
             ifu.io.core.fetchPacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
-        decode_units(w).io.enq.uop := dec_fbundle.uops(w).bits
-        // decode_units(w).io.status := csr.io.status
-        //decode_units(w).io.csr_decode <> csr.io.decode(w)
+        decode_units(w).io.enq.uop   := dec_fbundle.uops(w).bits
         decode_units(w).io.interrupt := csr.io.interrupt
-//        decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
 
         dec_uops(w) := decode_units(w).io.deq.uop
     }
@@ -693,7 +688,7 @@ class iFuCore extends CoreModule {
     csr.io.r2      := csr_exe_unit.io.iresp.bits.csr_r2
 
     csr.io.cmd := csr_rw_cmd
-    csr.io.exevalid := csr_exe_unit.io.iresp.valid
+    csr.io.exevalid  := csr_exe_unit.io.iresp.valid
     csr.io.exception := RegNext(rob.io.com_xcpt.valid)
     csr.io.com_xcpt  := RegNext(rob.io.com_xcpt)
 
@@ -701,8 +696,9 @@ class iFuCore extends CoreModule {
         AlignPCToBoundary(ifu.io.core.getFtqPc(0).compc, iCacheLineBytes) +
         RegNext(rob.io.com_xcpt.bits.pc_lob)
     )
-       
 
+    csr.io.is_ll := mem_resps(0).bits.uop.is_ll || mem_resps(1).bits.uop.is_ll
+    csr.io.is_sc := mem_resps(0).bits.uop.is_sc
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
@@ -851,16 +847,6 @@ class iFuCore extends CoreModule {
     require(cnt == numWritePorts)
 
     rob.io.brupdate <> brUpdate
-
-    // exe_units.map(u => u.io.status := csr.io.status)
-
-    // // Connect breakpoint info to memaddrcalcunit
-    // for (i <- 0 until memWidth) {
-    //     mem_units(i).io.status   := csr.io.status
-    //     mem_units(i).io.bp       := csr.io.bp
-    //     mem_units(i).io.mcontext := csr.io.mcontext
-    //     mem_units(i).io.scontext := csr.io.scontext
-    // }
 
     // LSU <> ROB
     rob.io.lsu_clr_bsy := lsu.io.core.clr_bsy

@@ -142,8 +142,8 @@ class CSRFileIO extends CoreBundle {
     val err_pc      = Input(UInt(32.W))
     val redirect_pc = Output(UInt(32.W))
 
-    // val is_llw    = Input(Bool())
-    // val is_scw    = Input(Bool())
+    val is_ll = Input(Bool())
+    val is_sc = Input(Bool())
 
     val exevalid = Input(Bool())
     val cmd      = Input(UInt(CSR_SZ.W))
@@ -395,11 +395,11 @@ class CSRFile extends CoreModule {
             csrRegNxt.llbctl.rollb := 0.U(1.W)
         }
         csrRegNxt.llbctl.klo := 0.U(1.W)
-    } /* .elsewhen (io.is_llw) {
+    } .elsewhen (io.is_ll) {
         csrRegNxt.llbctl.rollb := 1.U(1.W)
-    } .elsewhen (io.is_scw) {
+    } .elsewhen (io.is_sc) {
         csrRegNxt.llbctl.rollb := 0.U(1.W)
-    } */
+    }
 // --------------------------------------------------------
 
 // --------------------------------------------------------
