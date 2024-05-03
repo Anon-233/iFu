@@ -230,8 +230,8 @@ object WeirdDecode extends DecodeTable {
                //        |    |              |       |       |       |    rs2_type  |  |  |  |   |  |              |  |  |  |  |
                //        |    |              |       |       |       |       |      |  |  |  |   |  |  mem_cmd     |  |  |  |  |
                //        |    |              |       |       |       |       |      |  |  |  |   |  |     |        |  |  |  |  |
-        // IDLE     -> List(Y, uopIDLE),
-        CACOP    -> List(Y, uopNOP       , IQT_INT, FU_ALU, RT_X  , RT_X  , RT_X  , N, N, N, N,  N, N, /* M_X,*/    N, N, N, N, N),
+        IDLE     -> List(Y, uopIDLE      , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , N, N, N, N,  N, N, /* M_X,*/   N, N, N, Y, Y),
+        CACOP    -> List(Y, uopNOP       , IQT_INT, FU_ALU, RT_X  , RT_X  , RT_X  , N, N, N, N,  N, N, /* M_X,*/   N, N, N, N, N),
    )
 }
 

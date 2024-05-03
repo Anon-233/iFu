@@ -46,22 +46,23 @@ object Consts {
     val N = BitPat("b0")
 
     val CSR_SZ = 4
-    val CSR_N  = 0.U(CSR_SZ.W)  // 非CSR指令
-    val CSR_R  = 1.U(CSR_SZ.W)  // csrrd
-    val CSR_W  = 2.U(CSR_SZ.W)  // csrwr
-    val CSR_M  = 3.U(CSR_SZ.W)  // csrxchg
-    val CSR_E  = 4.U(CSR_SZ.W)  // ertn
-    val TLB_S  = 5.U(CSR_SZ.W)  // tlbsrch
-    val TLB_R  = 6.U(CSR_SZ.W)  // tlbrd
-    val TLB_W  = 7.U(CSR_SZ.W)  // tlbwr
-    val TLB_F  = 8.U(CSR_SZ.W)  // tlbfill
-    val TLB_I  = 9.U(CSR_SZ.W)  // invtlb
+    val CSR_N  =  0.U(CSR_SZ.W)  // 非CSR指令
+    val CSR_R  =  1.U(CSR_SZ.W)  // csrrd
+    val CSR_W  =  2.U(CSR_SZ.W)  // csrwr
+    val CSR_M  =  3.U(CSR_SZ.W)  // csrxchg
+    val CSR_E  =  4.U(CSR_SZ.W)  // ertn
+    val CSR_I  =  5.U(CSR_SZ.W)  // idle
+    val TLB_S  =  6.U(CSR_SZ.W)  // tlbsrch
+    val TLB_R  =  7.U(CSR_SZ.W)  // tlbrd
+    val TLB_W  =  8.U(CSR_SZ.W)  // tlbwr
+    val TLB_F  =  9.U(CSR_SZ.W)  // tlbfill
+    val TLB_I  = 10.U(CSR_SZ.W)  // invtlb
 
-    val BSRC_SZ = 2
-    val BSRC_1  = 0.U(BSRC_SZ.W) // 1-cycle branch pred
-    val BSRC_2  = 1.U(BSRC_SZ.W) // 2-cycle branch pred
-    val BSRC_3  = 2.U(BSRC_SZ.W) // 3-cycle branch pred
-    val BSRC_C  = 3.U(BSRC_SZ.W) // core branch resolution
+    // val BSRC_SZ = 2
+    // val BSRC_1  = 0.U(BSRC_SZ.W) // 1-cycle branch pred
+    // val BSRC_2  = 1.U(BSRC_SZ.W) // 2-cycle branch pred
+    // val BSRC_3  = 2.U(BSRC_SZ.W) // 3-cycle branch pred
+    // val BSRC_C  = 3.U(BSRC_SZ.W) // core branch resolution
 
     val CFI_SZ   = 2
     val CFI_X    = 0.U(CFI_SZ.W) // Not a CFI instruction
@@ -83,7 +84,6 @@ object Consts {
     val FU_DIV = 16.U(FUC_SZ.W)
     val FU_CSR = 32.U(FUC_SZ.W)
     val FU_CNT = 64.U(FUC_SZ.W)
-    // val FU_TLB = 128.U(FUC_SZ.W)
 
     val RT_X   = 0.U(1.W)
     val RT_FIX = 1.U(1.W)

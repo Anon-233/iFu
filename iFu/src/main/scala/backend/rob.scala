@@ -36,7 +36,7 @@ class RobIO(val numWritePorts: Int) extends CoreBundle {
     // excetion to CSR
     val com_xcpt = Valid(new CommitExceptionSignals)
 
-    // val csr_stall = Input(Bool())
+    val idle = Input(Bool())
 
     // flush signals
     // 可能因为异常，流水线延迟或者访存阶段错误等,发送给frondend
@@ -183,7 +183,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         canThrowException(w) := robVal(robHead) && robException(robHead)
 
         //---------------output:commit------------
-        canCommit(w) := robVal(robHead) && !(robBsy(robHead)) /* && !io.csr_stall */
+        canCommit(w) := robVal(robHead) && !(robBsy(robHead)) && !io.idle
         isXcpt2Commit(w) := (robUop(robHead).xcpt_cause === SYS) || (robUop(robHead).xcpt_cause === BRK)
 
         io.commit.valids(w)      := willCommit(w)

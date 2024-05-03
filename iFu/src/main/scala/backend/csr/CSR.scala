@@ -145,6 +145,8 @@ class CSRFileIO extends CoreBundle {
     val is_ll = Input(Bool())
     val is_sc = Input(Bool())
 
+    val idle = Output(Bool())
+
     val exevalid = Input(Bool())
     val cmd      = Input(UInt(CSR_SZ.W))
     val addr     = Input(UInt(14.W))
@@ -409,6 +411,14 @@ class CSRFile extends CoreModule {
     val swint = (csrReg.estat.is1_0 & csrReg.ecfg(1, 0)).asUInt.orR
 
     io.interrupt := (trint | exint | swint) & csrReg.crmd.ie
+// --------------------------------------------------------
+
+// --------------------------------------------------------
+// below code is for idle instruction
+    val idle_en = RegInit(false.B)
+    when (io.cmd === CSR_I) { idle_en := true.B }
+    when (io.interrupt)     { idle_en := false.B }
+    io.idle := idle_en
 // --------------------------------------------------------
 
 // --------------------------------------------------------

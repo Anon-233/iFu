@@ -480,7 +480,7 @@ class iFuCore extends CoreModule {
     rob.io.enq_valids        := dis_fire
     rob.io.enq_uops          := dis_uops
     rob.io.enq_partial_stall := dis_stalls.last
-    // rob.io.csr_stall         := csr.io.csr_stall
+    rob.io.idle              := csr.io.idle
 
     for (w <- 0 until coreWidth) {
         dis_uops(w).robIdx := Cat(

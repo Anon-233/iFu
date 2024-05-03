@@ -148,7 +148,8 @@ object CsrRRdDecode extends RRdDecodeConstants {
             BitPat(uopCSRWR)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_ZERO, immCSR, REN_1, CSR_W),
             BitPat(uopCSRRD)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_ZERO, OP2_ZERO, immCSR, REN_1, CSR_R),
             BitPat(uopCSRXCHG) -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_RS2 , immCSR, REN_1, CSR_M),
-            BitPat(uopERET)    -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, CSR_E)
+            BitPat(uopERET)    -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, CSR_E),
+            BitPat(uopIDLE)    -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, CSR_I),
         )
 }
 
