@@ -206,7 +206,7 @@ class iFuCore extends CoreModule {
     ifu.io.core.redirect_val := false.B
     ifu.io.core.redirect_flush := false.B
     ifu.io.core.flush_icache := (0 until coreWidth).map { i =>
-        (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_fencei)
+        (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_ibar)
     }.reduce(_||_)
 
     when (RegNext(rob.io.flush.valid)) {
