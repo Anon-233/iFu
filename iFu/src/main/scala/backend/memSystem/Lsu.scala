@@ -65,8 +65,6 @@ class LSUCoreIO extends CoreBundle {
 
     val clr_bsy     = Output(Vec(memWidth,Valid(UInt(robAddrSz.W))))    // TODO
 
-    // val clr_unsafe  = Output(Vec(memWidth, Valid(UInt(robAddrSz.W))))
-
     val fence_dmem  = Input(Bool())
 
     // Speculatively tell the IQs that we'll get load data back next cycle
@@ -389,7 +387,7 @@ class Lsu extends CoreModule {
     val can_fire_store_commit = widthMap(w => (
         (w == 0).B &&   // store只会发射到第0条流水线
         stq_commit_e.valid &&   // 该store指令有效
-        !stq_commit_e.bits.uop.is_fence &&  // 不是fence指令
+        !stq_commit_e.bits.uop.is_dbar &&  // 不是fence指令
         !tlb_xcpt_valid &&  //  TODO
         !stq_commit_e.bits.uop.xcpt_valid && // TODO
                 !stq_commit_e.bits.succeeded &&
@@ -505,7 +503,7 @@ class Lsu extends CoreModule {
     val tlb_xcpt_vaddrs = RegNext(exe_tlb_vaddr)
 
     // for (w <- 0 until memWidth) {
-    //    assert(!(dtlb.io.req(w).valid && exe_tlb_uop(w).is_fence), "Fence is pretending to talk to the TLB")
+    //    assert(!(dtlb.io.req(w).valid && exe_tlb_uop(w).is_dbar), "Fence is pretending to talk to the TLB")
     //    assert(!((will_fire_load_incoming(w) || will_fire_sta_incoming(w) || will_fire_stad_incoming(w)) &&
     //            exe_req(w).bits.mxcpt.valid && dtlb.io.req(w).valid &&
     //            !(exe_tlb_uop(w).ctrl.is_load || exe_tlb_uop(w).ctrl.is_sta)),
@@ -861,7 +859,7 @@ class Lsu extends CoreModule {
         val write_mask = GenByteMask(s_addr, s_uop.mem_size)
         for (w <- 0 until memWidth) {
             when(do_ld_search(w) && stq(i).valid && lcam_st_dep_mask(w)(i)) {
-                when(((lcam_mask(w) & write_mask) === lcam_mask(w)) && !s_uop.is_fence && word_addr_matches(w) && can_forward(w)) {
+                when(((lcam_mask(w) & write_mask) === lcam_mask(w)) && !s_uop.is_dbar && word_addr_matches(w) && can_forward(w)) {
                     ldst_addr_matches(w)(i) := true.B
                     ldst_forward_matches(w)(i) := true.B
                     dcache.io.lsu.s1_kill(w) := RegNext(dmem_req_fire(w))
@@ -870,7 +868,7 @@ class Lsu extends CoreModule {
                     ldst_addr_matches(w)(i) := true.B
                     dcache.io.lsu.s1_kill(w) := RegNext(dmem_req_fire(w))
                     s1_set_execute(lcam_ldq_idx(w)) := false.B
-                } .elsewhen(s_uop.is_fence || s_uop.is_sc) {
+                } .elsewhen(s_uop.is_dbar || s_uop.is_sc) {
                     ldst_addr_matches(w)(i) := true.B
                     dcache.io.lsu.s1_kill(w) := RegNext(dmem_req_fire(w))
                     s1_set_execute(lcam_ldq_idx(w)) := false.B
@@ -926,15 +924,6 @@ class Lsu extends CoreModule {
             block_load_wakeup := true.B
         }
     }
-
-
-    // Task 3: Clr unsafe bit in ROB for succesful translations
-    //         Delay this a cycle to avoid going ahead of the exception broadcast
-    //         The unsafe bit is cleared on the first translation, so no need to fire for load wakeups
-//    for (w <- 0 until memWidth) {
-//        io.core.clr_unsafe(w).valid := RegNext((do_st_search(w) || do_ld_search(w)) && !fired_load_wakeup(w)) && false.B
-//        io.core.clr_unsafe(w).bits := RegNext(lcam_uop(w).robIdx)
-//    }
 
     // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
     // TODO encapsulate this in an age-based  priority-encoder
@@ -1160,11 +1149,11 @@ class Lsu extends CoreModule {
 
     // store has been committed AND successfully sent data to memory
     when(stq(stq_head).valid && stq(stq_head).bits.committed) {
-        when(stq(stq_head).bits.uop.is_fence && !dcache.io.lsu.ordered) {
+        when(stq(stq_head).bits.uop.is_dbar && !dcache.io.lsu.ordered) {
             dcache.io.lsu.force_order := true.B
             store_needs_order := true.B
         }
-        clear_store := Mux(stq(stq_head).bits.uop.is_fence, dcache.io.lsu.ordered,
+        clear_store := Mux(stq(stq_head).bits.uop.is_dbar, dcache.io.lsu.ordered,
                                                             stq(stq_head).bits.succeeded
         )
     }
@@ -1177,13 +1166,10 @@ class Lsu extends CoreModule {
         stq(stq_head).bits.committed := false.B
 
         stq_head := WrapInc(stq_head, numStqEntries)
-        when(stq(stq_head).bits.uop.is_fence) {
+        when(stq(stq_head).bits.uop.is_dbar) {
             stq_execute_head := WrapInc(stq_execute_head, numStqEntries)
         }
     }
-
-
-
 
     //-------------------------------------------------------------
     // Exception / Reset

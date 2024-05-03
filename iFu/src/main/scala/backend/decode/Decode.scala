@@ -18,8 +18,8 @@ trait DecodeTable {
     //       |    micro-code                       uses_ldg                     |  is_br
     //       |    |  iq-type                       |  uses_stq                  |  |  is_pc2epc
     //       |    |     |     func unit            |  |  is_ll                  |  |  |  is_unique(clear pipeline for it)
-    //       |    |     |      |     dst_type      |  |  |      is_fence        |  |  |  |  flush_on_commit
-    //       |    |     |      |     |    rs1_typ  |  |  | is_sc|  is_fencei    |  |  |  |  |
+    //       |    |     |      |     dst_type      |  |  |      is_dbar         |  |  |  |  flush_on_commit
+    //       |    |     |      |     |    rs1_typ  |  |  | is_sc|  is_ibar      |  |  |  |  |
     //       |    |     |      |     |    |        |  |  |  |   |  |            |  |  |  |  |
     //       |    |     |      |     |    | rs2_typ|  |  |  |   |  |            |  |  |  |  |
     //       |    |     |      |     |    |    |   |  |  |  |   |  |  mem_cmd   |  |  |  |  |
@@ -69,8 +69,8 @@ object XDecode extends DecodeTable  {
                 //        | micro-code                                           uses_ldg                          | is_br
                 //        |    |           iq-type                                  | uses_stq                     |  | is_pc2epc
                 //        |    |              |   func unit                         |  |  is_ll                    |  |  | is_unique(clear pipeline for it)
-                //        |    |              |       |    dst_type                 |  |  |      is_fence          |  |  |  | flush_on_commit
-                //        |    |              |       |       |    rs1_type         |  |  | is_sc|  is_fencei      |  |  |  |  |
+                //        |    |              |       |    dst_type                 |  |  |      is_dbar           |  |  |  | flush_on_commit
+                //        |    |              |       |       |    rs1_type         |  |  | is_sc|  is_ibar        |  |  |  |  |
                 //        |    |              |       |       |       |             |  |  |  |   |  |              |  |  |  |  |
                 //        |    |              |       |       |       |    rs2_type |  |  |  |   |  |              |  |  |  |  |
                 //        |    |              |       |       |       |       |     |  |  |  |   |  |  mem_cmd     |  |  |  |  |
@@ -141,8 +141,8 @@ object TLBDeocde extends DecodeTable {
                //        | micro-code                                             uses_ldg                         | is_br
                //        |    |           iq-type                                   | uses_stq                     |  | is_pc2epc
                //        |    |              |   func unit                          |  |  is_ll                    |  |  | is_unique(clear pipeline for it)
-               //        |    |              |       |    dst_type                  |  |  |      is_fence          |  |  |  | flush_on_commit
-               //        |    |              |       |       |    rs1_type          |  |  | is_sc|  is_fencei      |  |  |  |  |
+               //        |    |              |       |    dst_type                  |  |  |      is_dbar           |  |  |  | flush_on_commit
+               //        |    |              |       |       |    rs1_type          |  |  | is_sc|  is_ibar        |  |  |  |  |
                //        |    |              |       |       |       |              |  |  |  |   |  |              |  |  |  |  |
                //        |    |              |       |       |       |    rs2_type  |  |  |  |   |  |              |  |  |  |  |
                //        |    |              |       |       |       |       |      |  |  |  |   |  |  mem_cmd     |  |  |  |  |
@@ -168,8 +168,8 @@ object CSRDecode extends DecodeTable {
                 //        | micro-code                                           uses_ldg                          | is_br
                 //        |    |           iq-type                                  | uses_stq                     |  | is_pc2epc
                 //        |    |              |   func unit                         |  |  is_ll                    |  |  | is_unique(clear pipeline for it)
-                //        |    |              |       |    dst_type                 |  |  |      is_fence          |  |  |  | flush_on_commit
-                //        |    |              |       |       |    rs1_type         |  |  | is_sc|  is_fencei      |  |  |  |  |
+                //        |    |              |       |    dst_type                 |  |  |      is_dbar           |  |  |  | flush_on_commit
+                //        |    |              |       |       |    rs1_type         |  |  | is_sc|  is_ibar        |  |  |  |  |
                 //        |    |              |       |       |       |             |  |  |  |   |  |              |  |  |  |  |
                 //        |    |              |       |       |       |    rs2_type |  |  |  |   |  |              |  |  |  |  |
                 //        |    |              |       |       |       |       |     |  |  |  |   |  |  mem_cmd     |  |  |  |  |
@@ -206,8 +206,8 @@ object CntDecode extends DecodeTable {
                //        | micro-code                                              uses_ldg                        | is_br
                //        |    |           iq-type                                   | uses_stq                     |  | is_pc2epc
                //        |    |              |   func unit                          |  |  is_ll                    |  |  | is_unique(clear pipeline for it)
-               //        |    |              |       |    dst_type                  |  |  |      is_fence          |  |  |  | flush_on_commit
-               //        |    |              |       |       |    rs1_type          |  |  | is_sc|  is_fencei      |  |  |  |  |
+               //        |    |              |       |    dst_type                  |  |  |      is_dbar           |  |  |  | flush_on_commit
+               //        |    |              |       |       |    rs1_type          |  |  | is_sc|  is_ibar        |  |  |  |  |
                //        |    |              |       |       |       |              |  |  |  |   |  |              |  |  |  |  |
                //        |    |              |       |       |       |    rs2_type  |  |  |  |   |  |              |  |  |  |  |
                //        |    |              |       |       |       |       |      |  |  |  |   |  |  mem_cmd     |  |  |  |  |
@@ -224,8 +224,8 @@ object WeirdDecode extends DecodeTable {
                //        | micro-code                                            uses_ldg                          | is_br
                //        |    |           iq-type                                   | uses_stq                     |  | is_pc2epc
                //        |    |              |   func unit                          |  |  is_ll                    |  |  | is_unique(clear pipeline for it)
-               //        |    |              |       |    dst_type                  |  |  |      is_fence          |  |  |  | flush_on_commit
-               //        |    |              |       |       |    rs1_type          |  |  | is_sc|  is_fencei      |  |  |  |  |
+               //        |    |              |       |    dst_type                  |  |  |      is_dbar           |  |  |  | flush_on_commit
+               //        |    |              |       |       |    rs1_type          |  |  | is_sc|  is_ibar        |  |  |  |  |
                //        |    |              |       |       |       |              |  |  |  |   |  |              |  |  |  |  |
                //        |    |              |       |       |       |    rs2_type  |  |  |  |   |  |              |  |  |  |  |
                //        |    |              |       |       |       |       |      |  |  |  |   |  |  mem_cmd     |  |  |  |  |
@@ -287,8 +287,8 @@ class DecodeUnit extends CoreModule {
     uop.use_stq := cs.uses_stq
     uop.is_ll := cs.is_ll
     uop.is_sc := cs.is_sc
-    uop.is_fence := cs.is_dbar
-    uop.is_fencei := cs.is_ibar
+    uop.is_dbar := cs.is_dbar
+    uop.is_ibar := cs.is_ibar
     uop.is_sys_pc2epc := cs.is_sys_pc2epc
     uop.is_unique := cs.inst_unique
     uop.flush_on_commit := cs.flush_on_commit

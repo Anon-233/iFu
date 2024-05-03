@@ -76,8 +76,8 @@ class MicroOp extends CoreBundle {
     val mem_size: UInt   = UInt(2.W)
     val mem_signed: Bool = Bool()
 
-    val is_fence: Bool  = Bool()
-    val is_fencei: Bool = Bool()
+    val is_dbar: Bool  = Bool()
+    val is_ibar: Bool = Bool()
     val is_ll: Bool     = Bool()
     val is_sc: Bool     = Bool()
 
@@ -93,7 +93,6 @@ class MicroOp extends CoreBundle {
     def is_sfb_shadow: Bool         = isSFB && !isBr
     def allocate_brtag: Bool        = (isBr && !isSFB) || isJalr
     def rf_wen: Bool                = dst_rtype =/= RT_X
-    def unsafe: Bool                = use_ldq || (use_stq && !is_fence) || isBr || isJalr
     def fu_code_is(_fu: UInt): Bool = (fuCode & _fu) =/= 0.U
     def is_nop: Bool                = uopc === uopNOP
 }
