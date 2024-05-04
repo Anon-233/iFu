@@ -697,8 +697,11 @@ class iFuCore extends CoreModule {
         RegNext(rob.io.com_xcpt.bits.pc_lob)
     )
 
-    csr.io.is_ll := mem_resps(0).bits.uop.is_ll || mem_resps(1).bits.uop.is_ll
-    csr.io.is_sc := mem_resps(0).bits.uop.is_sc
+    csr.io.is_ll := (
+        (mem_resps(0).valid && mem_resps(0).bits.uop.is_ll) ||
+        (mem_resps(1).valid && mem_resps(1).bits.uop.is_ll)
+    )
+    csr.io.is_sc := mem_resps(0).valid && mem_resps(0).bits.uop.is_sc
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
