@@ -49,8 +49,6 @@ class MicroOp extends CoreBundle {
 
     val immPacked: UInt = UInt(26.W)
 
-    // val csrAddr: UInt = UInt(/*TODO*/)
-
     val robIdx: UInt = UInt(robAddrSz.W)
     val ldqIdx: UInt = UInt(ldqAddrSz.W)
     val stqIdx: UInt = UInt(stqAddrSz.W)
@@ -69,7 +67,7 @@ class MicroOp extends CoreBundle {
     val instr_misalign : Bool = Bool()
     val ctrl = new CtrlSignals
 
-    val csrAddr: UInt = UInt(14.W)
+    val tlb_op: UInt = UInt(5.W)
 
     val use_ldq: Bool = Bool()
     val use_stq: Bool = Bool()
@@ -78,22 +76,23 @@ class MicroOp extends CoreBundle {
     val mem_size: UInt   = UInt(2.W)
     val mem_signed: Bool = Bool()
 
-    val is_fence: Bool  = Bool()
-    val is_fencei: Bool = Bool()
-    val is_amo: Bool    = Bool()
+    val is_dbar: Bool  = Bool()
+    val is_ibar: Bool = Bool()
+    val is_ll: Bool     = Bool()
+    val is_sc: Bool     = Bool()
 
     val is_sys_pc2epc: Bool = Bool()
     val is_unique: Bool = Bool()
     val flush_on_commit: Bool = Bool()
 
-    val debug_inst: UInt = UInt(coreInstrBits.W)
-    val debug_pc : UInt = UInt(32.W)
+    val debug_inst: UInt    = if (!FPGAPlatform) UInt(coreInstrBits.W) else null
+    val debug_pc: UInt      = if (!FPGAPlatform) UInt(32.W) else null
+    val debug_mispred: Bool = if (!FPGAPlatform) Bool() else null
 
     def is_sfb_br: Bool             = isBr && isSFB
     def is_sfb_shadow: Bool         = isSFB && !isBr
     def allocate_brtag: Bool        = (isBr && !isSFB) || isJalr
     def rf_wen: Bool                = dst_rtype =/= RT_X
-    def unsafe: Bool                = use_ldq || (use_stq && !is_fence) || isBr || isJalr
     def fu_code_is(_fu: UInt): Bool = (fuCode & _fu) =/= 0.U
     def is_nop: Bool                = uopc === uopNOP
 }

@@ -65,7 +65,7 @@ abstract class AbsIssueUnit (
 
         when (
             (io.disUops(w).bits.uopc === uopSTA) ||
-            (io.disUops(w).bits.uopc === uopAMO_AG)
+            (io.disUops(w).bits.uopc === uopSC_AG)
         ) {
             disUops(w).iwState := s_valid_2
         }

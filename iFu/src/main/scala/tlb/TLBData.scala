@@ -5,23 +5,47 @@ import chisel3.util._
 
 import iFu.common._
 import iFu.common.Consts._
-import iFu.tlb.TLBConsts._
 import iFu.backend._
 
-object TLBConsts {
-    val TLB_W_CMD_SZ    = 2
-    val TLB_WR          = 0.U(TLB_W_CMD_SZ.W)
-    val TLB_FILL        = 1.U(TLB_W_CMD_SZ.W)
-    val TLB_INV         = 2.U(TLB_W_CMD_SZ.W)
-
-    val TLB_R_CMD_SZ    = 2
-    val TLB_X           = 0.U(TLB_R_CMD_SZ.W)
-    val TLB_SRCH        = 1.U(TLB_R_CMD_SZ.W)
-    val TLB_RD          = 2.U(TLB_R_CMD_SZ.W)
-
+class TLBMeta extends CoreBundle {
+    val vppn = UInt((vaddrBits - 13).W)
+    val ps   = UInt(6.W)
+    val g    = Bool()
+    val asid = UInt(10.W)
+    val e    = Bool()
 }
 
-class TLBDataCsrContext extends CoreBundle {
+class TLBSingleData extends CoreBundle {
+    val ppn = UInt((paddrBits - 12).W)
+    val plv = UInt(2.W)
+    val mat = UInt(2.W)
+    val d   = Bool()
+    val v   = Bool()
+}
+
+class TLBEntry extends CoreBundle {
+    val meta = new TLBMeta
+    val data = Vec(2, new TLBSingleData)
+
+    def matches(vppn: UInt, asid: UInt): Bool = {
+        meta.e &&
+            (meta.g || meta.asid === asid) &&
+            Mux(meta.ps === 12.U,
+                meta.vppn === vppn,
+                meta.vppn(18, 10) === vppn(18, 10)
+            )
+    }
+}
+
+class TLBDataRReq extends CoreBundle {
+    val vaddr       = UInt(vaddrBits.W)
+}
+
+class TLBDataRResp extends CoreBundle {
+    val entry   = new TLBEntry
+}
+
+class TLBDataCSRContext extends CoreBundle {
     val asid_asid    = UInt(10.W)
 
     val tlbidx_index = UInt(5.W)
@@ -43,172 +67,118 @@ class TLBDataCsrContext extends CoreBundle {
     val tlbelo1_mat  = UInt(2.W)
     val tlbelo1_g    = Bool()
     val tlbelo1_ppn  = UInt(20.W)
-
-
 }
 
-class TLBMeta extends CoreBundle {
-    val vppn    = UInt((vaddrBits-13).W)
-    val ps      = UInt(6.W)
-    val g       = Bool()
-    val asid    = UInt(10.W)
-    val e       = Bool()
+class TLBDataInstr extends CoreBundle {
+    val cmd     = Input(UInt(CSR_SZ.W))
+    val op      = Input(UInt(5.W))
+    val rj_0_9  = Input(UInt(10.W))
+    val rk      = Input(UInt(xLen.W))
 }
 
-class TLBSingleData extends CoreBundle {
-    val ppn     = UInt((vaddrBits-12).W)
-    val plv     = UInt(2.W)
-    val mat     = UInt(2.W)
-    val d       = Bool()
-    val v       = Bool()
-}
-
-class TLBData extends CoreBundle {
-    val oddData  = new TLBSingleData
-    val evenData = new TLBSingleData
-}
-
-class TLBEntry extends CoreBundle {
-    val meta = new TLBMeta
-    val data = new TLBData
-}
-
-class TLBDataRReq extends CoreBundle {
-    val vaddr       = UInt(vaddrBits.W)
-    val cmd         = UInt(TLB_R_CMD_SZ.W)
-    val index       = UInt(log2Ceil(TLB_NUM).W) // 当is_tlb_rd为真时，需要index
-}
-
-class TLBDataRResp extends CoreBundle {
-    val data = new TLBData
-    val hit_idx = UInt(log2Ceil(TLB_NUM).W)
-}
-
-class TLBDataWReq extends CoreBundle {
-    val rj_0_9  = UInt(10.W)    // 存放无效操作所需的ASID信息
-    val rk      = UInt(32.W)    // 存放无效操作所需的虚拟地址信息
-    val data    = new TLBSingleData
-    val cmd     = UInt(TLB_W_CMD_SZ.W)
-    val op_code = UInt(5.W)
+class TLBDataCSRIO extends CoreBundle {
+    val csr_ctx   = Input(new TLBDataCSRContext)
+    val instr     = Input(new TLBDataInstr)
+    val sch_idx   = Valid(UInt(log2Ceil(TLB_NUM).W))
+    val tlb_entry = Output(new TLBEntry)
 }
 
 class TLBDataManagerIO extends CoreBundle {
-    val csr_context = Input(new TLBDataCsrContext)
-    val r_req   = Vec(memWidth + 1, Flipped(Decoupled(new TLBDataRReq)))
-    val r_resp  = Vec(memWidth + 1, Valid(new TLBDataRResp))
-    val w_req   = Flipped(Decoupled(new TLBDataWReq))
+    val csr    = new TLBDataCSRIO
+    val r_req  = Vec(memWidth + 1, Input(new TLBDataRReq))
+    val r_resp = Vec(memWidth + 1, Valid(new TLBDataRResp))
+    val fill_idx = if (!FPGAPlatform) Output(UInt(log2Ceil(TLB_NUM).W)) else null
 }
 
 class TLBDataManager extends CoreModule {
     val io = IO(new TLBDataManagerIO)
-    io <> DontCare //TODO 删除
-    val tlb_entries = Reg(Vec(TLB_NUM, Valid(new TLBEntry)))
-    val random_counter = RegInit(0.U(log2Ceil(TLB_NUM).W))
-    random_counter := random_counter + 1.U
-    val is_full = !tlb_entries.exists(_.valid === false.B)
-    val write_pos = Mux(is_full, random_counter, tlb_entries.indexWhere(_.valid === false.B))
-    val csr_regs = io.csr_context
-    for(i <- 0 until memWidth + 1) {
-        io.r_resp(i) := 0.U.asTypeOf(Valid(new TLBDataRResp))
-        for (j <- 0 until TLB_NUM) {
-            when(tlb_entries(j).valid && io.r_req(i).valid){
-                when((
-                        io.r_req(i).bits.cmd === TLB_X &&
-                        tlb_entries(j).bits.meta.vppn === io.r_req(i).bits.vaddr(vaddrBits - 1, 13)
-                        ) ||
-                        (
-                                io.r_req(i).bits.cmd === TLB_SRCH &&
-                                        tlb_entries(j).bits.meta.asid === csr_regs.asid_asid &&
-                                        tlb_entries(j).bits.meta.vppn === csr_regs.tlbehi_vppn
-                                ) ||
-                        (
-                                io.r_req(i).bits.cmd === TLB_RD &&
-                                        tlb_entries(j).bits.meta.e &&
-                                        io.csr_context.tlbidx_index === j.U
-                        )
+    io <> DontCare
 
-                ) {
-                    io.r_resp(i).valid          := true.B
-                    io.r_resp(i).bits.data      := tlb_entries(j).bits.data
-                    io.r_resp(i).bits.hit_idx   := j.U
-                }
-            }
+// --------------------------------------------------------
+// tlb entry definition
+    // the valid bit TLBMeta.e is random initialized now
+    // because we assume that user will call invtlb before using TLB
+    val tlb_entries = Reg(Vec(TLB_NUM, new TLBEntry))
 
-        }
+    val csr_ctx = io.csr.csr_ctx
+// --------------------------------------------------------
+    for (w <- 0 until memWidth + 1) {
+        val matchOH = tlb_entries.map(_.matches(io.r_req(w).vaddr(vaddrBits-1, 13), csr_ctx.asid_asid))
+        io.r_resp(w).valid := matchOH.reduce(_||_)
+        io.r_resp(w).bits.entry := Mux1H(matchOH, tlb_entries)
     }
-    when(io.w_req.valid){
-        when(io.w_req.bits.cmd === TLB_WR || io.w_req.bits.cmd === TLB_FILL) {
-            val write_meta = Wire(new TLBMeta)
-            val write_index = WireInit(csr_regs.tlbidx_index)
-            when(io.w_req.bits.cmd === TLB_FILL) {
-                write_index := write_pos
-            }
-            val write_data = Wire(new TLBData)
-            write_meta.vppn := csr_regs.tlbehi_vppn
-            write_meta.ps := csr_regs.tlbidx_ps
-            write_meta.g := csr_regs.tlbelo0_g && csr_regs.tlbelo1_g
-            write_meta.asid := csr_regs.asid_asid
-            write_meta.e := !csr_regs.tlbidx_ne
-
-            write_data.evenData.ppn := csr_regs.tlbelo0_ppn
-            write_data.evenData.plv := csr_regs.tlbelo0_plv
-            write_data.evenData.mat := csr_regs.tlbelo0_mat
-            write_data.evenData.d := csr_regs.tlbelo0_d
-            write_data.evenData.v := csr_regs.tlbelo0_v
-
-            write_data.oddData.ppn := csr_regs.tlbelo1_ppn
-            write_data.oddData.plv := csr_regs.tlbelo1_plv
-            write_data.oddData.mat := csr_regs.tlbelo1_mat
-            write_data.oddData.d := csr_regs.tlbelo1_d
-            write_data.oddData.v := csr_regs.tlbelo1_v
-
-            tlb_entries(write_index).valid := true.B
-            tlb_entries(write_index).bits.meta := write_meta
-            tlb_entries(write_index).bits.data := write_data
-        } .elsewhen(io.w_req.bits.cmd === TLB_INV) {
-            when(io.w_req.bits.op_code === 0.U || io.w_req.bits.op_code === 1.U){
-                for(i <- 0 until TLB_NUM) {
-                    tlb_entries(i).valid := false.B
+// --------------------------------------------------------
+    val instr = io.csr.instr
+    when (instr.cmd === TLB_S) {
+        val matches = VecInit(tlb_entries.map(_.matches(csr_ctx.tlbehi_vppn, csr_ctx.asid_asid)))
+        io.csr.sch_idx.valid := matches.asUInt.orR
+        io.csr.sch_idx.bits := OHToUInt(matches)
+    } .elsewhen (instr.cmd === TLB_R) {
+        io.csr.tlb_entry := tlb_entries(csr_ctx.tlbidx_index)
+    } .elsewhen (instr.cmd === TLB_W || instr.cmd === TLB_F) {
+        val fill_idx = RegInit(0.U(log2Ceil(TLB_NUM).W))
+        fill_idx := Mux(instr.cmd === TLB_F, fill_idx + 1.U, fill_idx)
+        if (!FPGAPlatform) {
+            io.fill_idx := fill_idx
+        }
+        val idx = Mux(instr.cmd === TLB_W,
+            csr_ctx.tlbidx_index, fill_idx
+        )
+        val entry = tlb_entries(idx)
+        entry.meta.vppn   := csr_ctx.tlbehi_vppn
+        entry.meta.ps     := csr_ctx.tlbidx_ps
+        entry.meta.g      := csr_ctx.tlbelo0_g && csr_ctx.tlbelo1_g
+        entry.meta.asid   := csr_ctx.asid_asid
+        entry.meta.e      := !csr_ctx.tlbidx_ne
+        entry.data(0).ppn := csr_ctx.tlbelo0_ppn
+        entry.data(0).plv := csr_ctx.tlbelo0_plv
+        entry.data(0).mat := csr_ctx.tlbelo0_mat
+        entry.data(0).d   := csr_ctx.tlbelo0_d
+        entry.data(0).v   := csr_ctx.tlbelo0_v
+        entry.data(1).ppn := csr_ctx.tlbelo1_ppn
+        entry.data(1).plv := csr_ctx.tlbelo1_plv
+        entry.data(1).mat := csr_ctx.tlbelo1_mat
+        entry.data(1).d   := csr_ctx.tlbelo1_d
+        entry.data(1).v   := csr_ctx.tlbelo1_v
+    } .elsewhen (instr.cmd === TLB_I) {
+        for (entry <- tlb_entries) {
+            when (instr.op === 0.U || instr.op === 1.U) {
+                entry.meta.e := false.B
+            } .elsewhen (instr.op === 2.U) {
+                when (entry.meta.g) {
+                    entry.meta.e := false.B
                 }
-            } .elsewhen(io.w_req.bits.op_code === 2.U) {
-                for(i <- 0 until TLB_NUM) {
-                    when(tlb_entries(i).bits.meta.g) {
-                        tlb_entries(i).valid := false.B
-                    }
+            } .elsewhen (instr.op === 3.U) {
+                when (!entry.meta.g) {
+                    entry.meta.e := false.B
                 }
-            } .elsewhen(io.w_req.bits.op_code === 3.U) {
-                for (i <- 0 until TLB_NUM) {
-                    when(!tlb_entries(i).bits.meta.g) {
-                        tlb_entries(i).valid := false.B
-                    }
+            } .elsewhen (instr.op === 4.U) {
+                when (!entry.meta.g && entry.meta.asid === instr.rj_0_9) {
+                    entry.meta.e := false.B
                 }
-            } .elsewhen(io.w_req.bits.op_code === 4.U) {
-                for (i <- 0 until TLB_NUM) {
-                    when(!tlb_entries(i).bits.meta.g && tlb_entries(i).bits.meta.asid === io.w_req.bits.rj_0_9) {
-                        tlb_entries(i).valid := false.B
-                    }
+            } .elsewhen (instr.op === 5.U) {
+                val ppn_match = Mux(entry.meta.ps === 12.U,
+                    entry.meta.vppn === instr.rk(vaddrBits - 1, 13),
+                    entry.meta.vppn(18, 10) === instr.rk(vaddrBits - 1, 23)
+                )
+                when (
+                    !entry.meta.g && entry.meta.asid === instr.rj_0_9 &&
+                    ppn_match
+                ) {
+                    entry.meta.e := false.B
                 }
-            } .elsewhen(io.w_req.bits.op_code === 5.U) {
-                for (i <- 0 until TLB_NUM) {
-                    when(!tlb_entries(i).bits.meta.g &&
-                            tlb_entries(i).bits.meta.asid === io.w_req.bits.rj_0_9 &&
-                            tlb_entries(i).bits.meta.vppn === io.w_req.bits.rk(vaddrBits - 1, 13)
-                    ) {
-                        tlb_entries(i).valid := false.B
-                    }
-                }
-            } .elsewhen(io.w_req.bits.op_code === 6.U) {
-                for (i <- 0 until TLB_NUM) {
-                    when(tlb_entries(i).bits.meta.g &&
-                            tlb_entries(i).bits.meta.asid === io.w_req.bits.rj_0_9 &&
-                            tlb_entries(i).bits.meta.vppn === io.w_req.bits.rk(vaddrBits - 1, 13)
-                    )
-                    {
-                        tlb_entries(i).valid := false.B
-                    }
+            } .elsewhen (instr.op === 6.U) {
+                val ppn_match = Mux(entry.meta.ps === 12.U,
+                    entry.meta.vppn === instr.rk(vaddrBits - 1, 13),
+                    entry.meta.vppn(18, 10) === instr.rk(vaddrBits - 1, 23)
+                )
+                when (
+                    (entry.meta.g || entry.meta.asid === instr.rj_0_9) &&
+                    ppn_match
+                ) {
+                    entry.meta.e := false.B
                 }
             }
         }
     }
 }
-

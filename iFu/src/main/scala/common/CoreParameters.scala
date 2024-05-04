@@ -93,6 +93,10 @@ class DcacheParameters {
 
     def isUncacheable(req : DCacheReq): Bool = req.is_uncacheable
 
+    def isLL(req : DCacheReq) : Bool = req.uop.is_ll
+
+    def isSC(req : DCacheReq) : Bool = req.uop.is_sc
+
 }
 
 case class IssueParams(
@@ -111,7 +115,7 @@ trait HasCoreParameters {
     val coreInstrBits: Int = coreInstrBytes * 8
     val coreWidth = 4
     val memWidth = 2
-    val maxBrCount: Int = 20
+    val maxBrCount: Int = 8
     val brTagSz: Int = log2Ceil(maxBrCount)
     val numLRegs: Int = 32
     val lregSz: Int = log2Ceil(numLRegs)

@@ -142,18 +142,22 @@ class CSRFileIO extends CoreBundle {
     val err_pc      = Input(UInt(32.W))
     val redirect_pc = Output(UInt(32.W))
 
-    // val is_llw    = Input(Bool())
-    // val is_scw    = Input(Bool())
+    val is_ll = Input(Bool())
+    val is_sc = Input(Bool())
+
+    val idle = Output(Bool())
 
     val exevalid = Input(Bool())
     val cmd      = Input(UInt(CSR_SZ.W))
     val addr     = Input(UInt(14.W))
     val rdata    = Output(UInt(32.W))
-    val rd       = Input(UInt(32.W))
-    val rj       = Input(UInt(32.W))
+    val tlb_op   = Input(UInt(5.W))
+    val r1       = Input(UInt(32.W))
+    val r2       = Input(UInt(32.W))
 
-    val dtlb_csr_reg  = Output(new DTLBCsrContext)
-    val tlb_data_csr_reg = Output(new TLBDataCsrContext)
+    val lsu_csr_ctx  = Output(new LSUCsrIO)
+    val itlb_csr_ctx = Output(new ITLBCsrContext)
+    val tlb_data     = Flipped(new TLBDataCSRIO)
 }
 
 class CSRFile extends CoreModule {
@@ -166,7 +170,8 @@ class CSRFile extends CoreModule {
     val csrRegNxt = Wire(new CSRReg)
     val csrReg    = RegNext(csrRegNxt, init = csrRst)
 
-
+    csrRegNxt := csrReg
+    csrRegNxt.estat.is9_2 := io.ext_int
 
 // --------------------------------------------------------
 // below code is for read
@@ -207,15 +212,27 @@ class CSRFile extends CoreModule {
 // --------------------------------------------------------
 
 // --------------------------------------------------------
+// below code is for timer interrupt
+    when(csrReg.tcfg.en.asBool) {
+        when(csrReg.tval =/= 0.U) { // decrement timer if it is not zero
+            csrRegNxt.tval := csrReg.tval - 1.U
+        }.otherwise { // set interrupt if timer is zero
+            when(csrReg.tcfg.periodic.asBool) {
+                csrRegNxt.tval := Cat(csrReg.tcfg.initval, 0.U(2.W))
+            }.otherwise {
+                csrRegNxt.tval := -1.S(TIMER_LENGTH.W).asUInt
+            }
+            csrRegNxt.estat.is_11 := 1.U(1.W) // set timer interrupt flag bit
+        }
+    }
+
+// --------------------------------------------------------
 // below code is for write
     val wen = io.exevalid && (io.cmd === CSR_W || io.cmd === CSR_M)
     val write_data = Mux(io.cmd === CSR_W,
-        io.rd,
-        (io.rd & io.rj) | (io.rdata & (~io.rj).asUInt)
+        io.r1,
+        (io.r1 & io.r2) | (io.rdata & (~io.r2).asUInt)
     )
-
-    csrRegNxt := csrReg
-    csrRegNxt.estat.is9_2 := io.ext_int
 
     when(wen && !io.exception && io.cmd =/= CSR_E){
         switch (io.addr) {
@@ -318,6 +335,31 @@ class CSRFile extends CoreModule {
             }
         }
     }
+    when (io.cmd === TLB_R) {
+        val entry = io.tlb_data.tlb_entry
+        csrRegNxt.tlbidx.ne   := !entry.meta.e
+        csrRegNxt.asid.asid   := Mux(entry.meta.e, entry.meta.asid  , 0.U)
+        csrRegNxt.tlbehi.vppn := Mux(entry.meta.e, entry.meta.vppn  , 0.U)
+        csrRegNxt.tlbidx.ps   := Mux(entry.meta.e, entry.meta.ps    , 0.U)
+        csrRegNxt.tlbelo0.ppn := Mux(entry.meta.e, entry.data(0).ppn, 0.U)
+        csrRegNxt.tlbelo0.g   := Mux(entry.meta.e, entry.meta.g     , 0.U)
+        csrRegNxt.tlbelo0.mat := Mux(entry.meta.e, entry.data(0).mat, 0.U)
+        csrRegNxt.tlbelo0.plv := Mux(entry.meta.e, entry.data(0).plv, 0.U)
+        csrRegNxt.tlbelo0.d   := Mux(entry.meta.e, entry.data(0).d  , 0.U)
+        csrRegNxt.tlbelo0.v   := Mux(entry.meta.e, entry.data(0).v  , 0.U)
+        csrRegNxt.tlbelo1.ppn := Mux(entry.meta.e, entry.data(1).ppn, 0.U)
+        csrRegNxt.tlbelo1.g   := Mux(entry.meta.e, entry.meta.g     , 0.U)
+        csrRegNxt.tlbelo1.mat := Mux(entry.meta.e, entry.data(1).mat, 0.U)
+        csrRegNxt.tlbelo1.plv := Mux(entry.meta.e, entry.data(1).plv, 0.U)
+        csrRegNxt.tlbelo1.d   := Mux(entry.meta.e, entry.data(1).d  , 0.U)
+        csrRegNxt.tlbelo1.v   := Mux(entry.meta.e, entry.data(1).v  , 0.U)
+    }
+    when (io.cmd === TLB_S) {
+        csrRegNxt.tlbidx.ne    := !io.tlb_data.sch_idx.valid
+        when (io.tlb_data.sch_idx.valid) {
+            csrRegNxt.tlbidx.index := io.tlb_data.sch_idx.bits
+        }
+    }
 // --------------------------------------------------------
 
 // --------------------------------------------------------
@@ -366,15 +408,15 @@ class CSRFile extends CoreModule {
             csrRegNxt.crmd.pg := 1.U(1.W)
         }
 
-        when(csrReg.llbctl.klo === 0.U(1.W)){
+        when (csrReg.llbctl.klo === 0.U(1.W)) {
             csrRegNxt.llbctl.rollb := 0.U(1.W)
         }
         csrRegNxt.llbctl.klo := 0.U(1.W)
-    } /* .elsewhen(io.is_llw) {
+    } .elsewhen (io.is_ll) {
         csrRegNxt.llbctl.rollb := 1.U(1.W)
-    } .elsewhen(io.is_scw) {
+    } .elsewhen (io.is_sc) {
         csrRegNxt.llbctl.rollb := 0.U(1.W)
-    } */
+    }
 // --------------------------------------------------------
 
 // --------------------------------------------------------
@@ -387,51 +429,69 @@ class CSRFile extends CoreModule {
 // --------------------------------------------------------
 
 // --------------------------------------------------------
-// below code is for timer interrupt
-    when (csrReg.tcfg.en.asBool) {
-        when (csrReg.tval =/= 0.U) {    // decrement timer if it is not zero
-            csrRegNxt.tval := csrReg.tval - 1.U
-        } .otherwise {  // set interrupt if timer is zero
-            when (csrReg.tcfg.periodic.asBool) {
-                csrRegNxt.tval := Cat(csrReg.tcfg.initval, 0.U(2.W))
-            } .otherwise {
-                csrRegNxt.tval := -1.S(TIMER_LENGTH.W).asUInt
-            }
-            csrRegNxt.estat.is_11 := 1.U(1.W)   // set timer interrupt flag bit
-        }
-    }
-    io.dtlb_csr_reg.crmd_da := csrReg.crmd.da
-    io.dtlb_csr_reg.crmd_pg := csrReg.crmd.pg
-    io.dtlb_csr_reg.crmd_datm := csrReg.crmd.datm
-    io.dtlb_csr_reg.crmd_plv := csrReg.crmd.plv
-    io.dtlb_csr_reg.dmw0_mat := csrReg.dmw0.mat
-    io.dtlb_csr_reg.dmw1_mat := csrReg.dmw1.mat
-    io.dtlb_csr_reg.dmw0_plv0 := csrReg.dmw0.plv0
-    io.dtlb_csr_reg.dmw0_plv3 := csrReg.dmw0.plv3
-    io.dtlb_csr_reg.dmw1_plv0 := csrReg.dmw1.plv0
-    io.dtlb_csr_reg.dmw1_plv3 := csrReg.dmw1.plv3
-    io.dtlb_csr_reg.dmw0_vseg := csrReg.dmw0.vseg
-    io.dtlb_csr_reg.dmw1_vseg := csrReg.dmw1.vseg
+// below code is for idle instruction
+    val idle_en = RegInit(false.B)
+    when (io.cmd === CSR_I) { idle_en := true.B }
+    when (io.interrupt)     { idle_en := false.B }
+    io.idle := idle_en
+// --------------------------------------------------------
 
-    io.tlb_data_csr_reg.asid_asid    := csrReg.asid.asid
-    io.tlb_data_csr_reg.tlbidx_index := csrReg.tlbidx.index
-    io.tlb_data_csr_reg.tlbidx_ps    := csrReg.tlbidx.ps
-    io.tlb_data_csr_reg.tlbidx_ne    := csrReg.tlbidx.ne
-    io.tlb_data_csr_reg.tlbehi_vppn  := csrReg.tlbehi.vppn
-    io.tlb_data_csr_reg.tlbelo0_v    := csrReg.tlbelo0.v
-    io.tlb_data_csr_reg.tlbelo0_d    := csrReg.tlbelo0.d
-    io.tlb_data_csr_reg.tlbelo0_plv  := csrReg.tlbelo0.plv
-    io.tlb_data_csr_reg.tlbelo0_mat  := csrReg.tlbelo0.mat
-    io.tlb_data_csr_reg.tlbelo0_g    := csrReg.tlbelo0.g
-    io.tlb_data_csr_reg.tlbelo0_ppn  := csrReg.tlbelo0.ppn
-    io.tlb_data_csr_reg.tlbelo1_v    := csrReg.tlbelo1.v
-    io.tlb_data_csr_reg.tlbelo1_d    := csrReg.tlbelo1.d
-    io.tlb_data_csr_reg.tlbelo1_plv  := csrReg.tlbelo1.plv
-    io.tlb_data_csr_reg.tlbelo1_mat  := csrReg.tlbelo1.mat
-    io.tlb_data_csr_reg.tlbelo1_g    := csrReg.tlbelo1.g
-    io.tlb_data_csr_reg.tlbelo1_ppn  := csrReg.tlbelo1.ppn
+// --------------------------------------------------------
+// below code is for tlb
+    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_da   := csrReg.crmd.da
+    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_pg   := csrReg.crmd.pg
+    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_datm := csrReg.crmd.datm
+    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_plv  := csrReg.crmd.plv
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_mat  := csrReg.dmw0.mat
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_mat  := csrReg.dmw1.mat
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_plv0 := csrReg.dmw0.plv0
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_plv3 := csrReg.dmw0.plv3
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_plv0 := csrReg.dmw1.plv0
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_plv3 := csrReg.dmw1.plv3
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_pseg := csrReg.dmw0.pseg
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_vseg := csrReg.dmw0.vseg
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_pseg := csrReg.dmw1.pseg
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_vseg := csrReg.dmw1.vseg
 
+    io.lsu_csr_ctx.llbit := csrReg.llbctl.rollb
 
+    io.itlb_csr_ctx.crmd_da := csrReg.crmd.da
+    io.itlb_csr_ctx.crmd_pg := csrReg.crmd.pg
+    io.itlb_csr_ctx.crmd_datm := csrReg.crmd.datm
+    io.itlb_csr_ctx.crmd_plv := csrReg.crmd.plv
+    io.itlb_csr_ctx.dmw0_mat := csrReg.dmw0.mat
+    io.itlb_csr_ctx.dmw1_mat := csrReg.dmw1.mat
+    io.itlb_csr_ctx.dmw0_plv0 := csrReg.dmw0.plv0
+    io.itlb_csr_ctx.dmw0_plv3 := csrReg.dmw0.plv3
+    io.itlb_csr_ctx.dmw1_plv0 := csrReg.dmw1.plv0
+    io.itlb_csr_ctx.dmw1_plv3 := csrReg.dmw1.plv3
+    io.itlb_csr_ctx.dmw0_pseg := csrReg.dmw0.pseg
+    io.itlb_csr_ctx.dmw0_vseg := csrReg.dmw0.vseg
+    io.itlb_csr_ctx.dmw1_pseg := csrReg.dmw1.pseg
+    io.itlb_csr_ctx.dmw1_vseg := csrReg.dmw1.vseg
+
+    io.tlb_data.csr_ctx.asid_asid    := csrReg.asid.asid
+    io.tlb_data.csr_ctx.tlbidx_index := csrReg.tlbidx.index
+    io.tlb_data.csr_ctx.tlbidx_ps    := csrReg.tlbidx.ps
+    io.tlb_data.csr_ctx.tlbidx_ne    := csrReg.tlbidx.ne
+    io.tlb_data.csr_ctx.tlbehi_vppn  := csrReg.tlbehi.vppn
+    io.tlb_data.csr_ctx.tlbelo0_v    := csrReg.tlbelo0.v
+    io.tlb_data.csr_ctx.tlbelo0_d    := csrReg.tlbelo0.d
+    io.tlb_data.csr_ctx.tlbelo0_plv  := csrReg.tlbelo0.plv
+    io.tlb_data.csr_ctx.tlbelo0_mat  := csrReg.tlbelo0.mat
+    io.tlb_data.csr_ctx.tlbelo0_g    := csrReg.tlbelo0.g
+    io.tlb_data.csr_ctx.tlbelo0_ppn  := csrReg.tlbelo0.ppn
+    io.tlb_data.csr_ctx.tlbelo1_v    := csrReg.tlbelo1.v
+    io.tlb_data.csr_ctx.tlbelo1_d    := csrReg.tlbelo1.d
+    io.tlb_data.csr_ctx.tlbelo1_plv  := csrReg.tlbelo1.plv
+    io.tlb_data.csr_ctx.tlbelo1_mat  := csrReg.tlbelo1.mat
+    io.tlb_data.csr_ctx.tlbelo1_g    := csrReg.tlbelo1.g
+    io.tlb_data.csr_ctx.tlbelo1_ppn  := csrReg.tlbelo1.ppn
+
+    io.tlb_data.instr.cmd    := io.cmd
+    io.tlb_data.instr.op     := io.tlb_op
+    io.tlb_data.instr.rj_0_9 := io.r1(9, 0)
+    io.tlb_data.instr.rk     := io.r2
 // --------------------------------------------------------
 
 // --------------------------------------------------------

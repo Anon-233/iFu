@@ -36,7 +36,7 @@ class RobIO(val numWritePorts: Int) extends CoreBundle {
     // excetion to CSR
     val com_xcpt = Valid(new CommitExceptionSignals)
 
-    // val csr_stall = Input(Bool())
+    val idle = Input(Bool())
 
     // flush signals
     // 可能因为异常，流水线延迟或者访存阶段错误等,发送给frondend
@@ -139,9 +139,8 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
         when (io.enq_valids(w)) {
             robVal(robTail)        := true.B
-            robBsy(robTail)        := !(io.enq_uops(w).is_fence ||
-                                        io.enq_uops(w).is_fencei ||
-                                        io.enq_uops(w).is_nop ||
+            robBsy(robTail)        := !(io.enq_uops(w).is_ibar ||
+                                        io.enq_uops(w).is_nop  ||
                                         io.enq_uops(w).xcpt_cause === SYS ||
                                         io.enq_uops(w).xcpt_cause === BRK)
             robException(robTail)  := io.enq_uops(w).xcpt_valid
@@ -160,6 +159,9 @@ class Rob(val numWritePorts: Int) extends CoreModule {
             when (wbResp.valid && MatchBank(GetBankIdx(wbUop.robIdx))) {
                 robBsy(rowIdx)        := false.B
                 robPredicated(rowIdx) := wbResp.bits.predicated
+                if (!FPGAPlatform) {
+                    robUop(rowIdx).debug_mispred := wbUop.debug_mispred
+                }
             }
         }
 
@@ -176,11 +178,11 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         when (io.lsu_xcpt.valid && MatchBank(GetBankIdx(io.lsu_xcpt.bits.uop.robIdx))) {
             robException(GetRowIdx(io.lsu_xcpt.bits.uop.robIdx)) := true.B
         }
-        
+
         canThrowException(w) := robVal(robHead) && robException(robHead)
 
         //---------------output:commit------------
-        canCommit(w) := robVal(robHead) && !(robBsy(robHead)) /* && !io.csr_stall */
+        canCommit(w) := robVal(robHead) && !(robBsy(robHead)) && !io.idle
         isXcpt2Commit(w) := (robUop(robHead).xcpt_cause === SYS) || (robUop(robHead).xcpt_cause === BRK)
 
         io.commit.valids(w)      := willCommit(w)
@@ -285,12 +287,10 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     io.com_xcpt.bits.badvaddr := Sext(rXcptBadvaddr, xLen)
     val insnSysPc2epc = robHeadVals.reduce(_||_) && PriorityMux(robHeadVals,io.commit.uops.map{u => u.is_sys_pc2epc})
-    
+
     val refetchInst = exceptionThrown || insnSysPc2epc
     val comXcptUop = PriorityMux(robHeadVals,io.commit.uops)
     io.com_xcpt.bits.ftq_idx := comXcptUop.ftqIdx
-    //io.com_xcpt.bits.edge_inst := comXcptUop.edge_inst
-    //io.com_xcpt.bits.is_rvc := comXcptUop.is_rvc
     io.com_xcpt.bits.pc_lob := comXcptUop.pcLowBits
     io.com_xcpt.bits.flush_typ := DontCare
 
@@ -445,4 +445,49 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         }
     }
     io.com_load_is_at_rob_head := RegNext(robHeadUsesLdq(PriorityEncoder(robHeadVals.asUInt)) && !willCommit.reduce(_||_))
+
+// -----------------------------------------------------------------------
+// Performance Counters
+    val cnt_len = 64
+
+    val cyc_cnt = RegInit(0.U(cnt_len.W))
+    val instr_cnt = RegInit(0.U(cnt_len.W))
+    val br_instr_cnt = RegInit(0.U(cnt_len.W))
+    val br_mispred_cnt = RegInit(0.U(cnt_len.W))
+    val ld_instr_cnt = RegInit(0.U(cnt_len.W))
+    val st_instr_cnt = RegInit(0.U(cnt_len.W))
+
+    cyc_cnt := cyc_cnt + 1.U    // inc 1 every cycle
+    instr_cnt := instr_cnt + PopCount(io.commit.arch_valids)    // inc 1 every committed instruction
+    br_instr_cnt := br_instr_cnt + PopCount(
+        (io.commit.arch_valids zip io.commit.uops) map {
+        case (v, uop) => v && (uop.isBr || uop.isJal || uop.isJalr)
+    })
+    br_mispred_cnt := br_mispred_cnt + PopCount(
+        (io.commit.arch_valids zip io.commit.uops) map {
+        case (v, uop) => v && (uop.isBr || uop.isJal || uop.isJalr) && uop.debug_mispred
+    })
+    ld_instr_cnt := ld_instr_cnt + PopCount(
+        (io.commit.arch_valids zip io.commit.uops) map {
+        case (v, uop) => v && uop.use_ldq
+    })
+    st_instr_cnt := st_instr_cnt + PopCount(
+        (io.commit.arch_valids zip io.commit.uops) map {
+        case (v, uop) => v && uop.use_stq
+    })
+
+    val last_cyc = (io.commit.valids zip io.commit.uops).map {
+        case (v, uop) => v && (uop.debug_pc === 0x1c000548.U(xLen.W))
+    }.reduce(_||_)
+
+    when (last_cyc) {
+        printf("============= iFu Performance Counters =============\n")
+        printf("Cycle count:              %d\n", cyc_cnt)
+        printf("Instruction count:        %d\n", instr_cnt)
+        printf("Branch instruction count: %d\n", br_instr_cnt)
+        printf("Branch mispredict count:  %d\n", br_mispred_cnt)
+        printf("Load instruction count:   %d\n", ld_instr_cnt)
+        printf("Store instruction count:  %d\n", st_instr_cnt)
+        printf("====================================================\n")
+    }
 }

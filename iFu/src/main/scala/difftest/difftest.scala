@@ -25,7 +25,7 @@ class DiffInstrCommitIO extends DifftestBundle with DifftestWithIndex {
     val instr          = Input(UInt(32.W))
     val skip           = Input(Bool())
     val is_TLBFILL     = Input(Bool())
-    val TLBFILL_index  = Input(UInt(5.W))
+    val TLBFILL_index  = Input(UInt(8.W))
     val is_CNTinst     = Input(Bool())
     val timer_64_value = Input(UInt(64.W))
     val wen            = Input(Bool())

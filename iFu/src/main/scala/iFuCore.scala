@@ -94,16 +94,16 @@ class iFuCore extends CoreModule {
     val csr         = Module(new CSRFile)
     val tlb_data    = Module(new TLBDataManager)
 
-    tlb_data.io.csr_context         := csr.io.tlb_data_csr_reg
-    // tlb_data.io.r_req(0)
-    tlb_data.io.r_req(0)            <> DontCare //TODO 删除
-    tlb_data.io.r_req(1)            <> lsu.io.core.tlb_data.r_req(0)
-    tlb_data.io.r_req(2)            <> lsu.io.core.tlb_data.r_req(1)
-    tlb_data.io.w_req               <> lsu.io.core.tlb_data.w_req
+    tlb_data.io.csr      <> csr.io.tlb_data
+    tlb_data.io.r_req(0) := ifu.io.core.tlb_data.r_req
+    tlb_data.io.r_req(1) := lsu.io.core.tlb_data.r_req(0)
+    tlb_data.io.r_req(2) := lsu.io.core.tlb_data.r_req(1)
 
-    lsu.io.core.tlb_data.r_resp(0)       <> tlb_data.io.r_resp(1)
-    lsu.io.core.tlb_data.r_resp(1)       <> tlb_data.io.r_resp(2)
-    lsu.io.csr.dtlb_csr_reg         := csr.io.dtlb_csr_reg
+    ifu.io.core.tlb_data.r_resp    := tlb_data.io.r_resp(0)
+    lsu.io.core.tlb_data.r_resp(0) := tlb_data.io.r_resp(1)
+    lsu.io.core.tlb_data.r_resp(1) := tlb_data.io.r_resp(2)
+    lsu.io.csr                     := csr.io.lsu_csr_ctx
+    ifu.io.core.csr.itlb_csr_cxt   := csr.io.itlb_csr_ctx
 
 /*-----------------------------*/
 
@@ -196,8 +196,6 @@ class iFuCore extends CoreModule {
     for (i <- 0 until memWidth) {
         mem_units(i).io.lsu_io <> lsu.io.core.exe(i)
     }
-    
-    // csr.io.inst foreach { c => c := DontCare }
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
@@ -208,7 +206,7 @@ class iFuCore extends CoreModule {
     ifu.io.core.redirect_val := false.B
     ifu.io.core.redirect_flush := false.B
     ifu.io.core.flush_icache := (0 until coreWidth).map { i =>
-        (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_fencei)
+        (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_ibar)
     }.reduce(_||_)
 
     when (RegNext(rob.io.flush.valid)) {
@@ -340,11 +338,8 @@ class iFuCore extends CoreModule {
     for (w <- 0 until coreWidth) {
         dec_valids(w) :=
             ifu.io.core.fetchPacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
-        decode_units(w).io.enq.uop := dec_fbundle.uops(w).bits
-        // decode_units(w).io.status := csr.io.status
-        //decode_units(w).io.csr_decode <> csr.io.decode(w)
+        decode_units(w).io.enq.uop   := dec_fbundle.uops(w).bits
         decode_units(w).io.interrupt := csr.io.interrupt
-//        decode_units(w).io.interrupt_cause := csr.io.interrupt_cause
 
         dec_uops(w) := decode_units(w).io.deq.uop
     }
@@ -441,9 +436,19 @@ class iFuCore extends CoreModule {
     val dis_prior_slot_valid  = dis_valids.scanLeft(false.B)((s, v) => s || v)
     val dis_prior_slot_unique = (dis_uops zip dis_valids).scanLeft(false.B) { case (s, (u, v)) => s || v && u.is_unique }
 
+    // wait_for_empty_pipeline(i) means that the ith instruction needs to wait
+    //  if only unique instructions:
+    //      need (rob is empty) and (store queue is empty) and (no valid instruction before)
+    //  if the instruction is a ibar:
+    //      need (rob is empty) and (fence is ready) and (no valid instruction before)
     val wait_for_empty_pipeline = (0 until coreWidth).map { w =>
         (dis_uops(w).is_unique) &&
-        (!rob.io.empty || !lsu.io.core.fencei_rdy || dis_prior_slot_valid(w))
+        (
+            !rob.io.empty ||
+            // !(lsu.io.core.stq_empty && !(dis_uops(w).is_ibar && !lsu.io.core.dcache_ord)) ||
+            (!lsu.io.core.stq_empty || (dis_uops(w).is_ibar && !lsu.io.core.dcache_ord)) ||
+            dis_prior_slot_valid(w)
+        )
     }
 
     val dis_hazards = (0 until coreWidth).map { w =>
@@ -460,7 +465,9 @@ class iFuCore extends CoreModule {
         || ifu.io.core.redirect_flush)
     }
 
-    lsu.io.core.fence_dmem := (dis_valids zip wait_for_empty_pipeline).map { case (v, w) => v && w }.reduce(_||_)
+    lsu.io.core.fence_dmem := (dis_valids zip dis_uops zip wait_for_empty_pipeline).map {
+        case ((v, u), w) => v && u.is_ibar && w
+    }.reduce(_||_)
 
     val dis_stalls = dis_hazards.scanLeft(false.B)((s, h) => s || h).takeRight(coreWidth)
     dis_fire := dis_valids zip dis_stalls map { case (v, s) => v && !s }
@@ -485,7 +492,7 @@ class iFuCore extends CoreModule {
     rob.io.enq_valids        := dis_fire
     rob.io.enq_uops          := dis_uops
     rob.io.enq_partial_stall := dis_stalls.last
-    // rob.io.csr_stall         := csr.io.csr_stall
+    rob.io.idle              := csr.io.idle
 
     for (w <- 0 until coreWidth) {
         dis_uops(w).robIdx := Cat(
@@ -684,15 +691,16 @@ class iFuCore extends CoreModule {
     //--------------------------CSR--------------------------------
     //-------------------------------------------------------------
     val csr_exe_unit = exe_units.csr_unit
-    val csr_rw_cmd = csr_exe_unit.io.iresp.bits.uop.ctrl.csr_cmd
+    val csr_rw_cmd = csr_exe_unit.io.iresp.bits.csr_cmd
 
     csr.io.ext_int := io.ext_int
-    csr.io.addr := csr_exe_unit.io.iresp.bits.uop.csrAddr
-    csr.io.rd := csr_exe_unit.io.iresp.bits.rd
-    csr.io.rj := csr_exe_unit.io.iresp.bits.rj
+    csr.io.addr    := csr_exe_unit.io.iresp.bits.csr_addr
+    csr.io.tlb_op  := csr_exe_unit.io.iresp.bits.tlb_op
+    csr.io.r1      := csr_exe_unit.io.iresp.bits.csr_r1
+    csr.io.r2      := csr_exe_unit.io.iresp.bits.csr_r2
 
     csr.io.cmd := csr_rw_cmd
-    csr.io.exevalid := csr_exe_unit.io.iresp.valid
+    csr.io.exevalid  := csr_exe_unit.io.iresp.valid
     csr.io.exception := RegNext(rob.io.com_xcpt.valid)
     csr.io.com_xcpt  := RegNext(rob.io.com_xcpt)
 
@@ -700,8 +708,12 @@ class iFuCore extends CoreModule {
         AlignPCToBoundary(ifu.io.core.getFtqPc(0).compc, iCacheLineBytes) +
         RegNext(rob.io.com_xcpt.bits.pc_lob)
     )
-       
 
+    csr.io.is_ll := (
+        (mem_resps(0).valid && mem_resps(0).bits.uop.is_ll) ||
+        (mem_resps(1).valid && mem_resps(1).bits.uop.is_ll)
+    )
+    csr.io.is_sc := mem_resps(0).valid && mem_resps(0).bits.uop.is_sc
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
@@ -810,7 +822,7 @@ class iFuCore extends CoreModule {
     var cnt = 0
     for (i <- 0 until memWidth) {
         val mem_uop = mem_resps(i).bits.uop
-        rob.io.wb_resps(cnt).valid  := mem_resps(i).valid && !(mem_uop.use_stq && !mem_uop.is_amo)
+        rob.io.wb_resps(cnt).valid  := mem_resps(i).valid && !(mem_uop.use_stq && !mem_uop.is_sc)
         rob.io.wb_resps(cnt).bits   := mem_resps(i).bits
         rob.io.debug_wb_valids(cnt) := mem_resps(i).valid && mem_uop.dst_rtype =/= RT_X
         rob.io.debug_wb_wdata(cnt)  := mem_resps(i).bits.data
@@ -826,7 +838,7 @@ class iFuCore extends CoreModule {
             val wb_uop = resp.bits.uop
             val data   = resp.bits.data
 
-            rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.use_stq && !wb_uop.is_amo)
+            rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.use_stq && !wb_uop.is_sc)
             rob.io.wb_resps(cnt).bits  := resp.bits
             rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
              if (eu.hasCSR) {
@@ -851,16 +863,6 @@ class iFuCore extends CoreModule {
 
     rob.io.brupdate <> brUpdate
 
-    // exe_units.map(u => u.io.status := csr.io.status)
-
-    // // Connect breakpoint info to memaddrcalcunit
-    // for (i <- 0 until memWidth) {
-    //     mem_units(i).io.status   := csr.io.status
-    //     mem_units(i).io.bp       := csr.io.bp
-    //     mem_units(i).io.mcontext := csr.io.mcontext
-    //     mem_units(i).io.scontext := csr.io.scontext
-    // }
-
     // LSU <> ROB
     rob.io.lsu_clr_bsy := lsu.io.core.clr_bsy
     rob.io.lsu_xcpt <> lsu.io.core.lsu_xcpt
@@ -877,9 +879,12 @@ class iFuCore extends CoreModule {
 
         val instr_commits = Module(new InstrCommits)
         val rawCommit = WireInit(0.U.asTypeOf(new InstrCommit))
+        instr_commits.io.exception := RegNext(rob.io.com_xcpt.valid)
         instr_commits.io.rawCommit := rawCommit
+        instr_commits.io.fill_idx  := tlb_data.io.fill_idx
 
         for (w <- 0 until robParameters.retireWidth) {
+            rawCommit.debug_uopc(w)  := rob.io.commit.uops(w).uopc
             rawCommit.debug_pc(w)    := rob.io.commit.uops(w).debug_pc
             rawCommit.debug_ldst(w)  := rob.io.commit.uops(w).ldst
             rawCommit.debug_insts(w) := rob.io.commit.uops(w).debug_inst

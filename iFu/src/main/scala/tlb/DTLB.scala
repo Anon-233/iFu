@@ -6,8 +6,6 @@ import chisel3.util._
 import iFu.common._
 import iFu.common.Consts._
 import iFu.common.CauseCode._
-//
-//第一步，
 
 class DTLBCsrContext extends CoreBundle(){
     val crmd_da     = Bool()
@@ -18,11 +16,13 @@ class DTLBCsrContext extends CoreBundle(){
     val dmw0_plv0   = Bool()
     val dmw0_plv3   = Bool()
     val dmw0_mat    = UInt(2.W)
+    val dmw0_pseg   = UInt(3.W)
     val dmw0_vseg   = UInt(3.W)
 
     val dmw1_plv0   = Bool()
     val dmw1_plv3   = Bool()
     val dmw1_mat    = UInt(2.W)
+    val dmw1_pseg = UInt(3.W)
     val dmw1_vseg   = UInt(3.W)
 }
 
@@ -46,14 +46,11 @@ class DTLBResp extends CoreBundle(){
     val is_uncacheable      = Bool()
 }
 class DTLBIO extends CoreBundle(){
-    val req         = Vec(memWidth, Flipped(Decoupled(new DTLBReq)))
-    val resp        = Vec(memWidth, new DTLBResp)
-    val r_req       = Vec(memWidth, Decoupled(new TLBDataRReq))
+    val req         = Vec(memWidth, Input(new DTLBReq))
+    val resp        = Vec(memWidth, Output(new DTLBResp))
+    val r_req       = Vec(memWidth, Output(new TLBDataRReq))
     val r_resp      = Vec(memWidth, Flipped(Valid(new TLBDataRResp)))
-    val w_req       = Decoupled(new TLBDataWReq)
-    // val w_resp = Input(Valid(new WResp))
     val dtlb_csr_context = Input(new DTLBCsrContext)
-    val tlb_data_context = Input(new TLBDataCsrContext)
     val kill = Input(Bool())
 
 }
@@ -61,91 +58,75 @@ class DTLBIO extends CoreBundle(){
 class DTLB extends CoreModule(){
     val io = IO(new DTLBIO)
     io <> DontCare  //TODO 删除
-    // when(io.req(0).bits.is_tlb_inst){
-    //     io.w_req.valid      := true.B
-    //     io.w_req.bits.vaddr := io.req(0).bits.vaddr
-    //     io.w_req.bits.cmd   := io.req(0).bits.cmd
-    // }
-    for(w <- 0 until memWidth){
-        io.resp(w)          := 0.U.asTypeOf(new DTLBResp)
-        io.resp(w).paddr    := io.req(w).bits.vaddr
-        io.req(w).ready     := true.B
-        when(io.req(w).valid) {
-            when(
-                (io.req(w).bits.vaddr(0) && io.req(w).bits.size === 1.U) ||
-                        (io.req(w).bits.vaddr(1, 0) =/= 0.U && io.req(w).bits.size === 2.U)
-            ) {
-                io.resp(w).exception.valid := true.B
-                io.resp(w).exception.bits.xcpt_cause := ALE
-            }/*.elsewhen(*/
-        }
-
-        // io.r_req(w).valid := true.B
-        // io.r_req(w).bits.addr := io.req(w).bits.vaddr
-
-        // when(!io.r_resp(w).valid){
-        //     io.resp(w).exceptions.valid         := true.B
-        //     io.resp(w).exceptions.bits.is_tlbr  := true.B
-
-        // } .elsewhen (io.r_resp(w).valid){
-        //     val meta = io.r_resp(w).bits.meta
-        //     when(meta.v){
-        //         when(io.req(w).bits.use_ldq === true.B) {
-        //             io.resp(w).exceptions.bits.is_pil := true.B
-        //         }.elsewhen(io.req(w).bits.use_stq === true.B) {
-        //             io.resp(w).exceptions.bits.is_pis := true.B
-        //         }
-        //     } .elsewhen(io.csr_context.plv < meta.plv) {
-        //         io.resp(w).exceptions.valid         := true.B
-        //         io.resp(w).exceptions.bits.is_ppi   := true.B
-        //     } .elsewhen(io.req(w).bits.use_stq && !meta.D) {
-        //         io.resp(w).exceptions.valid         := true.B
-        //         io.resp(w).exceptions.bits.is_pme   := true.B
-        //     }
-        // }
-    }
-    // val data_uncache_en = Bool()
-    // data_uncache_en := (da_mode && (csr_datm === 0.U)) ||
-    //     (dmw0_en && (csr_dmw0(`DMW_MAT) === 0.U)) ||
-    //     (dmw1_en && (csr_dmw1(`DMW_MAT) === 0.U)) ||
-    //     (data_addr_trans_en && (data_tlb_mat === 0.U))
-
-    // for(w <- 0 until memWidth) {
-    //     io.r_req(w).valid := io.req(w).valid
-    //     io.r_req(w).bits.vaddr := io.req(w).bits.vaddr
-    //     io.r_req(w).bits.cmd :=
-    // }
-
-    //TODO disable_cache是一个寄存器,以及data_addr_trans_en的支持
     val csr_regs = io.dtlb_csr_context
     val da_mode = csr_regs.crmd_da && !csr_regs.crmd_pg
     val pg_mode = !csr_regs.crmd_da && csr_regs.crmd_pg
-    if(!FPGAPlatform)dontTouch(csr_regs)
-    if(!FPGAPlatform)dontTouch(da_mode)
-    if(!FPGAPlatform)dontTouch(pg_mode)
+    if (!FPGAPlatform) dontTouch(da_mode)
+    if (!FPGAPlatform) dontTouch(pg_mode)
+
     for (w <- 0 until memWidth) {
-        val dmw0_en = (
-            (
+        io.resp(w) := 0.U.asTypeOf(new DTLBResp)
+        val vaddr = io.req(w).vaddr
+        when(
+            (vaddr(0) && io.req(w).size === 1.U) ||
+                (vaddr(1, 0) =/= 0.U && io.req(w).size === 2.U)
+        ) {
+            io.resp(w).exception.valid := true.B
+            io.resp(w).exception.bits.xcpt_cause := ALE
+        } .elsewhen(da_mode) {
+            io.resp(w).paddr := io.req(w).vaddr
+            io.resp(w).is_uncacheable := csr_regs.crmd_datm === 0.U
+        }.elsewhen(pg_mode) {
+            val dmw0_en = (
                 (csr_regs.dmw0_plv0 && csr_regs.crmd_plv === 0.U) ||
-                (csr_regs.dmw0_plv3 && csr_regs.crmd_plv === 3.U)
-            ) &&
-            (io.req(w).bits.vaddr(31, 29) === csr_regs.dmw0_vseg) &&
-            pg_mode
-        )
-        val dmw1_en = (
-            (
+                    (csr_regs.dmw0_plv3 && csr_regs.crmd_plv === 3.U)
+                ) &&
+                (io.req(w).vaddr(31, 29) === csr_regs.dmw0_vseg) &&
+                pg_mode
+            val dmw1_en = (
                 (csr_regs.dmw1_plv0 && csr_regs.crmd_plv === 0.U) ||
-                (csr_regs.dmw1_plv3 && csr_regs.crmd_plv === 3.U)
-            ) &&
-            (io.req(w).bits.vaddr(31, 29) === csr_regs.dmw1_vseg) &&
-            pg_mode
-        )
-        if(!FPGAPlatform)dontTouch(dmw0_en)
-        if(!FPGAPlatform)dontTouch(dmw1_en)
-        io.resp(w).is_uncacheable := (
-            (da_mode && (csr_regs.crmd_datm === 0.U)) ||
-            (dmw0_en && (csr_regs.dmw0_mat === 0.U))  ||
-            (dmw1_en && (csr_regs.dmw1_mat === 0.U))
-        )
+                    (csr_regs.dmw1_plv3 && csr_regs.crmd_plv === 3.U)
+                ) &&
+                (io.req(w).vaddr(31, 29) === csr_regs.dmw1_vseg) &&
+                pg_mode
+            if (!FPGAPlatform) dontTouch(dmw0_en)
+            if (!FPGAPlatform) dontTouch(dmw1_en)
+            when(dmw0_en || dmw1_en) {
+                io.resp(w).paddr := Cat(Mux(dmw0_en, csr_regs.dmw0_pseg, csr_regs.dmw1_pseg), io.req(w).vaddr(28, 0))
+                io.resp(w).exception.valid := false.B
+                io.resp(w).is_uncacheable := (
+                    (dmw0_en && (csr_regs.dmw0_mat === 0.U)) ||
+                        (dmw1_en && (csr_regs.dmw1_mat === 0.U))
+                    )
+            }.otherwise {
+                io.r_req(w).vaddr := vaddr
+                io.resp(w) := 0.U.asTypeOf(new DTLBResp)
+                val entry = io.r_resp(w).bits.entry
+                val odd_even_page = Mux(entry.meta.ps === 12.U, vaddr(12), vaddr(21))
+                val data = entry.data(odd_even_page)
+                when(!io.r_resp(w).valid) {
+                    io.resp(w).exception.valid := true.B
+                    io.resp(w).exception.bits.xcpt_cause := TLBR
+                }.otherwise {
+                    when(!data.v) {
+                        io.resp(w).exception.valid := true.B
+                        when(io.req(w).use_ldq) {
+                            io.resp(w).exception.bits.xcpt_cause := PIL
+                        }.elsewhen(io.req(w).use_stq) {
+                            io.resp(w).exception.bits.xcpt_cause := PIS
+                        }
+                    }.elsewhen(io.dtlb_csr_context.crmd_plv > data.plv) {
+                        io.resp(w).exception.valid := true.B
+                        io.resp(w).exception.bits.xcpt_cause := PPI
+                    }.elsewhen(io.req(w).use_stq && !data.d) {
+                        io.resp(w).exception.valid := true.B
+                        io.resp(w).exception.bits.xcpt_cause := PME
+                    }
+                }
+                io.resp(w).paddr := Mux(entry.meta.ps === 12.U,
+                    Cat(data.ppn, io.req(w).vaddr(11, 0)), Cat(data.ppn(paddrBits - 13, 9), vaddr(20, 0)))
+                io.resp(w).is_uncacheable := data.mat === 0.U
+            }
+        }
     }
 }

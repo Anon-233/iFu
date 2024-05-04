@@ -3,6 +3,8 @@ package iFu.common
 import chisel3._
 import chisel3.util._
 
+import iFu.common.Consts._
+
 import iFu.common.CauseCode
 class BrUpdateMasks extends CoreBundle {
     val resolveMask = UInt(maxBrCount.W)
@@ -39,15 +41,18 @@ class FuncUnitResp extends CoreBundle {
     val predicated = Bool()
     val data = UInt(xLen.W)
     val addr = UInt(xLen.W)
-    val rj   = UInt(xLen.W)
-    val rd   = UInt(xLen.W)
+    val r1   = UInt(xLen.W)
+    val r2   = UInt(xLen.W)
 }
 
 class ExeUnitResp(val len: Int = 32) extends CoreBundle {
-    val uop = new MicroOp
-    val data = Bits(len.W)
-    val rj   = Bits(len.W)
-    val rd   = Bits(len.W)
+    val uop        = new MicroOp
+    val data       = Bits(len.W)
+    val csr_cmd    = UInt(CSR_SZ.W)
+    val csr_addr   = UInt(14.W)
+    val tlb_op     = UInt(5.W)
+    val csr_r2     = UInt(xLen.W)
+    val csr_r1     = UInt(xLen.W)
     val predicated = Bool() // Was this predicated off?
 }
 
@@ -80,7 +85,8 @@ class LSUDMemIO extends CoreBundle {
     val exception   = Output(Bool())
     val rob_head_idx = Output(UInt(robAddrSz.W))
 
-    val force_order = Output(Bool())
+    val llbit       = Output(Bool())
+    val fence_dmem  = Output(Bool())
     val ordered     = Input(Bool())
 }
 

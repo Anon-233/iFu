@@ -52,10 +52,22 @@ class FetchBundle extends CoreBundle {
     val bpdMeta   = Vec(nBanks, Vec(bankWidth, new PredictionMeta))
 }
 
+class FrontendTLBDataIO extends CoreBundle {
+    val r_req   = Output(new TLBDataRReq)
+    val r_resp  = Flipped(Valid(new TLBDataRResp))
+}
+
+class FrontendCsrIO extends CoreBundle {
+    val itlb_csr_cxt = Input(new ITLBCsrContext)
+}
+
 class FrontendToCoreIO extends CoreBundle {
     val numFTQEntries   = frontendParams.numFTQEntries
 
-    val fetchPacket = new DecoupledIO(new FetchBufferResp)
+    val tlb_data        = new FrontendTLBDataIO
+    val csr             = new FrontendCsrIO
+
+    val fetchPacket     = new DecoupledIO(new FetchBufferResp)
 
     // 1 for xcpt/jalr/auipc/flush
     val getFtqPc        = Vec(2, new GetPCFromFtqIO)
@@ -98,7 +110,7 @@ class Frontend extends CoreModule {
     val bpd          = Module(new BranchPredictor)
     val ras          = Module(new Ras)  // TODO: should ras be a part of bpd?
     val icache       = Module(new ICache(frontendParams.iCacheParams))
-    val tlb          = Module(new ITLB)
+    val itlb          = Module(new ITLB)
     val fetch_buffer = Module(new FetchBuffer)
     val ftq          = Module(new FetchTargetQueue)
 
@@ -150,17 +162,19 @@ class Frontend extends CoreModule {
 // --------------------------------------------------------
 // Stage 1 -> access tlb, send paddr to icache, and use bpd.f1 to predict next pc
     // access TLB
-    tlb.io.req.valid      := s1_valid && !s1_is_replay && !f1_clear
-    tlb.io.req.bits.vaddr := s1_vpc
+    io.core.tlb_data.r_req      := itlb.io.r_req
+    itlb.io.r_resp              := io.core.tlb_data.r_resp
+    itlb.io.itlb_csr_cxt        := io.core.csr.itlb_csr_cxt
+    itlb.io.req.vaddr           := s1_vpc
     val f1_tlb_resp = Mux(
         s1_is_replay,
         RegNext(s0_replay_tlb_resp),
-        tlb.io.resp
+        itlb.io.resp
     )
 
     // send paddr to icache
     icache.io.s1_paddr := f1_tlb_resp.paddr
-    icache.io.s1_kill  := tlb.io.resp.exception.valid || f1_clear
+    icache.io.s1_kill  := itlb.io.resp.exception.valid || f1_clear
 
     // branch prediction
     val f1_bpd_resp = bpd.io.resp.f1

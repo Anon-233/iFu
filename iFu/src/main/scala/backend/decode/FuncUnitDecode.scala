@@ -132,7 +132,7 @@ object MemRRdDecode extends RRdDecodeConstants {
             BitPat(uopSTA)      -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS12, REN_0, CSR_N),
             BitPat(uopSTD)      -> List(BR_N  , N, N, Y, aluFn.FN_X    , OP1_RS1, OP2_RS2 , immS12, REN_0, CSR_N),
             BitPat(uopLLW)      -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_IMM , immS14, REN_0, CSR_N),
-            BitPat(uopAMO_AG)   -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_ZERO, immS14, REN_0, CSR_N)
+            BitPat(uopSC_AG)    -> List(BR_N  , N, N, Y, aluFn.FN_ADD  , OP1_RS1, OP2_ZERO, immS14, REN_0, CSR_N)
         )
 }
 
@@ -148,7 +148,8 @@ object CsrRRdDecode extends RRdDecodeConstants {
             BitPat(uopCSRWR)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_ZERO, immCSR, REN_1, CSR_W),
             BitPat(uopCSRRD)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_ZERO, OP2_ZERO, immCSR, REN_1, CSR_R),
             BitPat(uopCSRXCHG) -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_RS2 , immCSR, REN_1, CSR_M),
-            BitPat(uopERET)    -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, CSR_E)
+            BitPat(uopERET)    -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, CSR_E),
+            BitPat(uopIDLE)    -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, CSR_I),
         )
 }
 
@@ -164,6 +165,23 @@ object CntRRdDecode extends RRdDecodeConstants {
             BitPat(uopRDCNTIDW)-> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_ZERO, OP2_ZERO, immCID, REN_1, CSR_R),
             BitPat(uopRDCNTVLW)-> List(BR_N , Y, N, N, cntFn.FN_VL   , OP1_X   , OP2_X   , immX  , REN_1, CSR_N),
             BitPat(uopRDCNTVHW)-> List(BR_N , Y, N, N, cntFn.FN_VH   , OP1_X   , OP2_X   , immX  , REN_1, CSR_N)
+        )
+}
+
+object TLBRRdDecode extends RRdDecodeConstants {
+    val table: Array[(BitPat, List[BitPat])] =
+        Array[(BitPat, List[BitPat])](
+                   //                  br type
+                   //                    |  use alu pipe               op1 sel   op2 sel
+                   //                    |    |  use muldiv pipe         |         |        immsel       csr_cmd
+                   //                    |    |  |  use mem pipe         |         |        |      rf wen   |
+                   //                    |    |  |  |     alu fcn        |         |        |        |      |
+                   //                    |    |  |  |       |            |         |        |        |      |
+            BitPat(uopTLBSRCH) -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, TLB_S),
+            BitPat(uopTLBFILL) -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, TLB_F),
+            BitPat(uopTLBRD)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, TLB_R),
+            BitPat(uopTLBWR)   -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_X   , OP2_X   , immX  , REN_0, TLB_W),
+            BitPat(uopINVTLB)  -> List(BR_N , Y, N, N, aluFn.FN_ADD  , OP1_RS1 , OP2_RS2 , immX  , REN_0, TLB_I),
         )
 }
 
@@ -183,7 +201,10 @@ class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
     if (supportedUnits.jmp)    dec_table ++= JmpRRdDecode.table
     if (supportedUnits.mem)    dec_table ++= MemRRdDecode.table
     if (supportedUnits.muldiv) dec_table ++= MulDivRRdDecode.table
-    if (supportedUnits.csr)    dec_table ++= CsrRRdDecode.table
+    if (supportedUnits.csr) {
+        dec_table ++= CsrRRdDecode.table
+        dec_table ++= TLBRRdDecode.table
+    }
     if (supportedUnits.cnt)    dec_table ++= CntRRdDecode.table
     val rrd_cs = Wire(new RRdCtrlSigs).decode(io.rrd_uop.uopc, dec_table)
 
@@ -193,13 +214,9 @@ class RegisterReadDecode(supportedUnits: SupportedFuncs) extends CoreModule {
     io.rrd_uop.ctrl.op2_sel := rrd_cs.op2_sel
     io.rrd_uop.ctrl.imm_sel := rrd_cs.imm_sel
     io.rrd_uop.ctrl.op_fcn  := rrd_cs.op_fcn.asUInt
-    io.rrd_uop.ctrl.is_load := io.rrd_uop.uopc === uopLD
-    io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopAMO_AG
+    io.rrd_uop.ctrl.is_load := io.rrd_uop.uopc === uopLD  || io.rrd_uop.uopc === uopLLW
+    io.rrd_uop.ctrl.is_sta  := io.rrd_uop.uopc === uopSTA || io.rrd_uop.uopc === uopSC_AG
     io.rrd_uop.ctrl.is_std  := io.rrd_uop.uopc === uopSTD || (io.rrd_uop.ctrl.is_sta && io.rrd_uop.lrs2_rtype === RT_FIX)
-
-    when (io.rrd_uop.uopc === uopAMO_AG /*|| (io.rrd_uop.uopc === uopLD && io.rrd_uop.mem_cmd === M_XLL)*/) {
-        io.rrd_uop.immPacked := 0.U         //TODO:为什么为0？
-    }
 
     io.rrd_valid := io.iss_valid
     io.rrd_uop.ctrl.csr_cmd := rrd_cs.csr_cmd
