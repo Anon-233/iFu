@@ -195,8 +195,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     mshrs.io.req.valid := false.B
     mshrs.io.req.bits := 0.U.asTypeOf(new DCacheReq)
 
-    // lsu还在发force_order并且dcache行里面还有dirty，就进行在总线空闲时进行fence操作
-    fenceReadValid := false.B && (io.lsu.force_order && fenceMetaRead.resp.bits.hasDirty) && axiReady 
+    // lsu还在发fence_dmem并且dcache行里面还有dirty，就进行在总线空闲时进行fence操作
+    fenceReadValid := false.B && (io.lsu.fence_dmem && fenceMetaRead.resp.bits.hasDirty) && axiReady 
     //清掉里面所有的load指令(第一个周期清,之后别一直拉高)
     mshrs.io.fenceClear := fenceReadValid && RegNext(!fenceReadValid)
 

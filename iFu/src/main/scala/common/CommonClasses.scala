@@ -86,7 +86,7 @@ class LSUDMemIO extends CoreBundle {
     val rob_head_idx = Output(UInt(robAddrSz.W))
 
     val llbit       = Output(Bool())
-    val force_order = Output(Bool())
+    val fence_dmem  = Output(Bool())
     val ordered     = Input(Bool())
 }
 

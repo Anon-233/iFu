@@ -139,9 +139,8 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
         when (io.enq_valids(w)) {
             robVal(robTail)        := true.B
-            robBsy(robTail)        := !(io.enq_uops(w).is_dbar ||
-                                        io.enq_uops(w).is_ibar ||
-                                        io.enq_uops(w).is_nop ||
+            robBsy(robTail)        := !(io.enq_uops(w).is_ibar ||
+                                        io.enq_uops(w).is_nop  ||
                                         io.enq_uops(w).xcpt_cause === SYS ||
                                         io.enq_uops(w).xcpt_cause === BRK)
             robException(robTail)  := io.enq_uops(w).xcpt_valid

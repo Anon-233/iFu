@@ -80,8 +80,8 @@ object XDecode extends DecodeTable  {
         LLW       -> List(Y, uopLLW      , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_X  , Y, N, Y, N,  N, N, /*M_XLL,*/  N, N, N, Y, Y),
         SCW       -> List(Y, uopSC_AG    , IQT_MEM, FU_MEM, RT_FIX, RT_FIX, RT_FIX, N, Y, N, Y,  N, N, /*M_XSC,*/  N, N, N, Y, Y),
         PRELD     -> List(Y, uopNOP      , IQT_MEM, FU_MEM, RT_X  , RT_FIX, RT_X  , N, N, N, N,  N, N, /*M_X  ,*/  N, N, N, N, N),
-        DBAR      -> List(Y, uopNOP      , IQT_MEM, FU_MEM, RT_X  , RT_X  , RT_X  , N, Y, N, N,  Y, N, /*M_X  ,*/  N, N, N, Y, Y),
-        IBAR      -> List(Y, uopNOP      , IQT_MEM, FU_X  , RT_X  , RT_X  , RT_X  , N, N, N, N,  N, Y, /*M_X  ,*/  N, N, N, Y, Y),
+        DBAR      -> List(Y, uopNOP      , IQT_INT, FU_X  , RT_X  , RT_X  , RT_X  , N, N, N, N,  Y, N, /*M_X  ,*/  N, N, N, N, N),
+        IBAR      -> List(Y, uopNOP      , IQT_INT, FU_X  , RT_X  , RT_X  , RT_X  , N, N, N, N,  N, Y, /*M_X  ,*/  N, N, N, Y, Y),
         SRLIW     -> List(Y, uopSRLIW    , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , N, N, N, N,  N, N, /*M_X  ,*/  Y, N, N, N, N),
         SRAIW     -> List(Y, uopSRAIW    , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_X  , N, N, N, N,  N, N, /*M_X  ,*/  Y, N, N, N, N),
         SRLW      -> List(Y, uopSRLW     , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, N, N, N, N,  N, N, /*M_X  ,*/  Y, N, N, N, N),
@@ -231,7 +231,9 @@ object WeirdDecode extends DecodeTable {
                //        |    |              |       |       |       |       |      |  |  |  |   |  |  mem_cmd     |  |  |  |  |
                //        |    |              |       |       |       |       |      |  |  |  |   |  |     |        |  |  |  |  |
         IDLE     -> List(Y, uopIDLE      , IQT_INT, FU_CSR, RT_X  , RT_X  , RT_X  , N, N, N, N,  N, N, /* M_X,*/   N, N, N, Y, Y),
-        CACOP    -> List(Y, uopNOP       , IQT_INT, FU_ALU, RT_X  , RT_X  , RT_X  , N, N, N, N,  N, N, /* M_X,*/   N, N, N, N, N),
+        // CACOP    -> List(Y, uopNOP       , IQT_INT, FU_ALU, RT_X  , RT_X  , RT_X  , N, N, N, N,  N, N, /* M_X,*/   N, N, N, N, N),
+        // now cacop is as same as ibar
+        CACOP    -> List(Y, uopNOP      , IQT_INT, FU_X  , RT_X  , RT_X  , RT_X  , N, N, N, N,  N, Y, /*M_X  ,*/  N, N, N, Y, Y),
    )
 }
 

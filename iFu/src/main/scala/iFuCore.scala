@@ -436,9 +436,19 @@ class iFuCore extends CoreModule {
     val dis_prior_slot_valid  = dis_valids.scanLeft(false.B)((s, v) => s || v)
     val dis_prior_slot_unique = (dis_uops zip dis_valids).scanLeft(false.B) { case (s, (u, v)) => s || v && u.is_unique }
 
+    // wait_for_empty_pipeline(i) means that the ith instruction needs to wait
+    //  if only unique instructions:
+    //      need (rob is empty) and (store queue is empty) and (no valid instruction before)
+    //  if the instruction is a ibar:
+    //      need (rob is empty) and (fence is ready) and (no valid instruction before)
     val wait_for_empty_pipeline = (0 until coreWidth).map { w =>
         (dis_uops(w).is_unique) &&
-        (!rob.io.empty || !lsu.io.core.fencei_rdy || dis_prior_slot_valid(w))
+        (
+            !rob.io.empty ||
+            // !(lsu.io.core.stq_empty && !(dis_uops(w).is_ibar && !lsu.io.core.dcache_ord)) ||
+            (!lsu.io.core.stq_empty || (dis_uops(w).is_ibar && !lsu.io.core.dcache_ord)) ||
+            dis_prior_slot_valid(w)
+        )
     }
 
     val dis_hazards = (0 until coreWidth).map { w =>
@@ -455,7 +465,9 @@ class iFuCore extends CoreModule {
         || ifu.io.core.redirect_flush)
     }
 
-    lsu.io.core.fence_dmem := (dis_valids zip wait_for_empty_pipeline).map { case (v, w) => v && w }.reduce(_||_)
+    lsu.io.core.fence_dmem := (dis_valids zip dis_uops zip wait_for_empty_pipeline).map {
+        case ((v, u), w) => v && u.is_ibar && w
+    }.reduce(_||_)
 
     val dis_stalls = dis_hazards.scanLeft(false.B)((s, h) => s || h).takeRight(coreWidth)
     dis_fire := dis_valids zip dis_stalls map { case (v, s) => v && !s }
