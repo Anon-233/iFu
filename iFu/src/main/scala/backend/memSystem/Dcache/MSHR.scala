@@ -201,8 +201,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         // 对于STORE来说，由于LSU传来的STORE一定是分支预测正确的，所以不用管111
         val brupdate = Input(new BrUpdateInfo())
         
-        // fence指令会清空所有的非store指令mshr111
-        val fenceClear = Input(Bool())
+
             
         })
 
@@ -247,7 +246,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     // 一表只起到作为代表去指导取地址，因此不要传入分支更新，即使被kill掉，由于不知道有没有人依赖这个
     // 一表项，所以不会被分支抹掉,还需要继续取完
     firstMSHRs(i).brupdate := /* io.brupdate */ 0.U.asTypeOf(new BrUpdateInfo)
-    firstMSHRs(i).reset :=  false.B/*!firstMSHRs(i).hasStore && io.fenceClear */
+    firstMSHRs(i).reset :=  false.B
 
     firstMSHRs(i).fetchedBlockAddr := io.fetchedBlockAddr
     firstMSHRs(i).fetchReady := io.fetchReady
@@ -307,7 +306,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         secondMSHRs(i).fetchedpos := 0.U
         
         secondMSHRs(i).brupdate := io.brupdate
-        secondMSHRs(i).reset := false.B/*!secondMSHRs(i).hasStore && io.fenceClear */
+        secondMSHRs(i).reset := false.B
 
         secondMSHRs(i).replayReq.ready := false.B
         

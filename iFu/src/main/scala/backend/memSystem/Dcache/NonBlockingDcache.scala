@@ -193,15 +193,13 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     mshrs.io.req.bits := 0.U.asTypeOf(new DCacheReq)
 
     // lsu还在发force_order并且dcache行里面还有dirty，就进行在总线空闲时进行fence操作
-    fenceReadValid := false.B && (io.lsu.force_order && fenceMetaRead.resp.bits.hasDirty) && axiReady 
-    //清掉里面所有的load指令(第一个周期清,之后别一直拉高)
-    mshrs.io.fenceClear := fenceReadValid && RegNext(!fenceReadValid)
+    fenceReadValid :=/*  false.B && */ (io.lsu.force_order && fenceMetaRead.resp.bits.hasDirty) && axiReady 
 
     // wfu做完之后去清除掉对应的meta行
     fenceClearValid := wfu.io.fenceClearReq.valid
 
     // 只要meta没有dirty，就可以回应fence，不需要管流水线和mshr状态（如果里面有没做完的指令，lsu肯定非空，unique仍然会停留在dispatch）
-    io.lsu.ordered := true.B || !fenceMetaRead.resp.bits.hasDirty
+    io.lsu.ordered := /* true.B || */ !fenceMetaRead.resp.bits.hasDirty
 
     // TODO:   cacopValid := //
 
