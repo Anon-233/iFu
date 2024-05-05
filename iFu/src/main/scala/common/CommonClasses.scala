@@ -102,10 +102,10 @@ class CommitSignals extends CoreBundle {
     val rollback = Bool()
 
     //------------------debug
-    val debug_insts = Vec(robParameters.retireWidth, UInt(32.W))
-    val debug_wdata = Vec(robParameters.retireWidth, UInt(xLen.W))
-    val debug_ldst = Vec(robParameters.retireWidth, UInt(lregSz.W))
-    val debug_pc = Vec(robParameters.retireWidth, UInt(32.W))
+    val debug_insts = if (!FPGAPlatform) Vec(robParameters.retireWidth, UInt(32.W)) else null
+    val debug_wdata = if (!FPGAPlatform) Vec(robParameters.retireWidth, UInt(xLen.W)) else null
+    val debug_ldst = if (!FPGAPlatform) Vec(robParameters.retireWidth, UInt(lregSz.W)) else null
+    val debug_pc = if (!FPGAPlatform) Vec(robParameters.retireWidth, UInt(32.W)) else null
 }
 
 case class SupportedFuncs (
