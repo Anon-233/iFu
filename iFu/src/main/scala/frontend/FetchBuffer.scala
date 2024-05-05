@@ -2,6 +2,7 @@ package iFu.frontend
 
 import chisel3._
 import chisel3.util._
+import iFu.common.Consts.FPGAPlatform
 import iFu.common._
 import iFu.util.MaskUpper
 import iFu.frontend.FrontendUtils._
@@ -82,9 +83,11 @@ class FetchBuffer extends CoreModule {
             inUops(i).isSFB     := io.enq.bits.sfbs(i) || io.enq.bits.shadowed_mask(i) // is sfb_br or sfb_shadow
             inUops(i).ftqIdx    := io.enq.bits.ftqIdx
             inUops(i).instr     := io.enq.bits.instrs(i)
-            inUops(i).debug_inst := io.enq.bits.instrs(i)
-            inUops(i).debug_pc    := pc
-            inUops(i).taken     := io.enq.bits.cfiIdx.bits.asUInt === i.U && io.enq.bits.cfiIdx.valid
+            if (!FPGAPlatform) {
+                inUops(i).debug_inst := io.enq.bits.instrs(i)
+                inUops(i).debug_pc := pc
+            }
+            inUops(i).taken := io.enq.bits.cfiIdx.bits.asUInt === i.U && io.enq.bits.cfiIdx.valid
         }
     }
 

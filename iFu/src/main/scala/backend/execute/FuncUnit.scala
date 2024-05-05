@@ -196,7 +196,7 @@ class ALUUnit(
     for (i <- 1 until numStages) {
         rMispred(i) := rMispred(i - 1)
     }
-    io.resp.bits.uop.debug_mispred := rMispred(numStages - 1)
+    if (!FPGAPlatform) io.resp.bits.uop.debug_mispred := rMispred(numStages - 1)
 
     val rData = Reg(Vec(numStages, UInt(xLen.W)))
     val rPred = Reg(Vec(numStages, Bool()))

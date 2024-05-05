@@ -49,10 +49,10 @@ class RobIO(val numWritePorts: Int) extends CoreBundle {
 
 
     //---------------------debug
-    val debug_wb_valids = Input(Vec(numWritePorts, Bool()))
-    val debug_wb_wdata  = Input(Vec(numWritePorts, Bits(xLen.W)))
-    val debug_wb_ldst   = Input(Vec(numWritePorts, UInt(lregSz.W)))
-    val debug_wb_pc     = Input(Vec(numWritePorts, UInt(32.W)))
+    val debug_wb_valids = if (!FPGAPlatform) Input(Vec(numWritePorts, Bool())) else null
+    val debug_wb_wdata  = if (!FPGAPlatform) Input(Vec(numWritePorts, Bits(xLen.W))) else null
+    val debug_wb_ldst   = if (!FPGAPlatform) Input(Vec(numWritePorts, UInt(lregSz.W))) else null
+    val debug_wb_pc     = if (!FPGAPlatform) Input(Vec(numWritePorts, UInt(32.W))) else null
 }
 
 class Rob(val numWritePorts: Int) extends CoreModule {
@@ -110,11 +110,12 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     }
 
     // Used for trace port, for debug purposes only
-    val rob_debug_inst_mem   = SyncReadMem(numRobRows, Vec(coreWidth, UInt(32.W)))
-    val rob_debug_inst_wmask = WireInit(VecInit(0.U(coreWidth.W).asBools))
-    val rob_debug_inst_wdata = Wire(Vec(coreWidth, UInt(32.W)))
-    rob_debug_inst_mem.write(robTail, rob_debug_inst_wdata, rob_debug_inst_wmask)
-    val rob_debug_inst_rdata = rob_debug_inst_mem.read(robHead, willCommit.reduce(_||_))
+    val rob_debug_inst_mem   = if (!FPGAPlatform) SyncReadMem(numRobRows, Vec(coreWidth, UInt(32.W))) else null
+    val rob_debug_inst_wmask = if (!FPGAPlatform) WireInit(VecInit(0.U(coreWidth.W).asBools)) else null
+    val rob_debug_inst_wdata = if (!FPGAPlatform) Wire(Vec(coreWidth, UInt(32.W))) else null
+    val rob_debug_inst_rdata = if (!FPGAPlatform) rob_debug_inst_mem.read(robHead, willCommit.reduce(_||_)) else null
+    if (!FPGAPlatform) rob_debug_inst_mem.write(robTail, rob_debug_inst_wdata, rob_debug_inst_wmask)
+
 
     //---------------------------------------------
 
@@ -134,8 +135,10 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         //------------------dispatch stage------------------
         //enqueue
 
-        rob_debug_inst_wmask(w) := io.enq_valids(w)
-        rob_debug_inst_wdata(w) := io.enq_uops(w).debug_inst
+        if (!FPGAPlatform) {
+            rob_debug_inst_wmask(w) := io.enq_valids(w)
+            rob_debug_inst_wdata(w) := io.enq_uops(w).debug_inst
+        }
 
         when (io.enq_valids(w)) {
             robVal(robTail)        := true.B
@@ -147,7 +150,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
             robUop(robTail)        := io.enq_uops(w)
             robPredicated(robTail) := false.B
         } .elsewhen (io.enq_valids.reduce(_|_) && !robVal(robTail)) {
-            robUop(robTail).debug_inst := BUBBLE
+            if (!FPGAPlatform) robUop(robTail).debug_inst := BUBBLE
         }
 
         //------------------writeback-----------------------
@@ -188,7 +191,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         io.commit.valids(w)      := willCommit(w)
         io.commit.arch_valids(w) := willCommit(w) && !robPredicated(comIdx)
         io.commit.uops(w)        := robUop(comIdx)
-        io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
+        if (!FPGAPlatform) io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
 
         // 感觉没什么用
         when (
@@ -213,7 +216,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
             var brMask = robUop(i).brMask
             when (IsKilledByBranch(io.brupdate,brMask)) {
                 robVal(i)            := false.B
-                robUop(i).debug_inst := BUBBLE
+                if (!FPGAPlatform) robUop(i).debug_inst := BUBBLE
             } .elsewhen (robVal(i)) {
                 robUop(i).brMask := GetNewBrMask(io.brupdate,brMask)
             }
@@ -236,35 +239,39 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         robHeadVals(w)    := robVal(robHead)
         robHeadUsesLdq(w) := robUop(robHead).use_ldq
 
-        when (willCommit(w)) {
-            robUop(robHead).debug_inst := BUBBLE
-        } .elsewhen (rbkRow) {
-            robUop(robTail).debug_inst := BUBBLE
+        if (!FPGAPlatform) {
+            when(willCommit(w)) {
+                robUop(robHead).debug_inst := BUBBLE
+            }.elsewhen(rbkRow) {
+                robUop(robTail).debug_inst := BUBBLE
+            }
         }
 
         // 给 debug 用的
-        for (i <- 0 until numWritePorts) {
-            val rob_idx = io.wb_resps(i).bits.uop.robIdx
-            when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx))) {
-                rob_debug_wdata(GetRowIdx(rob_idx)) := io.debug_wb_wdata(i)
-                rob_debug_ldst(GetRowIdx(rob_idx))  := io.debug_wb_ldst(i)
-                rob_debug_pc(GetRowIdx(rob_idx))    := io.debug_wb_pc(i)
-            }
-            val temp_uop = robUop(GetRowIdx(rob_idx))
+        if (!FPGAPlatform) {
+            for (i <- 0 until numWritePorts) {
+                val rob_idx = io.wb_resps(i).bits.uop.robIdx
+                when(io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx))) {
+                    rob_debug_wdata(GetRowIdx(rob_idx)) := io.debug_wb_wdata(i)
+                    rob_debug_ldst(GetRowIdx(rob_idx)) := io.debug_wb_ldst(i)
+                    rob_debug_pc(GetRowIdx(rob_idx)) := io.debug_wb_pc(i)
+                }
+                val temp_uop = robUop(GetRowIdx(rob_idx))
 
-            assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
+                assert(!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
                     !robVal(GetRowIdx(rob_idx))),
                     "[rob] writeback (" + i + ") occurred to an invalid ROB entry.")
-            assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
+                assert(!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
                     !robBsy(GetRowIdx(rob_idx))),
                     "[rob] writeback (" + i + ") occurred to a not-busy ROB entry.")
-            assert (!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
+                assert(!(io.wb_resps(i).valid && MatchBank(GetBankIdx(rob_idx)) &&
                     temp_uop.ldst_val && temp_uop.pdst =/= io.wb_resps(i).bits.uop.pdst),
                     "[rob] writeback (" + i + ") occurred to the wrong pdst.")
+            }
+            io.commit.debug_wdata(w) := rob_debug_wdata(robHead)
+            io.commit.debug_ldst(w) := rob_debug_ldst(robHead)
+            io.commit.debug_pc(w) := rob_debug_pc(robHead)
         }
-        io.commit.debug_wdata(w) := rob_debug_wdata(robHead)
-        io.commit.debug_ldst(w)  := rob_debug_ldst(robHead)
-        io.commit.debug_pc(w)    := rob_debug_pc(robHead)
     }
 
     var blockCommit = (robState =/= stateNormal) && (robState =/= stateWatiTillEmpty) || RegNext(exceptionThrown) || RegNext(RegNext(exceptionThrown))
@@ -448,46 +455,48 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
 // -----------------------------------------------------------------------
 // Performance Counters
-    val cnt_len = 64
+    if (!FPGAPlatform) {
+        val cnt_len = 64
 
-    val cyc_cnt = RegInit(0.U(cnt_len.W))
-    val instr_cnt = RegInit(0.U(cnt_len.W))
-    val br_instr_cnt = RegInit(0.U(cnt_len.W))
-    val br_mispred_cnt = RegInit(0.U(cnt_len.W))
-    val ld_instr_cnt = RegInit(0.U(cnt_len.W))
-    val st_instr_cnt = RegInit(0.U(cnt_len.W))
+        val cyc_cnt = RegInit(0.U(cnt_len.W))
+        val instr_cnt = RegInit(0.U(cnt_len.W))
+        val br_instr_cnt = RegInit(0.U(cnt_len.W))
+        val br_mispred_cnt = RegInit(0.U(cnt_len.W))
+        val ld_instr_cnt = RegInit(0.U(cnt_len.W))
+        val st_instr_cnt = RegInit(0.U(cnt_len.W))
 
-    cyc_cnt := cyc_cnt + 1.U    // inc 1 every cycle
-    instr_cnt := instr_cnt + PopCount(io.commit.arch_valids)    // inc 1 every committed instruction
-    br_instr_cnt := br_instr_cnt + PopCount(
-        (io.commit.arch_valids zip io.commit.uops) map {
-        case (v, uop) => v && (uop.isBr || uop.isJal || uop.isJalr)
-    })
-    br_mispred_cnt := br_mispred_cnt + PopCount(
-        (io.commit.arch_valids zip io.commit.uops) map {
-        case (v, uop) => v && (uop.isBr || uop.isJal || uop.isJalr) && uop.debug_mispred
-    })
-    ld_instr_cnt := ld_instr_cnt + PopCount(
-        (io.commit.arch_valids zip io.commit.uops) map {
-        case (v, uop) => v && uop.use_ldq
-    })
-    st_instr_cnt := st_instr_cnt + PopCount(
-        (io.commit.arch_valids zip io.commit.uops) map {
-        case (v, uop) => v && uop.use_stq
-    })
+        cyc_cnt := cyc_cnt + 1.U // inc 1 every cycle
+        instr_cnt := instr_cnt + PopCount(io.commit.arch_valids) // inc 1 every committed instruction
+        br_instr_cnt := br_instr_cnt + PopCount(
+            (io.commit.arch_valids zip io.commit.uops) map {
+                case (v, uop) => v && (uop.isBr || uop.isJal || uop.isJalr)
+            })
+        br_mispred_cnt := br_mispred_cnt + PopCount(
+            (io.commit.arch_valids zip io.commit.uops) map {
+                case (v, uop) => v && (uop.isBr || uop.isJal || uop.isJalr) && uop.debug_mispred
+            })
+        ld_instr_cnt := ld_instr_cnt + PopCount(
+            (io.commit.arch_valids zip io.commit.uops) map {
+                case (v, uop) => v && uop.use_ldq
+            })
+        st_instr_cnt := st_instr_cnt + PopCount(
+            (io.commit.arch_valids zip io.commit.uops) map {
+                case (v, uop) => v && uop.use_stq
+            })
 
-    val last_cyc = (io.commit.valids zip io.commit.uops).map {
-        case (v, uop) => v && (uop.debug_pc === 0x1c000548.U(xLen.W))
-    }.reduce(_||_)
+        val last_cyc = (io.commit.valids zip io.commit.uops).map {
+            case (v, uop) => v && (uop.debug_pc === 0x1c000548.U(xLen.W))
+        }.reduce(_ || _)
 
-    when (last_cyc) {
-        printf("============= iFu Performance Counters =============\n")
-        printf("Cycle count:              %d\n", cyc_cnt)
-        printf("Instruction count:        %d\n", instr_cnt)
-        printf("Branch instruction count: %d\n", br_instr_cnt)
-        printf("Branch mispredict count:  %d\n", br_mispred_cnt)
-        printf("Load instruction count:   %d\n", ld_instr_cnt)
-        printf("Store instruction count:  %d\n", st_instr_cnt)
-        printf("====================================================\n")
+        when(last_cyc) {
+            printf("============= iFu Performance Counters =============\n")
+            printf("Cycle count:              %d\n", cyc_cnt)
+            printf("Instruction count:        %d\n", instr_cnt)
+            printf("Branch instruction count: %d\n", br_instr_cnt)
+            printf("Branch mispredict count:  %d\n", br_mispred_cnt)
+            printf("Load instruction count:   %d\n", ld_instr_cnt)
+            printf("Store instruction count:  %d\n", st_instr_cnt)
+            printf("====================================================\n")
+        }
     }
 }

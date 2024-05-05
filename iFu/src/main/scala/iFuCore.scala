@@ -822,14 +822,16 @@ class iFuCore extends CoreModule {
     var cnt = 0
     for (i <- 0 until memWidth) {
         val mem_uop = mem_resps(i).bits.uop
-        rob.io.wb_resps(cnt).valid  := mem_resps(i).valid && !(mem_uop.use_stq && !mem_uop.is_sc)
-        rob.io.wb_resps(cnt).bits   := mem_resps(i).bits
-        rob.io.debug_wb_valids(cnt) := mem_resps(i).valid && mem_uop.dst_rtype =/= RT_X
-        rob.io.debug_wb_wdata(cnt)  := mem_resps(i).bits.data
-        rob.io.debug_wb_ldst(cnt)   := mem_uop.ldst
-        rob.io.debug_wb_pc(cnt)     := mem_uop.debug_pc
+        rob.io.wb_resps(cnt).valid := mem_resps(i).valid && !(mem_uop.use_stq && !mem_uop.is_sc)
+        rob.io.wb_resps(cnt).bits := mem_resps(i).bits
+        if (!FPGAPlatform) {
+            rob.io.debug_wb_valids(cnt) := mem_resps(i).valid && mem_uop.dst_rtype =/= RT_X
+            rob.io.debug_wb_wdata(cnt) := mem_resps(i).bits.data
+            rob.io.debug_wb_ldst(cnt) := mem_uop.ldst
+            rob.io.debug_wb_pc(cnt) := mem_uop.debug_pc
 
-        if(!FPGAPlatform)dontTouch(mem_uop.debug_pc)
+            dontTouch(mem_uop.debug_pc)
+        }
         cnt += 1
     }
     for (eu <- exe_units) {
@@ -840,20 +842,22 @@ class iFuCore extends CoreModule {
 
             rob.io.wb_resps(cnt).valid := resp.valid && !(wb_uop.use_stq && !wb_uop.is_sc)
             rob.io.wb_resps(cnt).bits  := resp.bits
-            rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
-             if (eu.hasCSR) {
-                 rob.io.debug_wb_wdata(cnt) := Mux(
-                     wb_uop.ctrl.csr_cmd =/= CSR_N,
-                     csr.io.rdata,
-                     data
-                 )
-                 rob.io.debug_wb_ldst(cnt) := wb_uop.ldst
-                 rob.io.debug_wb_pc(cnt) := wb_uop.debug_pc
-             } else {
-                rob.io.debug_wb_wdata(cnt) := data
-                rob.io.debug_wb_ldst(cnt)  := wb_uop.ldst
-                rob.io.debug_wb_pc(cnt)     := wb_uop.debug_pc
-             }
+            if (!FPGAPlatform) {
+                rob.io.debug_wb_valids(cnt) := resp.valid && wb_uop.rf_wen && wb_uop.dst_rtype === RT_FIX
+                if (eu.hasCSR) {
+                    rob.io.debug_wb_wdata(cnt) := Mux(
+                        wb_uop.ctrl.csr_cmd =/= CSR_N,
+                        csr.io.rdata,
+                        data
+                    )
+                    rob.io.debug_wb_ldst(cnt) := wb_uop.ldst
+                    rob.io.debug_wb_pc(cnt) := wb_uop.debug_pc
+                } else {
+                    rob.io.debug_wb_wdata(cnt) := data
+                    rob.io.debug_wb_ldst(cnt) := wb_uop.ldst
+                    rob.io.debug_wb_pc(cnt) := wb_uop.debug_pc
+                }
+            }
             cnt += 1
 
             if(!FPGAPlatform)dontTouch(wb_uop.debug_pc)
