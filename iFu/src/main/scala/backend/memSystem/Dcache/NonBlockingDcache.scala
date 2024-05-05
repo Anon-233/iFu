@@ -188,6 +188,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     mshrReadValid := mshrs.io.newFetchreq.valid && axiReady
 
     mshrs.io.brupdate := io.lsu.brupdate
+    mshrs.io.exception := io.lsu.exception
     mshrReplayValid := mshrs.io.replay.valid
     mshrs.io.fetchedBlockAddr := 0.U
     mshrs.io.fetchReady := false.B
@@ -380,7 +381,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                         s0valid(w) &&
                         !(s0state === lsu && (isStore(s0req(w)) && s2StoreFailed)) && 
                         !(s0state === lsu && (!isStore(s0req(w)) && IsKilledByBranch(io.lsu.brupdate, s0req(w).uop))) &&
-                        !(s0state === replay && (!isStore(s0req(w)) && IsKilledByBranch(io.lsu.brupdate, s0req(w).uop)))
+                        !(s0state === replay && (!isStore(s0req(w)) && IsKilledByBranch(io.lsu.brupdate, s0req(w).uop)))&&
+                        !(s0state === lsu && (!isStore(s0req(w)) && io.lsu.exception)) &&
+                        !(s0state === replay && (!isStore(s0req(w)) && io.lsu.exception))
                         ) &&
                         !io.lsu.s1_kill(w)
     }
@@ -489,11 +492,15 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         s2valid(w) := RegNext(s1valid(w) &&
                             !(s1state === lsu && (isStore(s1req(w)) && s2StoreFailed)) && 
                             !(s1state === lsu && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop))) &&
-                            !(s1state === replay && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)))
+                            !(s1state === replay && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)))  &&
+                            !(s1state === lsu && (!isStore(s1req(w)) && io.lsu.exception)) &&
+                            !(s1state === replay && (!isStore(s1req(w)) && io.lsu.exception))
                             )   &&
                         // s2周期没有被kill才行，s2周期被kill的只可能分支kill,s2storeFailed本身不会对自己kill
                         !(s2state === lsu && (!isStore(s2req(w)) && IsKilledByBranch(io.lsu.brupdate, s2req(w).uop))) &&
-                        !(s2state === replay && (!isStore(s2req(w)) && IsKilledByBranch(io.lsu.brupdate, s2req(w).uop)))
+                        !(s2state === replay && (!isStore(s2req(w)) && IsKilledByBranch(io.lsu.brupdate, s2req(w).uop))) &&
+                        !(s2state === lsu && (!isStore(s2req(w)) && io.lsu.exception)) &&
+                        !(s2state === replay && (!isStore(s2req(w)) && io.lsu.exception))
     }
 
     val s2hit = RegNext(s1hit)

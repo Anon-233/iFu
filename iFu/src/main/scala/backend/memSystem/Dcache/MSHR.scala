@@ -44,6 +44,8 @@ class MSHREntry extends CoreModule with HasDcacheParameters {
         // 分支预测调整TODO
         val brupdate = Input(new BrUpdateInfo())
 
+        val exception = Input(Bool())
+
         // 之后发进来的每条新的miss请求的地址111
         val newBlockAddr = Input(UInt(nBlockAddrBits.W))
         // 是不是用的同一块111
@@ -105,8 +107,8 @@ class MSHREntry extends CoreModule with HasDcacheParameters {
     
     io.active := mshr.valid && mshr.ready
 
-    //分支预测调整 或reset
-    when (io.reset || IsKilledByBranch(io.brupdate, mshr.req.uop.brMask)) {
+    //分支预测调整 或reset 或对于load的execption
+    when (io.reset || IsKilledByBranch(io.brupdate, mshr.req.uop.brMask) || (io.exception && !isStore(mshr.req))){
         mshr.valid := false.B
         mshr := 0.U.asTypeOf(new MSHRdata)
     }
@@ -201,7 +203,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         // 对于STORE来说，由于LSU传来的STORE一定是分支预测正确的，所以不用管111
         val brupdate = Input(new BrUpdateInfo())
         
-
+        val exception = Input(Bool())
             
         })
 
@@ -246,6 +248,8 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     // 一表只起到作为代表去指导取地址，因此不要传入分支更新，即使被kill掉，由于不知道有没有人依赖这个
     // 一表项，所以不会被分支抹掉,还需要继续取完
     firstMSHRs(i).brupdate := /* io.brupdate */ 0.U.asTypeOf(new BrUpdateInfo)
+    firstMSHRs(i).exception := false.B
+
     firstMSHRs(i).reset :=  false.B
 
     firstMSHRs(i).fetchedBlockAddr := io.fetchedBlockAddr
@@ -306,6 +310,9 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         secondMSHRs(i).fetchedpos := 0.U
         
         secondMSHRs(i).brupdate := io.brupdate
+
+        secondMSHRs(i).exception := io.exception
+
         secondMSHRs(i).reset := false.B
 
         secondMSHRs(i).replayReq.ready := false.B
