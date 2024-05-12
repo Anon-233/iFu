@@ -878,6 +878,7 @@ class iFuCore extends CoreModule {
     // *** debug for difftest
     //-------------------------------------------------------------
     if (!FPGAPlatform) {
+
         val logic_registers = Module(new LogicRegisters)
         logic_registers.io.commit := rob.io.commit
 
@@ -895,6 +896,15 @@ class iFuCore extends CoreModule {
             rawCommit.debug_wdata(w) := rob.io.commit.debug_wdata(w)
             rawCommit.debug_wen(w)   := rob.io.commit.uops(w).ldst_val && rob.io.commit.arch_valids(w)
             rawCommit.valids(w)      := rob.io.commit.arch_valids(w) & (~RegNext(rob.io.com_xcpt.valid))
+        }
+
+        val load_events = Module(new LoadEventCommits)
+        load_events.io.exception := RegNext(rob.io.com_xcpt.valid)
+        for(i <- 0 until robParameters.retireWidth) {
+            load_events.io.rawCommit.debug_uop(i) := rob.io.commit.uops(i)
+            load_events.io.rawCommit.debug_paddr(i) := 0.U
+            load_events.io.rawCommit.debug_vaddr(i) := 0.U
+            load_events.io.rawCommit.valids(i) := rob.io.commit.arch_valids(i) & (~RegNext(rob.io.com_xcpt.valid))
         }
     }
 

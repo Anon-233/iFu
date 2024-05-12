@@ -87,14 +87,14 @@ class DiffGRegStateIO extends DifftestBundle {
 }
 
 class DiffStoreEventIO extends DifftestBundle with DifftestWithIndex {
-    val valid      = Input(Bool())
+    val valid      = Input(UInt(8.W))//{4'b0, llbit && sc_w, st_w, st_h, st_b}
     val storePAddr = Input(UInt(64.W))
     val storeVAddr = Input(UInt(64.W))
     val storeData  = Input(UInt(64.W))
 }
 
 class DiffLoadEventIO extends DifftestBundle with DifftestWithIndex {
-    val valid  = Input(Bool())
+    val valid  = Input(UInt(8.W)) //{2'b0, ll_w, ld_w, ld_hu, ld_h, ld_bu, ld_b}
     val paddr  = Input(UInt(64.W))
     val vaddr  = Input(UInt(64.W))
 }
