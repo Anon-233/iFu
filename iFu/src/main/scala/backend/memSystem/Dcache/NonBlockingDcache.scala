@@ -8,6 +8,8 @@ import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
 
+import iFu.difftest._
+
 trait HasDcacheParameters extends HasCoreParameters{
     val nTagBits       = dcacheParameters.nTagBits
     val nIdxBits       = dcacheParameters.nIdxBits
@@ -214,6 +216,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // 检查全局，如果此时流水线的s0和s1阶段状态为lsu并且有store，就将其kill掉
     val s2StoreFailed = WireInit(false.B)
 
+    val doingMMIO = WireInit(false.B)
     // 对于普通lsu请求,如果当周期检测到有高于lsu优先级请求的话，就将ready置零，下周期lsu发送不过来，同时再去执行非lsu请求
     // 对于mmio的lsu请求,要看总线是否空闲,如果总线空闲,就可以发,如果总线不空闲,就不让发
     io.lsu.req.ready := !(wbValid   ||
@@ -225,7 +228,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                         // 这个信号用于判断s2storeFailed的时候不去接当周期lsu的store请求
                           (lsuhasStore && s2StoreFailed) || 
                         // 如果lsu是mmo  
-                          (/* io.lsu.req.valid &&  */lsuhasMMIO && !axiReady)
+                          (/* io.lsu.req.valid &&  */lsuhasMMIO && !axiReady) ||
+                        // 在一条mmio从进来到做完返回之前的全程，不要接下一个store请求，防止做完乱序
+                          (lsuhasStore && doingMMIO)
                           )
 
   
@@ -328,6 +333,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 lsuMetaRead(w).req.valid := s0valid(w)
                 lsuMetaRead(w).req.bits.idx := getIdx(s0req(w).addr)
                 //这里用到TLB之后,需要将虚拟地址转换为物理地址,采用的是VIPT,因此可能要等下周期TLB的结果
+                //s0不需要tag，s1 再传
                 lsuMetaRead(w).req.bits.tag := getTag(s0req(w).addr)
 
                 // 单纯通知meta是不是一个写指令，不会实际store
@@ -398,6 +404,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     }
     // }
 
+
+
     // mshr的read请求所需信息
     val s1fetchAddr = RegNext(s0fetchAddr)
     // refill好的信息
@@ -416,6 +424,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     when(s1state === lsu){
         for(w <- 0 until memWidth){
+            // s1 发送paddr 用于判断hit
+            // 如果是lsu状态，那么在s1需要将addr转换为paddr
+
+            // s1req(w).addr := io.lsu.s1_paddr(w)
+            // lsuMetaRead(w).req.bits.tag := getTag(io.lsu.s1_paddr(w))
+
             when(lsuMetaRead(w).resp.valid){
                 //在resp之前，meta内部判断是否是store,如果是store,就要判断是否是readOnly,如果是readOnly,就回传来miss
                 when(lsuMetaRead(w).resp.bits.hit){
@@ -431,7 +445,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 }
             }
         }
-
     }.elsewhen(s1state === replay){
         // 只保存读出的meta，然后根据他自己的信息去读data
         when(replayMetaRead.resp.valid){
@@ -503,7 +516,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                         !(s2state === replay && (!isStore(s2req(w)) && io.lsu.exception))
     }
 
-    val s2hit = RegNext(s1hit)
+    val s2hit = WireInit(0.U.asTypeOf(Vec(memWidth , Bool())))
+    for(w <- 0 until memWidth){
+        // 对于lsu的store请求，要现在mshr里面找，如果有store，就当作miss处理
+        s2hit(w) := RegNext(s1hit(w)) && !(s2state === lsu && (isStore(s2req(w)) && mshrs.io.hasStore))
+    }
     // 其他状态的pos
     val s2pos = RegNext(s1pos)
     // lsu请求下hit的pos
@@ -536,6 +553,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         s2StoreFailed := missArbiter.io.storeFailed
         sendNack := missArbiter.io.sendNack
         sendResp := missArbiter.io.sendResp
+        
+
         // 以上将所有中途kill或者miss的请求都处理完了，接下来处理hit且活着的请求
         for(w <- 0 until memWidth){
             when(s2hit(w)){
@@ -745,10 +764,29 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         io.lsu.resp(w).valid := sendResp(w)
     }
 
+    // difftest
+    val isRealStoreState = (s2state === lsu || s2state === replay || s2state === mmioresp)
+
+    val difftest = Module(new DifftestStoreEvent)
+    //{4'b0, llbit && sc_w, st_w, st_h, st_b}
+    val sc_w =  isRealStoreState && sendResp(0) && s2valid(0) && s2req(0).uop.is_sc
+    val st_w =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 2.U
+    val st_h =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 1.U
+    val st_b =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 0.U
+    difftest.io.valid := VecInit(Cat((0.U(4.W)), io.lsu.llbit && sc_w, st_w, st_h, st_b)).asUInt
+    difftest.io.clock := clock
+    difftest.io.coreid := 0.U // only support 1 core now
+    difftest.io.index := 0.U
+    difftest.io.storePAddr := s2req(0).addr
+    difftest.io.storeVAddr := 0.U
+    difftest.io.storeData := WordWrite(s2req(0), 0.U(32.W))
+
     // 当两个都ready并且流水线中没有fence,mmioreq,mshrread,mmioresp,wb,refill的时候，axiReady才会拉高
     axiReady := (wfu.io.ready && mmiou.io.ready) &&
                 (s1state =/= fence_read && s1state =/= fence_clear && s1state =/= mmioresp && s1state =/= mmioreq && s1state =/= mshrread && s1state =/= wb && s1state =/= refill) &&
                 (s1state =/= fence_read && s2state =/= fence_clear && s2state =/= mmioresp && s2state =/= mmioreq && s2state =/= mshrread && s2state =/= wb && s2state =/= refill)
+
+    doingMMIO := s1state === mmioreq || s2state === mmioreq || !mmiou.io.ready
 
     // TODO enable continuous hit store forwarding(DONE)
     // TODO simplify the IO channel of DCacheData and DCacheMeta(DONE)

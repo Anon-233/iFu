@@ -22,6 +22,9 @@ class MMIOUnit extends Module  with HasDcacheParameters{
         val cbusReq = Output(new CBusReq)
     })
 
+    if(!FPGAPlatform)dontTouch(io)
+
+
     val ready :: fetch :: wb :: Nil = Enum(3)
     val state = RegInit(ready)
     //
@@ -43,6 +46,7 @@ class MMIOUnit extends Module  with HasDcacheParameters{
     
     io.ready := state === ready
 
+    if(!FPGAPlatform)dontTouch(mmioReq)
 
     when(state === ready){
         when(io.mmioReq.valid){
@@ -61,6 +65,7 @@ class MMIOUnit extends Module  with HasDcacheParameters{
             io.mmioResp.valid := true.B
             io.mmioResp.bits.data := io.cbusResp.data
             io.mmioResp.bits.uop := mmioReq.uop
+            io.mmioResp.bits.addr := mmioReq.addr
             state := Mux(io.cbusResp.isLast, ready, fetch)
             
         }
@@ -77,10 +82,16 @@ class MMIOUnit extends Module  with HasDcacheParameters{
                             Mux(mmioReq.uop.mem_size === 1.U, Fill(2, mmioReq.data(15, 0)), 
                                         // word
                                                                     mmioReq.data))
+        val debug_lo_byte = mmioReq.data(7, 0)
+        val debug_lo_half = mmioReq.data(15, 0)
+
+        dontTouch(debug_lo_byte)
+        dontTouch(debug_lo_half)
+
         when(io.cbusResp.ready){
             assert(io.cbusResp.isLast, "mmio write must be single word")
             io.mmioResp.valid := true.B
-            io.mmioResp.bits.uop := mmioReq.uop
+            io.mmioResp.bits := mmioReq
             state := Mux(io.cbusResp.isLast, ready, fetch)
         }
     }

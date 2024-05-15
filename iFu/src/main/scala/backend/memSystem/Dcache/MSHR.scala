@@ -3,7 +3,7 @@ import chisel3._
 import chisel3.util._
 import iFu.common._
 import iFu.util._
-
+import iFu.common.Consts._
 
 class MSHRdata extends CoreBundle with HasDcacheParameters{
     //该项是否有效
@@ -207,7 +207,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
             
         })
 
-    // if(!FPGAPlatform)dontTouch(io)
+    if(!FPGAPlatform)dontTouch(io)
     val firstMSHRs = VecInit((Seq.fill(nFirstMSHRs)(Module(new MSHREntry))).map(_.io))
     val secondMSHRs = VecInit((Seq.fill(nSecondMSHRs)(Module(new MSHREntry))).map(_.io))
 
@@ -293,6 +293,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
     // hasStore
     io.hasStore := hasStore
+    
 
     for(i <- 0 until nSecondMSHRs) {
         // 二表相对于一表，只用来写入，和brupdate调整

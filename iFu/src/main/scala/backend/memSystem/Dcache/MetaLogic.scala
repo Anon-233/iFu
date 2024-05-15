@@ -15,7 +15,6 @@ class MetaLine extends CoreBundle with HasDcacheParameters {
     val readOnly = Bool()
     val fixed = Bool()
     val tag   = UInt(nTagBits.W)
-
     // No age here, it is preserved at MetaLogic , because we need 
     // hit or miss to decide how to update age
 }
@@ -205,8 +204,8 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
             is(lsu_R){
                 // isLsuStore用来触发Store的命中机制
                 val isLsuStore = RegNext(io.lsuRead(w).req.bits.isLsuStore)
-                val rtag = RegNext(readTag(w))
-                val hitoh = VecInit(rmetaSet.map((x: MetaLine) => x.valid && x.tag === rtag && 
+                val rtag = RegNext(readTag(w))// no need RegNext(readTag(w)) , because  the tag is from io.lsu.s1_paddr
+                val hitoh = VecInit(rmetaSet.map((x: MetaLine) => x.valid && x.tag === rtag &&
                      !(x.readOnly && isLsuStore) // 如果是一个试图访问只读块的store指令，就认为是miss
                 )).asUInt
                 val hitpos = PriorityEncoder(hitoh)
