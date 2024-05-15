@@ -60,6 +60,7 @@ class MMIOUnit extends Module  with HasDcacheParameters{
 
         io.cbusReq.addr := fetchAddr
         io.cbusReq.data := DontCare
+        io.cbusReq.size := mmioReq.uop.mem_size
         when(io.cbusResp.ready){
             assert(io.cbusResp.isLast, "mmio fetch must be single word")
             io.mmioResp.valid := true.B
