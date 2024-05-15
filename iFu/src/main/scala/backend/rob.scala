@@ -53,6 +53,7 @@ class RobIO(val numWritePorts: Int) extends CoreBundle {
     val debug_wb_wdata  = if (!FPGAPlatform) Input(Vec(numWritePorts, Bits(xLen.W))) else null
     val debug_wb_ldst   = if (!FPGAPlatform) Input(Vec(numWritePorts, UInt(lregSz.W))) else null
     val debug_wb_pc     = if (!FPGAPlatform) Input(Vec(numWritePorts, UInt(32.W))) else null
+    val debug_load_uncacheable = if (!FPGAPlatform) Input(Vec(numWritePorts, Bool())) else null
 }
 
 class Rob(val numWritePorts: Int) extends CoreModule {
@@ -131,6 +132,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
         val rob_debug_ldst  = Mem(numRobRows,UInt(lregSz.W))
         val rob_debug_pc    = Mem(numRobRows,UInt(32.W))
+        val rob_debug_load_uncacheable = Mem(numRobRows, Bool())
 
         //------------------dispatch stage------------------
         //enqueue
@@ -255,6 +257,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
                     rob_debug_wdata(GetRowIdx(rob_idx)) := io.debug_wb_wdata(i)
                     rob_debug_ldst(GetRowIdx(rob_idx)) := io.debug_wb_ldst(i)
                     rob_debug_pc(GetRowIdx(rob_idx)) := io.debug_wb_pc(i)
+                    rob_debug_load_uncacheable(GetRowIdx(rob_idx)) := io.debug_load_uncacheable(i)
                 }
                 val temp_uop = robUop(GetRowIdx(rob_idx))
 
@@ -271,6 +274,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
             io.commit.debug_wdata(w) := rob_debug_wdata(robHead)
             io.commit.debug_ldst(w) := rob_debug_ldst(robHead)
             io.commit.debug_pc(w) := rob_debug_pc(robHead)
+            io.commit.debug_load_uncacheable(w) := rob_debug_load_uncacheable(robHead)
         }
     }
 

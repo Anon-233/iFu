@@ -829,6 +829,7 @@ class iFuCore extends CoreModule {
             rob.io.debug_wb_wdata(cnt) := mem_resps(i).bits.data
             rob.io.debug_wb_ldst(cnt) := mem_uop.ldst
             rob.io.debug_wb_pc(cnt) := mem_uop.debug_pc
+            rob.io.debug_load_uncacheable(cnt) := mem_uop.debug_load_uncacheable
 
             dontTouch(mem_uop.debug_pc)
         }
@@ -857,6 +858,7 @@ class iFuCore extends CoreModule {
                     rob.io.debug_wb_ldst(cnt) := wb_uop.ldst
                     rob.io.debug_wb_pc(cnt) := wb_uop.debug_pc
                 }
+                rob.io.debug_load_uncacheable(cnt) := false.B
             }
             cnt += 1
 
@@ -893,19 +895,12 @@ class iFuCore extends CoreModule {
             rawCommit.debug_pc(w)    := rob.io.commit.uops(w).debug_pc
             rawCommit.debug_ldst(w)  := rob.io.commit.uops(w).ldst
             rawCommit.debug_insts(w) := rob.io.commit.uops(w).debug_inst
+            rawCommit.debug_load_uncacheable(w) := rob.io.commit.debug_load_uncacheable(w)
             rawCommit.debug_wdata(w) := rob.io.commit.debug_wdata(w)
             rawCommit.debug_wen(w)   := rob.io.commit.uops(w).ldst_val && rob.io.commit.arch_valids(w)
             rawCommit.valids(w)      := rob.io.commit.arch_valids(w) & (~RegNext(rob.io.com_xcpt.valid))
         }
 
-        val load_events = Module(new LoadEventCommits)
-        load_events.io.exception := RegNext(rob.io.com_xcpt.valid)
-        for(i <- 0 until robParameters.retireWidth) {
-            load_events.io.rawCommit.debug_uop(i) := rob.io.commit.uops(i)
-            load_events.io.rawCommit.debug_paddr(i) := 0.U
-            load_events.io.rawCommit.debug_vaddr(i) := 0.U
-            load_events.io.rawCommit.valids(i) := rob.io.commit.arch_valids(i) & (~RegNext(rob.io.com_xcpt.valid))
-        }
     }
 
     //-------------------------------------------------------------

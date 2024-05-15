@@ -107,6 +107,7 @@ class CommitSignals extends CoreBundle {
     val debug_wdata = if (!FPGAPlatform) Vec(robParameters.retireWidth, UInt(xLen.W)) else null
     val debug_ldst = if (!FPGAPlatform) Vec(robParameters.retireWidth, UInt(lregSz.W)) else null
     val debug_pc = if (!FPGAPlatform) Vec(robParameters.retireWidth, UInt(32.W)) else null
+    val debug_load_uncacheable = if (!FPGAPlatform) Vec(robParameters.retireWidth, Bool()) else null
 }
 
 case class SupportedFuncs (

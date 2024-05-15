@@ -947,6 +947,8 @@ class Lsu extends CoreModule {
                 val send_iresp = ldq(ldq_idx).bits.uop.dst_rtype === RT_FIX
 
                 io.core.exe(w).iresp.bits.uop := ldq(ldq_idx).bits.uop
+                if (!FPGAPlatform)
+                    io.core.exe(w).iresp.bits.uop.debug_load_uncacheable := ldq(ldq_idx).bits.is_uncacheable
                 io.core.exe(w).iresp.valid := send_iresp
                 io.core.exe(w).iresp.bits.data := loadDataGen(
                     ldq(ldq_idx).bits.addr.bits(1,0),

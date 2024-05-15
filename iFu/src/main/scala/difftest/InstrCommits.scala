@@ -15,7 +15,8 @@ class InstrCommit extends CoreBundle {
     val debug_wdata = Vec(robParameters.retireWidth, UInt(xLen.W))
     val debug_ldst  = Vec(robParameters.retireWidth, UInt(lregSz.W))
     val debug_pc    = Vec(robParameters.retireWidth, UInt(32.W))
-    val debug_wen   = Vec(robParameters.retireWidth,Bool())
+    val debug_wen   = Vec(robParameters.retireWidth, Bool())
+    val debug_load_uncacheable = Vec(robParameters.retireWidth, Bool())
 
     val valids      = Vec(robParameters.retireWidth,Bool())
 }
@@ -61,27 +62,37 @@ class InstrCommits extends CoreModule {
             zippedCommit.debug_wdata(idx) := rawCommit.debug_wdata(i)
             zippedCommit.debug_wen(idx)   := rawCommit.debug_wen(i)
             zippedCommit.debug_uopc(idx)  := rawCommit.debug_uopc(i)
+            zippedCommit.debug_load_uncacheable(idx) := rawCommit.debug_load_uncacheable(i)
         }
     }
 
     for (i <- 0 until 4) {
-        val difftest = Module(new DifftestInstrCommit)
-        difftest.io.clock  := clock
-        difftest.io.coreid := 0.U   // only support 1 core now
+        val dic = Module(new DifftestInstrCommit)
+        dic.io.clock  := clock
+        dic.io.coreid := 0.U   // only support 1 core now
 
-        difftest.io.index          := i.U
-        difftest.io.valid          := zippedCommit.valids(i)
-        difftest.io.pc             := zippedCommit.debug_pc(i)
-        difftest.io.instr          := zippedCommit.debug_insts(i)
-        difftest.io.skip           := false.B
-        difftest.io.is_TLBFILL     := zippedCommit.debug_uopc(i) === uopTLBFILL
-        difftest.io.TLBFILL_index  := Cat(0.U(3.W), io.fill_idx - 1.U)
-        difftest.io.is_CNTinst     := false.B
-        difftest.io.timer_64_value := 0.U
-        difftest.io.wen            := zippedCommit.debug_wen(i)
-        difftest.io.wdest          := zippedCommit.debug_ldst(i)
-        difftest.io.wdata          := zippedCommit.debug_wdata(i)
-        difftest.io.csr_rstat      := false.B
-        difftest.io.csr_data       := 0.U
+        dic.io.index          := i.U
+        dic.io.valid          := zippedCommit.valids(i)
+        dic.io.pc             := zippedCommit.debug_pc(i)
+        dic.io.instr          := zippedCommit.debug_insts(i)
+        dic.io.skip           := false.B
+        dic.io.is_TLBFILL     := zippedCommit.debug_uopc(i) === uopTLBFILL
+        dic.io.TLBFILL_index  := Cat(0.U(3.W), io.fill_idx - 1.U)
+        dic.io.is_CNTinst     := false.B
+        dic.io.timer_64_value := 0.U
+        dic.io.wen            := zippedCommit.debug_wen(i)
+        dic.io.wdest          := zippedCommit.debug_ldst(i)
+        dic.io.wdata          := zippedCommit.debug_wdata(i)
+        dic.io.csr_rstat      := false.B
+        dic.io.csr_data       := 0.U
+
+        val dle = Module(new DifftestLoadEvent)
+        dle.io.clock          := clock
+        dle.io.coreid         := 0.U
+        dle.io.vaddr          := 0.U
+
+        dle.io.valid          := zippedCommit.debug_load_uncacheable(i)
+        dle.io.index          := i.U
+        dle.io.paddr          := 0xf8000000L.asUInt
     }
 }
