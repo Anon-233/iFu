@@ -73,6 +73,8 @@ class MMIOUnit extends Module  with HasDcacheParameters{
 
     }.elsewhen(state === wb){
         io.cbusReq.addr := mmioReq.addr
+        // 设置size
+        io.cbusReq.size := mmioReq.uop.mem_size
         // 根据粒度, 造写入的数据,例如写入字节,始终要写入的是低8位,但是mask的不同决定写入位置不一样
         // 因此,如果st.b就是四份最低字节
         // 如果st.h就是两份低半字,st.w才是一份字

@@ -354,8 +354,8 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
             when(matchActiveFirst){
                 // 快速唤醒
                 secondMSHRs(allocSecondMSHR).fastWakeUp := true.B
-                // 一表项在唤醒的时候会将自己变成ready并且记录下pos,此时直接找一表项去要pos
-                secondMSHRs(allocSecondMSHR).fetchedpos := firstMSHRs(firstNewMatchway).replaypos
+                // 一表项在唤醒的时候会将自己变成ready并且记录下pos,此时拿的是此时一并传进来的fetchpos
+                secondMSHRs(allocSecondMSHR).fetchedpos := io.fetchedpos
             }.otherwise{
                 // 什么都不做，按正常运行 
                 secondMSHRs(allocSecondMSHR).fastWakeUp := false.B
