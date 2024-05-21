@@ -198,7 +198,7 @@ fetchReady到s2的时候才会给mshr，这个时候，s0,s1都有其他的事�
 
 
 19. mshr的secondmiss导致重取行的问题
-![Alt text](image.png)
+![Alt text](imgs\image.png)
 
 分析refill
 当最后一个字的refill进行到s0时候，fetchReady和fetchedPos拉高
