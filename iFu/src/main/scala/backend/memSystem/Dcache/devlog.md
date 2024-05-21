@@ -226,3 +226,20 @@ s2 refill
 一表项还是得晚两个周期重置，这两个周期正好适合被调整为活跃状态，便于二表项快速唤醒判断，根据fetchReady信号和pos信号，来判断是否快速唤醒
 
 这两个周期相比于至少16个周期的refill周期，是不会出现新的重填冲突的
+
+20. readOnly设置时间
+之前说当refill到该行的第一个字才设成readOnly，为的是能多做几条st指令，然而这是错误的
+
+没有dirty的一行，mshrread送入wfu，此时wfu认为只需要refill新的行就好
+
+在mshrread到refill第一个字的期间
+如果有st这一行的指令进来，就会命中，它不知道readOnly，hit上做了一个字，但wfu显然不会感知到这个问题，因为他认为只要refill新的行就好，于是访存不一致
+
+因此要尽可能提早地设置readOnly，不是refill第一个字，而是在mshrread到s2的时候就要设置readOnly
+
+此时情况如下
+- s0 没问题，感知到readOnly
+- s1 如果是那种st指令，一周期之前还不知道该行被设为readOnly，仍然hit要做
+- s2 刚刚把那一行设为readOnly
+
+因此附加机制，fastReadOnly，存储上述情况（要readOnly但那还没拉高）的那一行，在metalogic里面，只读行的条件不仅仅那一行readOnly，也要或上正好匹配到fastReadOnly，这样才是完整的只读行条件

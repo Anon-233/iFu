@@ -190,6 +190,17 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     }
 
 
+    // 代一个周期，快速该行设为readOnly
+    val fastROval = RegInit(false.B)
+    val fastROidx = RegInit(0.U(nIdxBits.W))
+    val fastROtag = RegInit(0.U(nTagBits.W))
+    dontTouch(fastROval)
+    dontTouch(fastROidx)
+    dontTouch(fastROtag)
+
+    fastROval := false.B
+    fastROidx := 0.U
+    fastROtag := 0.U
 
     for(w <- 0 until memWidth){
         
@@ -206,13 +217,13 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                 val isLsuStore = RegNext(io.lsuRead(w).req.bits.isLsuStore)
                 val rtag = RegNext(readTag(w))// no need RegNext(readTag(w)) , because  the tag is from io.lsu.s1_paddr
                 val hitoh = VecInit(rmetaSet.map((x: MetaLine) => x.valid && x.tag === rtag &&
-                     !(x.readOnly && isLsuStore) // 如果是一个试图访问只读块的store指令，就认为是miss
-                )).asUInt
+                    // 如果是一个试图访问只读块(这行被设置成只读，或者上个周期有条mshrread将把这里设置成只读)的store指令，就认为是miss
+                     !( isLsuStore && (x.readOnly || (fastROval && fastROtag === rtag && fastROidx === ridx)))
+                     )).asUInt
                 val hitpos = PriorityEncoder(hitoh)
                 readResp(w).bits.hit := hitoh.orR
                 readResp(w).bits.pos := hitpos
                 readResp(w).bits.rmeta := rmetaSet(hitpos)
-
             }
             is(replay_R){
                 
@@ -254,6 +265,12 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                 readResp(w).bits.pos := replacePos
                 // 可能读到的是有效的，也可能是无效的行 ,送到axi那边自行判断要不要先写回总线
                 readResp(w).bits.rmeta := rmetaSet(replacePos)
+                
+                // 记录这个s1取出来的，该被设为readOnly的行的信息
+                fastROval := true.B
+                fastROidx := ridx
+                fastROtag := rmetaSet(replacePos).tag
+
             }
 
 

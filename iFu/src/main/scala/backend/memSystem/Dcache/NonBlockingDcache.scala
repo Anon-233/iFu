@@ -228,9 +228,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                         // 这个信号用于判断s2storeFailed的时候不去接当周期lsu的store请求
                           (lsuhasStore && s2StoreFailed) || 
                         // 如果lsu是mmo  
-                          (/* io.lsu.req.valid &&  */lsuhasMMIO && !axiReady) 
+                          (/* io.lsu.req.valid &&  */lsuhasMMIO && !axiReady)
                         // 在一条mmio从进来到做完返回之前的全程，不要接下一个store请求(即使是普通的store)，防止提交顺序不同对不上difftest
                         //   (lsuhasStore && doingMMIO)
+
                           )
 
   
@@ -354,7 +355,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // 想fetch的地址保存在s0fetchAddr
         s0fetchAddr := s0req(0).addr
 
-
     }.elsewhen(s0state === refill){
         when(s0fetchReady){
             // 通告地址，以及refill到的行号
@@ -462,7 +462,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             wfu.io.valid := s1valid(0)
             wfu.io.fetchAddr := s1fetchAddr
             wfu.io.metaresp := mshrMetaRead.resp.bits
-
         }
 
     }.elsewhen(s1state === refill){
@@ -521,8 +520,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // 对于lsu的store请求，要现在mshr里面找，如果有store，就当作miss处理
         s2hit(w) := RegNext(s1hit(w)) && !(s2state === lsu && (isStore(s2req(w)) && mshrs.io.hasStore))
     }
-    // 其他状态的pos
-    val s2pos = RegNext(s1pos)
+    // 其他状态的pos (对于mshrpos，在s1才直到自己分到的pos，这里要及时更新)
+    val s2pos = RegNext(Mux(s1state === mshrread, mshrMetaRead.resp.bits.pos, s1pos))
     // lsu请求下hit的pos
     val s2hitpos = RegNext(s1hitpos)
     // lsu阶段，如果发生了miss，将由missArbiter来决定写入mshr行为
@@ -630,6 +629,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     }.elsewhen(s2state === mshrread){
         // 激活wfu在1阶段就做完了
+        // 在s2，将那一行的readOnly拉高，直到该行处理完毕，不允许st指令操作这一行
+        axiMetaWrite.req.valid := s2valid(0)
+        axiMetaWrite.req.bits.idx := getIdx(s2fetchAddr)
+        axiMetaWrite.req.bits.pos := s2pos
+        axiMetaWrite.req.bits.setreadOnly.valid := true.B
+        axiMetaWrite.req.bits.setreadOnly.bits := true.B
     }.elsewhen(s2state ===fence_read){
         // 激活wfu在1阶段就做完了,这里可能之后做fenceWrite的清除对应meta行
     }.elsewhen(s2state === wb){
@@ -637,15 +642,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         wfu.io.axiReadResp.valid := axiDataRead.resp.valid
         wfu.io.axiReadResp.bits.data := axiDataRead.resp.bits.data
 
-        // wb的时候,判断addr的地址是不是那一行的第一个字,如果是,拉高那一行的只读位
-        when(s2req(0).addr(nOffsetBits -1, 2) === 0.U){
-            axiMetaWrite.req.valid := s2valid(0)
-            axiMetaWrite.req.bits.idx := getIdx(s2req(0).addr)
-            axiMetaWrite.req.bits.pos := s2pos
-
-            axiMetaWrite.req.bits.setreadOnly.valid := true.B
-            axiMetaWrite.req.bits.setreadOnly.bits := true.B
-        }
+        
         // resp和nack都不发
         for (w <- 0 until memWidth) {
             sendResp(w) := false.B
