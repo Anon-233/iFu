@@ -347,15 +347,19 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         // 非首次miss，只写入二表，id是一表它对应的那一项的id
             secondMSHRs(allocSecondMSHR).id := firstNewMatchway
             secondMSHRs(allocSecondMSHR).req.valid := io.req.valid
-            // 如果自己匹配的那个表项就在这个周期触发了被唤醒的逻辑(下个周期就会被刷没了)，那么二表项存入的时候采取快速唤醒
-            // 这里信号的意思是匹配到了这个周期就被唤醒的一表项
-            val matchActiveFirst = io.fetchReady && fetchedBlockAddrMatches(firstNewMatchway)/* firstMSHRs(firstNewMatchway).active */
+            // 快速唤醒见devlog
+            val matchActiveFirst = (
+                                    (io.fetchReady && fetchedBlockAddrMatches(firstNewMatchway))//当周期匹配到一个将要被唤醒的
+                                    || firstMSHRs(firstNewMatchway).active//一个被唤醒保持活跃状态的表项
+                                    )
             
             when(matchActiveFirst){
                 // 快速唤醒
                 secondMSHRs(allocSecondMSHR).fastWakeUp := true.B
-                // 一表项在唤醒的时候会将自己变成ready并且记录下pos,此时拿的是此时一并传进来的fetchpos
-                secondMSHRs(allocSecondMSHR).fetchedpos := io.fetchedpos
+                // 一表项在唤醒的时候会将自己变成ready并且记录下pos,此时拿判断是当周期传入的pos还是活跃一表的pos
+                secondMSHRs(allocSecondMSHR).fetchedpos := Mux(firstMSHRs(firstNewMatchway).active 
+                                                                ,firstMSHRs(firstNewMatchway).replaypos 
+                                                                ,io.fetchedpos )
             }.otherwise{
                 // 什么都不做，按正常运行 
                 secondMSHRs(allocSecondMSHR).fastWakeUp := false.B
@@ -368,8 +372,6 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
     // 如果一个fetch取好了，就把它从一表中删掉，然后激活二表中的对应项，等待之后用到它的时候一项一项的拿
     when(io.fetchReady){
-        // 删除first表中的fetch地址项(改为两个周期以后再清除，他们会变成ready状态待两个周期
-        firstMSHRs(firstFetchMatchway).reset := true.B
         // 激活second表中的fetch地址项,同时告诉二表这一行所在的位置
         for(i <- 0 until nSecondMSHRs) {
             when(secondMSHRs(i).getID === firstFetchMatchway){
@@ -378,6 +380,10 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
             }
         }
     }
+    // 删除first表中的fetch地址项(改为两个周期以后再清除，他们会变成ready状态待两个周期
+    val s2fetchReady = RegNext(RegNext(io.fetchReady))
+    val s2firstFetchMatchway = RegNext(RegNext(firstFetchMatchway))
+    firstMSHRs(s2firstFetchMatchway).reset := s2fetchReady
 
     // 传出新的fetch地址(如果有的话)
     val fetchable = haswait

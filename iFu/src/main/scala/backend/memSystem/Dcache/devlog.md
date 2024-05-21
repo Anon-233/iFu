@@ -195,3 +195,34 @@ ds影响不大，ipc还是1.27
 fetchReady到s2的时候才会给mshr，这个时候，s0,s1都有其他的事务了，如果这条指令是miss重填好的st指令，那么当他进入s0的时候，s1，s2那些lsu发过来的在他之后的的st指令就会被先做完，这是不允许的，因此s2的时候，有一条说正常做完的st指令要看mshr里面有没有hasStore，配合上一表项两周期的驻留，就可以保证这个指令不会提前做完，而是再一次去重发。
 
 但是完全可以在s0就判断出来送给mshr去让他下个周期replay，就不会有这个问题，并且当s2refill完成的时候，如没有更高优先级的东西，s1正好执行到那条replay的东西读数据，此时s2写最后一个字,被内部转发保证了数据的正确性使得逻辑更加清晰了.
+
+
+19. mshr的secondmiss导致重取行的问题
+![Alt text](image.png)
+
+分析refill
+当最后一个字的refill进行到s0时候，fetchReady和fetchedPos拉高
+s0 refill
+s1 肯定miss的 lsu1
+s2 肯定miss的 lsu2 此时它可以看到一表项，没问题
+
+下个周期一表项就将被删除了
+
+s0 将要miss的lsu2
+s1 refill
+s2 肯定miss的lsu1 ，但此时一表项已经被删除了，就做不了secondmiss了
+因此需要一个regnext的fetchready和pos。来避免这个问题
+
+再下个周期
+当refill结束作用于meta的时候
+
+s0 xxx，没问题，就是hit了
+s1 如果是lsu，此时实际上被判miss
+s2 refill
+
+下个周期，miss的lsu进行到s2，然而此时一表项已经被清除掉了，就做不了secondmiss了。
+因此需要两个regnext的fetchready和pos。来避免这个问题
+
+一表项还是得晚两个周期重置，这两个周期正好适合被调整为活跃状态，便于二表项快速唤醒判断，根据fetchReady信号和pos信号，来判断是否快速唤醒
+
+这两个周期相比于至少16个周期的refill周期，是不会出现新的重填冲突的
