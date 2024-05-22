@@ -380,10 +380,13 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
             }
         }
     }
-    // 删除first表中的fetch地址项(改为两个周期以后再清除，他们会变成ready状态待两个周期
+    // 删除first表中的fetch地址项(两个周期之后，refill进行到s2，正式写meta
     val s2fetchReady = RegNext(RegNext(io.fetchReady))
     val s2firstFetchMatchway = RegNext(RegNext(firstFetchMatchway))
-    firstMSHRs(s2firstFetchMatchway).reset := s2fetchReady
+    // 再一个周期，留给refill后面可能紧跟的，被判为miss的lsu请求（见devlog）
+    val s3fetchReady = RegNext(s2fetchReady)
+    val s3firstFetchMatchway = RegNext(s2firstFetchMatchway)
+    firstMSHRs(s3firstFetchMatchway).reset := s3fetchReady
 
     // 传出新的fetch地址(如果有的话)
     val fetchable = haswait

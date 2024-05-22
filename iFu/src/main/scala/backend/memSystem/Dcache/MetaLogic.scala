@@ -126,11 +126,15 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     val readTag = Wire(Vec(memWidth, UInt(nTagBits.W)))
     val readPos = Wire(Vec(memWidth, UInt(log2Ceil(nWays).W)))
     val readResp = 0.U.asTypeOf(Vec(memWidth, Valid(new DcacheMetaResp)))
+    // lsureadinfo
+    val hitoh = Wire(Vec(memWidth, UInt(nWays.W)))
+
     if(!FPGAPlatform)dontTouch(readType)
     if(!FPGAPlatform)dontTouch(readIdx)
     if(!FPGAPlatform)dontTouch(readPos)
     if(!FPGAPlatform)dontTouch(readTag)
     if(!FPGAPlatform)dontTouch(readResp)
+    if(!FPGAPlatform)dontTouch(hitoh)
 
     for(w <- 0 until memWidth){
         readType :=  Mux(haslsuRead , lsu_R,
@@ -175,10 +179,11 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                         Mux(io.cacopRead.req.valid, io.cacopRead.req.bits.tag,
                                                     0.U(nTagBits.W)))
                         
-
+        
     }
 
     for(w<- 0 until memWidth){
+
         meta.io.read(w).req.valid := readValid(w)
         meta.io.read(w).req.bits := readReq(w)
 
@@ -187,6 +192,8 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
         readResp(w).bits.idx := RegNext(readIdx(w))
 
         // 其他项根据情况在下面配置
+        // lsu read
+        hitoh(w) := 0.U
     }
 
 
@@ -194,6 +201,7 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     val fastROval = RegInit(false.B)
     val fastROidx = RegInit(0.U(nIdxBits.W))
     val fastROtag = RegInit(0.U(nTagBits.W))
+
     dontTouch(fastROval)
     dontTouch(fastROidx)
     dontTouch(fastROtag)
@@ -216,12 +224,13 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                 // isLsuStore用来触发Store的命中机制
                 val isLsuStore = RegNext(io.lsuRead(w).req.bits.isLsuStore)
                 val rtag = RegNext(readTag(w))// no need RegNext(readTag(w)) , because  the tag is from io.lsu.s1_paddr
-                val hitoh = VecInit(rmetaSet.map((x: MetaLine) => x.valid && x.tag === rtag &&
+                hitoh(w) := VecInit(rmetaSet.map((x: MetaLine) => x.valid && x.tag === rtag &&
                     // 如果是一个试图访问只读块(这行被设置成只读，或者上个周期有条mshrread将把这里设置成只读)的store指令，就认为是miss
                      !( isLsuStore && (x.readOnly || (fastROval && fastROtag === rtag && fastROidx === ridx)))
                      )).asUInt
-                val hitpos = PriorityEncoder(hitoh)
-                readResp(w).bits.hit := hitoh.orR
+                assert(PopCount(hitoh(w)) <= 1.U,"At most one hit")
+                val hitpos = PriorityEncoder(hitoh(w))
+                readResp(w).bits.hit := hitoh(w).orR
                 readResp(w).bits.pos := hitpos
                 readResp(w).bits.rmeta := rmetaSet(hitpos)
             }

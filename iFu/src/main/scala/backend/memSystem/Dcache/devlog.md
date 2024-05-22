@@ -208,7 +208,7 @@ s2 肯定miss的 lsu2 此时它可以看到一表项，没问题
 
 下个周期一表项就将被删除了
 
-s0 将要miss的lsu2
+s0 将要miss的lsu2 (一般是紧跟replay，但可能replay的被branchKill了，传来的是普通的lsu指令)
 s1 refill
 s2 肯定miss的lsu1 ，但此时一表项已经被删除了，就做不了secondmiss了
 因此需要一个regnext的fetchready和pos。来避免这个问题
@@ -220,12 +220,12 @@ s0 xxx，没问题，就是hit了
 s1 如果是lsu，此时实际上被判miss
 s2 refill
 
-下个周期，miss的lsu进行到s2，然而此时一表项已经被清除掉了，就做不了secondmiss了。
+再下个周期，miss的lsu进行到s2，然而此时一表项已经被清除掉了，就做不了secondmiss了。
 因此需要两个regnext的fetchready和pos。来避免这个问题
 
-一表项还是得晚两个周期重置，这两个周期正好适合被调整为活跃状态，便于二表项快速唤醒判断，根据fetchReady信号和pos信号，来判断是否快速唤醒
+一表项得晚三个周期重置，这三个周期正好适合被调整为活跃状态(两个周期配合refill的s2，再一个周期留给refill后面的那条lsu)，便于二表项快速唤醒判断，根据fetchReady信号和pos信号，来判断是否快速唤醒
 
-这两个周期相比于至少16个周期的refill周期，是不会出现新的重填冲突的
+这三个周期相比于至少16个周期的refill周期，是不会出现新的重填冲突的
 
 20. readOnly设置时间
 之前说当refill到该行的第一个字才设成readOnly，为的是能多做几条st指令，然而这是错误的
@@ -243,3 +243,11 @@ s2 refill
 - s2 刚刚把那一行设为readOnly
 
 因此附加机制，fastReadOnly，存储上述情况（要readOnly但那还没拉高）的那一行，在metalogic里面，只读行的条件不仅仅那一行readOnly，也要或上正好匹配到fastReadOnly，这样才是完整的只读行条件
+
+21. 技术性问题
+a = RegInit(0.U)
+只是初始值为0
+如果不指定a始终有默认值a := 0
+如果之后有哪怕一个周期触发了a := 1,那么a就不会再是0了，并不是自动默认值
+因此还是要加上a := 0 ,然后再去某个分支条件里面赋值a:=1
+
