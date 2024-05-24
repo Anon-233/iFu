@@ -70,9 +70,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     }
 
 
-    val replay :: wb :: refill ::  mshrread :: lsu  :: mmioreq :: mmioresp  :: prefetch  :: fence_read :: fence_clear :: cacop :: nil :: Nil = Enum(12)
-
-
+    val replay :: wb :: refill ::  mshrread :: lsu :: mmioreq :: mmioresp  :: prefetch  :: fence_read :: fence_clear :: cacop :: nil :: Nil = Enum(12)
 
     // 替换单元
     val wfu = Module(new WriteFetchUnit)
@@ -117,6 +115,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     val mshrMetaRead = meta.io.mshrRead
     mshrMetaRead.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
+
+    val axiMetaRead = meta.io.axiRead
+    axiMetaRead.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
+
     val axiMetaWrite = meta.io.axiWrite
     axiMetaWrite.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
 
@@ -338,7 +340,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 lsuMetaRead(w).req.bits.tag := getTag(s0req(w).addr)
 
                 // 单纯通知meta是不是一个写指令，不会实际store
-                lsuMetaRead(w).req.bits.isLsuStore := (isStore(s0req(w)))
+                lsuMetaRead(w).req.bits.isStore := (isStore(s0req(w)))
         }
 
     }.elsewhen(s0state === replay){
@@ -346,6 +348,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         replayMetaRead.req.valid := s0valid(0)
         replayMetaRead.req.bits.idx := getIdx(s0req(0).addr)
         replayMetaRead.req.bits.tag := getTag(s0req(0).addr)
+        replayMetaRead.req.bits.isStore := (isStore(s0req(0)))
 
     }.elsewhen(s0state === mshrread){
 
@@ -356,11 +359,18 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         s0fetchAddr := s0req(0).addr
 
     }.elsewhen(s0state === refill){
+        // 如果取好，通告地址，以及refill到的行号
         when(s0fetchReady){
-            // 通告地址，以及refill到的行号
             mshrs.io.fetchReady := s0fetchReady
             mshrs.io.fetchedBlockAddr := getBlockAddr(s0activateAddr)
             mshrs.io.fetchedpos := s0pos
+        }
+
+        // refill的时候,判断addr的地址是不是那一行的第一个字,如果是,先告诉meta这一行将被invalid
+        when(s0req(0).addr(nOffsetBits -1, 2) === 0.U){
+            axiMetaRead.req.valid := s0valid(0)
+            axiMetaRead.req.bits.idx := getIdx(s0req(0).addr)
+            axiMetaRead.req.bits.pos := s0pos
         }
 
     }.elsewhen(s0state === wb){
@@ -642,6 +652,15 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         wfu.io.axiReadResp.valid := axiDataRead.resp.valid
         wfu.io.axiReadResp.bits.data := axiDataRead.resp.bits.data
 
+        // wb的时候,判断addr的地址是不是那一行的最后一个字,如果是,废除掉对应那个pos的metaline（即将被refill 破坏）
+        when(s2req(0).addr(nOffsetBits -1, 2) === 0xf.U){
+            axiMetaWrite.req.valid := s2valid(0)
+            axiMetaWrite.req.bits.idx := getIdx(s2req(0).addr)
+            axiMetaWrite.req.bits.pos := s2pos
+
+            axiMetaWrite.req.bits.setvalid.valid := true.B
+            axiMetaWrite.req.bits.setvalid.bits := false.B
+        }
         
         // resp和nack都不发
         for (w <- 0 until memWidth) {
@@ -658,8 +677,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         axiDataWrite.req.bits.offset := getWordOffset(s2req(0).addr)
         axiDataWrite.req.bits.data := s2req(0).data
 
-        // 两个关于meta的特殊情况
-
+        // 一个关于meta的特殊情况
         // refill的时候,判断addr的地址是不是那一行的第一个字,如果是,废除掉对应那个pos的metaline
         when(s2req(0).addr(nOffsetBits -1, 2) === 0.U){
             axiMetaWrite.req.valid := s2valid(0)
@@ -669,6 +687,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             axiMetaWrite.req.bits.setvalid.valid := true.B
             axiMetaWrite.req.bits.setvalid.bits := false.B
         }
+        
         // s2fetchReady 的时候,所有data将要写完了,这个时候可以将新的meta写入
         when(s2fetchReady){
             // 通告地址，以及refill到的行号

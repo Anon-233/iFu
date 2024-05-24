@@ -251,3 +251,31 @@ a = RegInit(0.U)
 如果之后有哪怕一个周期触发了a := 1,那么a就不会再是0了，并不是自动默认值
 因此还是要加上a := 0 ,然后再去某个分支条件里面赋值a:=1
 
+
+22. 写回行的时候，如果该行clean，但是前面一个周期有store
+- s0 mshrread 要向meta读行，感知不到前面的dirty
+- s1 lsu命中这一行要写，这一行将边dirty
+- s2 不会干扰mshrread
+
+如果感知不到这一行是dirty，wfu拿到的会误以为是clean，只做refill，不wb那么就会导致访存不一致
+
+那么需要在里面加fastDirty，记录这种情况，如果有fastDirty，那么meta的dirty位就不是0，而是快速地1，以方便给wfu
+使之正常的先发起wb，再refill
+
+
+
+23. meta逻辑的转发
+由于meta是s0读而s2才写，因此需要一个周期s2->s1的转发
+需要读meta的：
+lsu看valid和readonly
+mshrread看valid和dirty
+
+需要写meta的：
+mshr写readonly
+refill写新的meta行
+replay和lsu写dirty
+
+- mshrread 写readonly要让前一周期lsu看到(done)
+- refill第一个字会废meta行，但是前一个周期的只读load的lsu还是可见的，此时行的第一个字被破坏了，因此调整到wb结束的时候就废除meta行**wb就除掉，到refill的时候至少隔一个周期，所有命中的ld数据行不会被refill破坏**，从而可以保证到refill写第一个字的时候那一行已经作废，lsu ld全部已经算miss(done)
+- refill最后一个字会写meta行，前一个lsu可能还是会误判为miss，解决方案如19所示（done）
+- 写dirty的replay和lsu要让前一周期mshrread看到从而正确反映给wfu(done) 至于valid，只有refill会改动，二者互斥，不会出现问题
