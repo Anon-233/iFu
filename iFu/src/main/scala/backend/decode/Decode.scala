@@ -263,7 +263,7 @@ class DecodeUnit extends CoreModule {
     val xcpt_valid = WireInit(false.B)
     val xcpt_cause = WireInit(0.U(15.W))
 
-    when (io.interrupt) {    //TODO: isSFB是否应该删掉
+    when (io.interrupt && !io.enq.uop.isSFB) {    //TODO: isSFB是否应该删掉
         xcpt_valid := true.B
         xcpt_cause := INT
     } .elsewhen (io.enq.uop.xcpt_valid) {
