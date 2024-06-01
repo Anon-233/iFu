@@ -159,13 +159,13 @@ class iFuCore extends CoreModule {
     }
     b1.resolveMask := brinfos.map(x => x.valid << x.uop.brTag).reduce(_|_)
     b1.mispredictMask := brinfos.map(x =>
-        (x.valid && x.mispredict && !rob.io.flush.valid) << x.uop.brTag
+        (x.valid && x.mispredict) << x.uop.brTag
     ).reduce(_|_)
 
     var mispredict_val = false.B
     var oldest_mispredict = brinfos(0)
     for (b <- brinfos) {
-        val mispred = b.valid && b.mispredict && !RegNext(rob.io.flush.valid)
+        val mispred = b.valid && b.mispredict
         val use_this_mispredict = !mispredict_val ||
             mispred && IsOlder(b.uop.robIdx, oldest_mispredict.uop.robIdx, rob.io.rob_head_idx)
         mispredict_val = mispredict_val || mispred
