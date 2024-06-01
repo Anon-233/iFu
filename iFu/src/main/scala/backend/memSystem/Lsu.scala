@@ -396,34 +396,26 @@ class Lsu extends CoreModule {
 
     val exe_tlb_valid = Wire(Vec(memWidth, Bool()))
     for (w <- 0 until memWidth) {
-        // var变量表示需要被抢占的资源
-        var tlb_avail = true.B
-        var dc_avail = true.B // dc -> dcache
-        var lcam_avail = true.B // TODO
-        var rob_avail = true.B
+        var dcache_avail = true.B
+        var lcam_avail   = true.B
 
-        def lsu_sched(can_fire: Bool, uses_tlb: Boolean, uses_dc: Boolean, uses_lcam: Boolean, uses_rob: Boolean): Bool = {
+        def lsu_sched(can_fire: Bool, uses_dcache: Boolean, uses_lcam: Boolean): Bool = {
             val will_fire = can_fire && 
-                !(uses_tlb.B && !tlb_avail) &&
                 !(uses_lcam.B && !lcam_avail) &&
-                !(uses_dc.B && !dc_avail) &&
-                !(uses_rob.B && !rob_avail)
+                !(uses_dcache.B && !dc_avail) &&
 
-            tlb_avail = tlb_avail && !(will_fire && uses_tlb.B)
             lcam_avail = lcam_avail && !(will_fire && uses_lcam.B)
-            dc_avail = dc_avail && !(will_fire && uses_dc.B)
-            rob_avail = rob_avail && !(will_fire && uses_rob.B)
-            if(!FPGAPlatform)dontTouch(will_fire) // if(!FPGAPlatform)dontTouch these so we can inspect the will_fire signals
+            dc_avail = dc_avail && !(will_fire && uses_dcache.B)
+            if (!FPGAPlatform) dontTouch(will_fire)
             will_fire
         }
 
-        // will开头表示经过了排序
-        will_fire_load_incoming(w) := lsu_sched(can_fire_load_incoming(w), true , true , true , false) // TLB , DC , LCAM ,
-        will_fire_stad_incoming(w) := lsu_sched(can_fire_stad_incoming(w), true , false, true , true ) // TLB ,    , LCAM , ROB
-        will_fire_sta_incoming(w)  := lsu_sched(can_fire_sta_incoming(w) , true , false, true , true ) // TLB ,    , LCAM , ROB
-        will_fire_std_incoming(w)  := lsu_sched(can_fire_std_incoming(w) , false, false, false, true ) //     ,    ,      , ROB
-        will_fire_load_wakeup(w)   := lsu_sched(can_fire_load_wakeup(w)  , false, true , true , false) //     , DC , LCAM1,
-        will_fire_store_commit(w)  := lsu_sched(can_fire_store_commit(w) , false, true , false, false) //     , DC ,      ,
+        will_fire_load_incoming(w) := lsu_sched(can_fire_load_incoming(w), true , true ) // DC , LCAM
+        will_fire_stad_incoming(w) := lsu_sched(can_fire_stad_incoming(w), false, true ) //    , LCAM
+        will_fire_sta_incoming(w)  := lsu_sched(can_fire_sta_incoming(w) , false, true ) //    , LCAM
+        will_fire_std_incoming(w)  := lsu_sched(can_fire_std_incoming(w) , false, false) //    ,     
+        will_fire_load_wakeup(w)   := lsu_sched(can_fire_load_wakeup(w)  , true , true ) // DC , LCAM
+        will_fire_store_commit(w)  := lsu_sched(can_fire_store_commit(w) , true , false) // DC ,     
 
         when (will_fire_load_wakeup(w)) {
             p0_block_load_mask(ldq_wakeup_idx) := true.B
@@ -654,7 +646,6 @@ class Lsu extends CoreModule {
                 !mem_stq_incoming_e(w).bits.uop.is_sc  &&
                 !IsKilledByBranch(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
             )
-            printf("LSU: stad happened!\n")
         } .elsewhen(fired_sta_incoming(w)) {
             clr_bsy_valid(w) := (
                 mem_stq_incoming_e(w).valid            &&
