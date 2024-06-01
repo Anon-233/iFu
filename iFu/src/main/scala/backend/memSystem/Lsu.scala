@@ -616,7 +616,6 @@ class Lsu extends CoreModule {
     val fired_stad_incoming = widthMap(w => RegNext(will_fire_stad_incoming(w) && !exe_req_killed(w)))
     val fired_sta_incoming = widthMap(w => RegNext(will_fire_sta_incoming(w) && !exe_req_killed(w)))
     val fired_std_incoming = widthMap(w => RegNext(will_fire_std_incoming(w) && !exe_req_killed(w)))
-    val fired_store_commit = RegNext(will_fire_store_commit)
     val fired_load_wakeup = widthMap(w => RegNext(will_fire_load_wakeup(w) && !IsKilledByBranch(io.core.brupdate, ldq_wakeup_e.bits.uop)))
 
     val mem_incoming_uop = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, exe_req(w).bits.uop)))
@@ -836,29 +835,6 @@ class Lsu extends CoreModule {
         !io.core.exception && !RegNext(io.core.exception)
     ))
     mem_forward_stq_idx := forwarding_idx
-    //********?
-    // Avoid deadlock with a 1-w LSU prioritizing load wakeups > store commits
-    // On a 2W machine, load wakeups and store commits occupy separate pipelines,
-    // so only add this logic for 1-w LSU
-    if (memWidth == 1) {
-        // Wakeups may repeatedly find a st->ld addr conflict and fail to forward,
-        // repeated wakeups may block the store from ever committing
-        // Disallow load wakeups 1 cycle after this happens to allow the stores to drain
-        when(RegNext(ldst_addr_matches(0).reduce(_ || _) && !mem_forward_valid(0))) {
-            block_load_wakeup := true.B
-        }
-
-        // If stores remain blocked for 15 cycles, block load wakeups to get a store through
-        val store_blocked_counter = Reg(UInt(4.W))
-        when(will_fire_store_commit(0) || !can_fire_store_commit(0)) {
-            store_blocked_counter := 0.U
-        }.elsewhen(can_fire_store_commit(0) && !will_fire_store_commit(0)) {
-            store_blocked_counter := Mux(store_blocked_counter === 15.U, 15.U, store_blocked_counter + 1.U)
-        }
-        when(store_blocked_counter === 15.U) {
-            block_load_wakeup := true.B
-        }
-    }
 
     // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
     // TODO encapsulate this in an age-based  priority-encoder
