@@ -74,7 +74,14 @@ abstract class PipelinedFuncUnit (
             io.bypass(i).bits.uop := rUops(i - 1)
         }
     } else {
-        require(false, "PipelinedFuncUnit must have at least one stage")
+        require (numStages == 0)
+
+        io.resp.valid := io.req.valid && !IsKilledByBranch(io.brUpdate, io.req.bits.uop) && !io.req.bits.kill
+        io.resp.bits.predicated := false.B  // default
+        io.resp.bits.uop := io.req.bits.uop
+        io.resp.bits.uop.brMask := GetNewBrMask(io.brUpdate, io.req.bits.uop)
+        io.resp.bits.r1 := io.req.bits.rs1Data
+        io.resp.bits.r2 := io.req.bits.rs2Data
     }
 }
 
@@ -244,7 +251,7 @@ class PipelinedMulUnit(numStages: Int = 3) extends PipelinedFuncUnit (
     io.resp.bits.data := imult.io.resp.bits.data
 }
 
-class AddrGenUnit(numStages: Int = 1) extends PipelinedFuncUnit(
+class AddrGenUnit(numStages: Int = 0) extends PipelinedFuncUnit(
     numStages = numStages
 ) {
     val uop        = io.req.bits.uop
@@ -252,20 +259,8 @@ class AddrGenUnit(numStages: Int = 1) extends PipelinedFuncUnit(
     val addr       = (io.req.bits.rs1Data.asSInt + offset).asUInt
     val store_data = io.req.bits.rs2Data
 
-    val rAddr = Reg(Vec(numStages, UInt(xLen.W)))
-    rAddr(0) := addr
-    for (i <- 1 until numStages) {
-        rAddr(i) := rAddr(i - 1)
-    }
-
-    val rData = Reg(Vec(numStages, UInt(xLen.W)))
-    rData(0) := store_data
-    for (i <- 1 until numStages) {
-        rData(i) := rData(i - 1)
-    }
-
-    io.resp.bits.addr := rAddr(numStages - 1)
-    io.resp.bits.data := rData(numStages - 1)
+    io.resp.bits.addr := addr
+    io.resp.bits.data := store_data
 }
 
 abstract class IterativeFuncUnit extends FuncUnit (
