@@ -752,16 +752,16 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         fenceMetaWrite.req.bits.setdirty.bits := false.B
 
         // 彻底清除这一行
-        fenceMetaWrite.req.bits.setvalid.valid := true.B
+        fenceMetaWrite.req.bits.setvalid.valid := false.B
         fenceMetaWrite.req.bits.setvalid.bits := false.B
 
-        fenceMetaWrite.req.bits.setreadOnly.valid := true.B
+        fenceMetaWrite.req.bits.setreadOnly.valid := false.B
         fenceMetaWrite.req.bits.setreadOnly.bits := false.B
 
-        fenceMetaWrite.req.bits.setfixed.valid := true.B
+        fenceMetaWrite.req.bits.setfixed.valid := false.B
         fenceMetaWrite.req.bits.setfixed.bits := false.B
 
-        fenceMetaWrite.req.bits.setTag.valid := true.B
+        fenceMetaWrite.req.bits.setTag.valid := false.B
         fenceMetaWrite.req.bits.setTag.bits := 0.U
 
     }.elsewhen(s2state === prefetch){
@@ -783,20 +783,23 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // difftest
     val isRealStoreState = (s2state === lsu || s2state === replay || s2state === mmioresp)
 
-    val difftest = Module(new DifftestStoreEvent)
-    //{4'b0, llbit && sc_w, st_w, st_h, st_b}
-    val sc_w =  isRealStoreState && sendResp(0) && s2valid(0) && s2req(0).uop.is_sc
-    val st_w =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 2.U
-    val st_h =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 1.U
-    val st_b =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 0.U
-    // disable now
-    difftest.io.valid := 0.U  & VecInit(Cat((0.U(4.W)), io.lsu.llbit && sc_w, st_w, st_h, st_b)).asUInt
-    difftest.io.clock := clock
-    difftest.io.coreid := 0.U // only support 1 core now
-    difftest.io.index := 0.U
-    difftest.io.storePAddr := s2req(0).addr
-    difftest.io.storeVAddr := 0.U
-    difftest.io.storeData := WordWrite(s2req(0), 0.U(32.W))
+    if(!FPGAPlatform){
+        val difftest = Module(new DifftestStoreEvent)
+        //{4'b0, llbit && sc_w, st_w, st_h, st_b}
+        val sc_w =  isRealStoreState && sendResp(0) && s2valid(0) && s2req(0).uop.is_sc
+        val st_w =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 2.U
+        val st_h =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 1.U
+        val st_b =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 0.U
+        // disable now
+        difftest.io.valid := 0.U  & VecInit(Cat((0.U(4.W)), io.lsu.llbit && sc_w, st_w, st_h, st_b)).asUInt
+        difftest.io.clock := clock
+        difftest.io.coreid := 0.U // only support 1 core now
+        difftest.io.index := 0.U
+        difftest.io.storePAddr := s2req(0).addr
+        difftest.io.storeVAddr := 0.U
+        difftest.io.storeData := WordWrite(s2req(0), 0.U(32.W))
+    }
+    
 
     // 当两个都ready并且流水线中没有fence,mmioreq,mshrread,mmioresp,wb,refill的时候，axiReady才会拉高
     axiReady := (wfu.io.ready && mmiou.io.ready) &&
