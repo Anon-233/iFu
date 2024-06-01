@@ -2,10 +2,10 @@ package iFu.tlb
 
 import chisel3._
 import chisel3.util._
-
 import iFu.common._
 import iFu.common.Consts._
 import iFu.backend._
+import iFu.common.CauseCode.ecodeBits
 
 class TLBMeta extends CoreBundle {
     val vppn = UInt((vaddrBits - 13).W)
@@ -46,7 +46,9 @@ class TLBDataRResp extends CoreBundle {
 }
 
 class TLBDataCSRContext extends CoreBundle {
-    val asid_asid    = UInt(10.W)
+    val asid_asid = UInt(10.W)
+
+    val estat_ecode  = UInt(6.W)
 
     val tlbidx_index = UInt(5.W)
     val tlbidx_ps    = UInt(6.W)
@@ -129,7 +131,7 @@ class TLBDataManager extends CoreModule {
         entry.meta.ps     := csr_ctx.tlbidx_ps
         entry.meta.g      := csr_ctx.tlbelo0_g && csr_ctx.tlbelo1_g
         entry.meta.asid   := csr_ctx.asid_asid
-        entry.meta.e      := !csr_ctx.tlbidx_ne
+        entry.meta.e      := Mux(csr_ctx.estat_ecode === 0x3F.U(ecodeBits.W), 1.B, !csr_ctx.tlbidx_ne)
         entry.data(0).ppn := csr_ctx.tlbelo0_ppn
         entry.data(0).plv := csr_ctx.tlbelo0_plv
         entry.data(0).mat := csr_ctx.tlbelo0_mat

@@ -471,6 +471,7 @@ class CSRFile extends CoreModule {
     io.itlb_csr_ctx.dmw1_vseg := csrReg.dmw1.vseg
 
     io.tlb_data.csr_ctx.asid_asid    := csrReg.asid.asid
+    io.tlb_data.csr_ctx.estat_ecode  := csrReg.estat.ecode
     io.tlb_data.csr_ctx.tlbidx_index := csrReg.tlbidx.index
     io.tlb_data.csr_ctx.tlbidx_ps    := csrReg.tlbidx.ps
     io.tlb_data.csr_ctx.tlbidx_ne    := csrReg.tlbidx.ne
