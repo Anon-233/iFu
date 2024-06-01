@@ -437,7 +437,7 @@ class Lsu extends CoreModule {
     // TLB Access
     val exe_tlb_uop   = widthMap(w => exe_req(w).bits.uop)
     val exe_tlb_vaddr = widthMap(w => exe_req(w).bits.addr)
-    val exe_tlb_size  = widthMap(w => will_fire_sta_incoming(w))
+    val exe_tlb_size  = widthMap(w => exe_tlb_uop(w).mem_size)
 
     val dtlb = Module(new DTLB)
     for (w <- 0 until memWidth) {

@@ -31,28 +31,22 @@ class DTLBException extends CoreBundle(){
 }
 
 class DTLBReq extends CoreBundle(){
-    val vaddr = UInt(vaddrBits.W)
+    val vaddr   = UInt(vaddrBits.W)
+    val size    = UInt(2.W)
     val use_ldq = Bool()
     val use_stq = Bool()
-    val passthrough = Bool()
-    val size = UInt(2.W)
-
-    val is_tlb_inst = Bool()
-    // val cmd = Bits(TLB_CMD_SZ.W)
 }
 class DTLBResp extends CoreBundle(){
-    val paddr               = UInt(paddrBits.W)
-    val exception           = Valid(new DTLBException())
-    val is_uncacheable      = Bool()
+    val paddr          = UInt(paddrBits.W)
+    val exception      = Valid(new DTLBException())
+    val is_uncacheable = Bool()
 }
 class DTLBIO extends CoreBundle(){
-    val req         = Vec(memWidth, Input(new DTLBReq))
-    val resp        = Vec(memWidth, Output(new DTLBResp))
-    val r_req       = Vec(memWidth, Output(new TLBDataRReq))
-    val r_resp      = Vec(memWidth, Flipped(Valid(new TLBDataRResp)))
+    val req              = Vec(memWidth, Input(new DTLBReq))
+    val resp             = Vec(memWidth, Output(new DTLBResp))
+    val r_req            = Vec(memWidth, Output(new TLBDataRReq))
+    val r_resp           = Vec(memWidth, Flipped(Valid(new TLBDataRResp)))
     val dtlb_csr_context = Input(new DTLBCsrContext)
-    val kill = Input(Bool())
-
 }
 
 class DTLB extends CoreModule(){
