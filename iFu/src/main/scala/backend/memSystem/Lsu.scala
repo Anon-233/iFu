@@ -435,29 +435,14 @@ class Lsu extends CoreModule {
 
     //--------------------------------------------
     // TLB Access
-    val exe_tlb_uop = widthMap(w =>
-        Mux(will_fire_load_incoming(w) || will_fire_stad_incoming(w) ||
-            will_fire_sta_incoming(w),
-            exe_req(w).bits.uop, NullMicroOp)
-    )
-    val exe_tlb_vaddr = widthMap(w =>
-        Mux(will_fire_load_incoming(w) || will_fire_stad_incoming(w) || will_fire_sta_incoming(w),
-            exe_req(w).bits.addr,
-            0.U
-        )
-    )
-
-    val exe_size = widthMap(w =>
-        Mux(will_fire_load_incoming(w) || will_fire_stad_incoming(w) ||
-            will_fire_sta_incoming(w),
-            exe_tlb_uop(w).mem_size, 0.U)
-    )
+    val exe_tlb_uop   = widthMap(w => exe_req(w).bits.uop)
+    val exe_tlb_vaddr = widthMap(w => exe_req(w).bits.addr)
+    val exe_tlb_size  = widthMap(w => will_fire_sta_incoming(w))
 
     val dtlb = Module(new DTLB)
-    dtlb.io <> DontCare
     for (w <- 0 until memWidth) {
-        dtlb.io.req(w).vaddr := exe_tlb_vaddr(w)
-        dtlb.io.req(w).size := exe_size(w)
+        dtlb.io.req(w).vaddr   := exe_tlb_vaddr(w)
+        dtlb.io.req(w).size    := exe_tlb_size(w)
         dtlb.io.req(w).use_stq := exe_req(w).bits.uop.use_stq
         dtlb.io.req(w).use_ldq := exe_req(w).bits.uop.use_ldq
     }
