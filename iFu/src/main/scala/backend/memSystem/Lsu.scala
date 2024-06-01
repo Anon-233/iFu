@@ -391,21 +391,23 @@ class Lsu extends CoreModule {
              stq_commit_e.bits.data.valid)
         )   // 数据准备好了
     ))
-    //---------------------------------------------------------
-    // Controller logic. Arbitrate which request actually fires
 
+// -----------------------------------------------------------------------
+// out of order scheduling
     val exe_tlb_valid = Wire(Vec(memWidth, Bool()))
     for (w <- 0 until memWidth) {
         var dcache_avail = true.B
         var lcam_avail   = true.B
 
         def lsu_sched(can_fire: Bool, uses_dcache: Boolean, uses_lcam: Boolean): Bool = {
-            val will_fire = can_fire && 
-                !(uses_lcam.B && !lcam_avail) &&
-                !(uses_dcache.B && !dc_avail) &&
+            val will_fire = (
+                can_fire                          && 
+                !(uses_lcam.B && !lcam_avail)     &&
+                !(uses_dcache.B && !dcache_avail)
+            )
 
-            lcam_avail = lcam_avail && !(will_fire && uses_lcam.B)
-            dc_avail = dc_avail && !(will_fire && uses_dcache.B)
+            lcam_avail   = lcam_avail   && !(will_fire && uses_lcam.B)
+            dcache_avail = dcache_avail && !(will_fire && uses_dcache.B)
             if (!FPGAPlatform) dontTouch(will_fire)
             will_fire
         }
@@ -422,8 +424,13 @@ class Lsu extends CoreModule {
         } .elsewhen(will_fire_load_incoming(w)) {
             p0_block_load_mask(exe_req(w).bits.uop.ldqIdx) := true.B
         }
-        exe_tlb_valid(w) := !tlb_avail
+        exe_tlb_valid(w) := (
+            will_fire_load_incoming(w) ||
+            will_fire_stad_incoming(w) ||
+            will_fire_sta_incoming(w)
+        )
     }
+// -----------------------------------------------------------------------
 
     //--------------------------------------------
     // TLB Access
