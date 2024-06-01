@@ -87,7 +87,7 @@ class ALUExeUnit (
     hasMul           = hasMul,
     hasDiv           = hasDiv,
     hasCnt           = hasCnt,
-    numStages        = if (hasAlu && hasMul) 3 else if (hasAlu) 1 else 0
+    numStages        = if (hasMul) 3 else 1
 ) {
     val div_busy  = WireInit(false.B)
 
@@ -189,11 +189,11 @@ class ALUExeUnit (
     if (hasMem) {
         require(!hasAlu)
         require(numStages == 0)
-        val maddrcalc = Module(new MemAddrCalcUnit)
+        val maddrcalc = Module(new AddrGenUnit(numStages = numStages))
         maddrcalc.io.req <> DontCare
         maddrcalc.io.req.valid  := io.req.valid && io.req.bits.uop.fu_code_is(FU_MEM)
         maddrcalc.io.req.bits   := io.req.bits
-        maddrcalc.io.brUpdate     <> io.brupdate
+        maddrcalc.io.brUpdate   := io.brupdate
         maddrcalc.io.resp.ready := true.B
 
         io.lsu_io.req := maddrcalc.io.resp

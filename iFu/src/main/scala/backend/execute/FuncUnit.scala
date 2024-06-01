@@ -8,27 +8,20 @@ import iFu.common.Consts._
 import iFu.util._
 import iFu.frontend.GetPCFromFtqIO
 
-//TODO:为ERET单独设计CSR_CMD
 abstract class FuncUnit (
     val isPiplined: Boolean,
     val numStages: Int,
     val isJmpUnit: Boolean,
-    val isAluUnit: Boolean,
-    val isMemAddrCalcUnit: Boolean
+    val isAluUnit: Boolean
 ) extends CoreModule {
     val io = IO(new Bundle {
-        val req = Flipped(Decoupled(new FuncUnitReq))
-        val resp = Decoupled(new FuncUnitResp)
+        val req      = Flipped(Decoupled(new FuncUnitReq))
+        val resp     = Decoupled(new FuncUnitResp)
         val brUpdate = Input(new BrUpdateInfo)
-        val bypass = Output(Vec(numStages, Valid(new ExeUnitResp)))
+        val bypass   = Output(Vec(numStages, Valid(new ExeUnitResp)))
 
-        val brInfo = if (isAluUnit) Output(new BrResolutionInfo) else null
+        val brInfo   = if (isAluUnit) Output(new BrResolutionInfo) else null
         val getFtqPC = if (isJmpUnit) Flipped(new GetPCFromFtqIO) else null
-        // val status = if (isMemAddrCalcUnit) Input(new MStatus) else null
-
-        // val bp = if (isMemAddrCalcUnit) Input(Vec(nBreakpoints, new BP)) else null
-        // val mcontext = if (isMemAddrCalcUnit) Input(UInt(mcontextWidth.W)) else null
-        // val scontext = if (isMemAddrCalcUnit) Input(UInt(scontextWidth.W)) else null
     })
     io <> DontCare
 }
@@ -36,14 +29,12 @@ abstract class FuncUnit (
 abstract class PipelinedFuncUnit (
     numStages: Int,
     isJmpUnit: Boolean = false,
-    isAluUnit: Boolean = false,
-    isMemAddrCalcUnit: Boolean = false
+    isAluUnit: Boolean = false
 ) extends FuncUnit (
     isPiplined = true,
     numStages = numStages,
     isJmpUnit = isJmpUnit,
-    isAluUnit = isAluUnit,
-    isMemAddrCalcUnit = isMemAddrCalcUnit
+    isAluUnit = isAluUnit
 ) {
     io.req.ready := true.B
     var rValids: Vec[Bool]  = null
@@ -83,14 +74,7 @@ abstract class PipelinedFuncUnit (
             io.bypass(i).bits.uop := rUops(i - 1)
         }
     } else {
-        require (numStages == 0)
-
-        io.resp.valid := io.req.valid && !IsKilledByBranch(io.brUpdate, io.req.bits.uop) && !io.req.bits.kill
-        io.resp.bits.predicated := false.B  // default
-        io.resp.bits.uop := io.req.bits.uop
-        io.resp.bits.uop.brMask := GetNewBrMask(io.brUpdate, io.req.bits.uop)
-        io.resp.bits.r1 := io.req.bits.rs1Data
-        io.resp.bits.r2 := io.req.bits.rs2Data
+        require(false, "PipelinedFuncUnit must have at least one stage")
     }
 }
 
@@ -260,25 +244,35 @@ class PipelinedMulUnit(numStages: Int = 3) extends PipelinedFuncUnit (
     io.resp.bits.data := imult.io.resp.bits.data
 }
 
-class MemAddrCalcUnit extends PipelinedFuncUnit(
-    numStages = 0,
-    isMemAddrCalcUnit = true
+class AddrGenUnit(numStages: Int = 1) extends PipelinedFuncUnit(
+    numStages = numStages
 ) {
     val uop        = io.req.bits.uop
     val offset     = immGen(uop.immPacked, uop.ctrl.imm_sel)
     val addr       = (io.req.bits.rs1Data.asSInt + offset).asUInt
     val store_data = io.req.bits.rs2Data
 
-    io.resp.bits.addr := addr
-    io.resp.bits.data := store_data
+    val rAddr = Reg(Vec(numStages, UInt(xLen.W)))
+    rAddr(0) := addr
+    for (i <- 1 until numStages) {
+        rAddr(i) := rAddr(i - 1)
+    }
+
+    val rData = Reg(Vec(numStages, UInt(xLen.W)))
+    rData(0) := store_data
+    for (i <- 1 until numStages) {
+        rData(i) := rData(i - 1)
+    }
+
+    io.resp.bits.addr := rAddr(numStages - 1)
+    io.resp.bits.data := rData(numStages - 1)
 }
 
 abstract class IterativeFuncUnit extends FuncUnit (
     isPiplined = false,
     numStages = 1,
     isJmpUnit = false,
-    isAluUnit = false,
-    isMemAddrCalcUnit = false
+    isAluUnit = false
 ) {
     val rUop = Reg(new MicroOp)
     val doKill = Wire(Bool())
