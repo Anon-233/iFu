@@ -179,12 +179,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     // 流水线里面有mmioresp的时候，下一个fire的请求不要进来
     lsuMMIOValid := io.lsu.req.fire && lsuhasMMIO && axiReady
-    lsuNormalValid := io.lsu.req.fire && !lsuhasMMIO && io.lsu.req.ready
+    lsuNormalValid := io.lsu.req.fire && !lsuhasMMIO
 
 
-    val lsuhasStore = io.lsu.req.bits.map( req =>
-        req.valid && isStore(req.bits)
-    ).reduce(_||_)
+    // val lsuhasStore = io.lsu.req.bits.map( req =>
+    //     req.valid && isStore(req.bits)
+    // ).reduce(_||_)
 
     // 存储mshr的信息
     val mshrs = Module(new MSHRFile)
@@ -228,13 +228,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                           mshrReplayValid ||
                           mshrReadValid ||
                         // 这个信号用于判断s2storeFailed的时候不去接当周期lsu的store请求
-                          (lsuhasStore && s2StoreFailed) || 
+                          (/* lsuhasStore && */ s2StoreFailed) || 
                         // 如果lsu是mmo  
                           (/* io.lsu.req.valid &&  */lsuhasMMIO && !axiReady)
                         // 在一条mmio从进来到做完返回之前的全程，不要接下一个store请求(即使是普通的store)，防止提交顺序不同对不上difftest
                         //   (lsuhasStore && doingMMIO)
-
-                          )
+                        )
 
   
     // 总线相关请求是最高优先级,包括wb和refill这两个请求,他们互斥,只有一个会发生
@@ -442,7 +441,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
             when(lsuMetaRead(w).resp.valid){
                 //在resp之前，meta内部判断是否是store,如果是store,就要判断是否是readOnly,如果是readOnly,就回传来miss
-                when(lsuMetaRead(w).resp.bits.hit){
+                when(lsuMetaRead(w).resp.bits.hit || (isSc(s1req(w)) && !io.lsu.llbit )) {
                     s1hit(w) := true.B
                     s1hitpos(w) := lsuMetaRead(w).resp.bits.pos
                     // 接下来要去读data
@@ -453,6 +452,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 }.otherwise{
                     s1hit(w) := false.B
                 }
+                
             }
         }
     }.elsewhen(s1state === replay){
