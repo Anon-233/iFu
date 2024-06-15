@@ -432,8 +432,8 @@ class Lsu extends CoreModule {
     }
 // -----------------------------------------------------------------------
 
-    //--------------------------------------------
-    // TLB Access
+// -----------------------------------------------------------------------
+// dtlb access
     val exe_tlb_uop   = widthMap(w => exe_req(w).bits.uop)
     val exe_tlb_vaddr = widthMap(w => exe_req(w).bits.addr)
     val exe_tlb_size  = widthMap(w => exe_tlb_uop(w).mem_size)
@@ -445,18 +445,21 @@ class Lsu extends CoreModule {
         dtlb.io.req(w).use_stq := exe_req(w).bits.uop.use_stq
         dtlb.io.req(w).use_ldq := exe_req(w).bits.uop.use_ldq
     }
-    // exceptions
 
-    // TODO check for xcpt_if and verify that never happens on non-speculative instructions.
+    // exceptions
     val tlb_xcpt_valids = RegNext(widthMap(w =>
-            exe_tlb_valid(w) &&
-            dtlb.io.resp(w).exception.valid &&
-            !io.core.exception &&
-            !IsKilledByBranch(io.core.brupdate, exe_tlb_uop(w))))
-    val tlb_xcpt_uops = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, exe_tlb_uop(w))))
+        exe_tlb_valid(w) &&
+        dtlb.io.resp(w).exception.valid &&
+        !io.core.exception &&
+        !IsKilledByBranch(io.core.brupdate, exe_tlb_uop(w)) &&
+        !(exe_tlb_uop(w).is_sc && !io.csr.llbit)    // sc throw exception only when llbit is 1
+    ))
+    val tlb_xcpt_uops   = RegNext(widthMap(w =>
+        UpdateBrMask(io.core.brupdate, exe_tlb_uop(w))
+    ))
     val tlb_xcpt_causes = RegNext(widthMap(w =>
         dtlb.io.resp(w).exception.bits.xcpt_cause
-    ))          //TODO causes需要改变
+    ))
     val tlb_xcpt_vaddrs = RegNext(exe_tlb_vaddr)
 
     tlb_xcpt_valid := tlb_xcpt_valids.reduce(_ || _)
@@ -480,13 +483,15 @@ class Lsu extends CoreModule {
         oldest_xcpt_rob_idx = Mux(is_older, tlb_xcpt_uops(w).robIdx, oldest_xcpt_rob_idx)
     }
 
-    val exe_tlb_xcpt = widthMap(w => exe_tlb_valid(w) && dtlb.io.resp(w).exception.valid)
+    val exe_tlb_xcpt  = widthMap(w =>
+        exe_tlb_valid(w) && dtlb.io.resp(w).exception.valid &&
+        !(exe_tlb_uop(w).is_sc && !io.csr.llbit)    // sc throw exception only when llbit is 1
+    )
     val exe_tlb_paddr = widthMap(w => dtlb.io.resp(w).paddr)
     val exe_tlb_uncacheable = widthMap(w => dtlb.io.resp(w).is_uncacheable)
     for (w <- 0 until memWidth) {
         when(tlb_xcpt_valids(w)) {
             assert(RegNext(will_fire_load_incoming(w) || will_fire_stad_incoming(w) || will_fire_sta_incoming(w)))
-            // Technically only faulting AMOs need this
             assert(tlb_xcpt_uops(w).use_ldq ^ tlb_xcpt_uops(w).use_stq)
             when(tlb_xcpt_uops(w).use_ldq) {
                 ldq(tlb_xcpt_uops(w).ldqIdx).bits.uop.xcpt_valid := true.B
@@ -495,6 +500,7 @@ class Lsu extends CoreModule {
             }
         }
     }
+// -----------------------------------------------------------------------
 
     //------------------------------
     // Issue Someting to Memory
@@ -525,9 +531,9 @@ class Lsu extends CoreModule {
         dcache.io.lsu.s1_kill(w) := false.B
 
         when (will_fire_load_incoming(w)) {
-            dmem_req(w).valid := !exe_tlb_xcpt(w) && !dtlb.io.resp(w).is_uncacheable
+            dmem_req(w).valid     := !exe_tlb_xcpt(w)
             dmem_req(w).bits.addr := exe_tlb_paddr(w)
-            dmem_req(w).bits.uop := exe_tlb_uop(w)
+            dmem_req(w).bits.uop  := exe_tlb_uop(w)
             s0_executing_loads(ldq_incoming_idx(w)) := dmem_req_fire(w)
             assert(!ldq_incoming_e(w).bits.executed)
         } .elsewhen(will_fire_store_commit(w)) {
