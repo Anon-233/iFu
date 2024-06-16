@@ -441,7 +441,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
             when(lsuMetaRead(w).resp.valid){
                 //在resp之前，meta内部判断是否是store,如果是store,就要判断是否是readOnly,如果是readOnly,就回传来miss
-                when(lsuMetaRead(w).resp.bits.hit || (isSc(s1req(w)) && !io.lsu.llbit )) {
+                when(lsuMetaRead(w).resp.bits.hit || (isSC(s1req(w)) && !io.lsu.llbit )) {
                     s1hit(w) := true.B
                     s1hitpos(w) := lsuMetaRead(w).resp.bits.pos
                     // 接下来要去读data
