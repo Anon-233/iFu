@@ -531,7 +531,7 @@ class Lsu extends CoreModule {
         dcache.io.lsu.s1_kill(w) := false.B
 
         when (will_fire_load_incoming(w)) {
-            dmem_req(w).valid     := !exe_tlb_xcpt(w)
+            dmem_req(w).valid     := !exe_tlb_xcpt(w)  && !dtlb.io.resp(w).is_uncacheable
             dmem_req(w).bits.addr := exe_tlb_paddr(w)
             dmem_req(w).bits.uop  := exe_tlb_uop(w)
             s0_executing_loads(ldq_incoming_idx(w)) := dmem_req_fire(w)
