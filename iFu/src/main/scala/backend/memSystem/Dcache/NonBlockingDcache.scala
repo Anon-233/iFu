@@ -732,8 +732,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // 装载newDataLine的0号数据作为可能的读操作的resp的data
         for(w <- 0 until memWidth){
             // DcacheReq类,req的uop还是那个请求的uop，但是如果是一个ld指令，那么这里的data（原store的写入数据）将作为读取到的data的载体
-            io.lsu.resp(0).bits.data := s2req(0).data
-            io.lsu.resp(0).bits.uop := s2req(0).uop
+            io.lsu.resp(0).bits.data := Mux(isSC(s2req(0)), io.lsu.llbit.asUInt , s2req(0).data)
+            io.lsu.resp(0).bits.uop  := s2req(0).uop
         }
         // 选择0号做回复
         sendResp(0) := s2valid(0)
