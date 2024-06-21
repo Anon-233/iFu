@@ -716,17 +716,25 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             axiMetaWrite.req.bits.setTag.valid := true.B
             axiMetaWrite.req.bits.setTag.bits := s2newMeta.tag
         }
-
     }.elsewhen(s2state === mmioreq){
         // 查pipeline，要求lsu发送的时候0号或1号是mmio请求，不会同时发两个
 
         val mmioreq = Mux(s2valid(0), s2req(0), s2req(1))
-        // mmiou必须空闲
-        assert(mmiou.io.ready , "mmiou must be idle")
-        mmiou.io.mmioReq.valid := s2valid(0) || s2valid(1)
-        // 存入请求本身
-        mmiou.io.mmioReq.bits := mmioreq
-
+        when(isSC(mmioreq) && !io.lsu.llbit){
+            // 如果是一个llbit为0的sc指令，那么直接返回llbit，不真正执行
+            // 选择0号做回复
+            sendResp(0) := s2valid(0)
+            sendNack(0) := false.B
+            sendResp(1) := false.B
+            sendNack(1) := false.B
+            io.lsu.resp(0).bits.data := io.lsu.llbit.asUInt
+        }.otherwise{
+            // mmiou必须空闲
+            assert(mmiou.io.ready , "mmiou must be idle")
+            mmiou.io.mmioReq.valid := s2valid(0) || s2valid(1)
+            // 存入请求本身
+            mmiou.io.mmioReq.bits := mmioreq
+        }
     }.elsewhen(s2state === mmioresp){
         
         // 装载newDataLine的0号数据作为可能的读操作的resp的data
