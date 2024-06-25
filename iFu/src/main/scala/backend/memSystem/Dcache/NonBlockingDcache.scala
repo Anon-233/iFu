@@ -723,11 +723,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         when(isSC(mmioreq) && !io.lsu.llbit){
             // 如果是一个llbit为0的sc指令，那么直接返回llbit，不真正执行
             // 选择0号做回复
-            sendResp(0) := s2valid(0)
+            sendResp(0) := s2valid(0) || s2valid(1)
             sendNack(0) := false.B
             sendResp(1) := false.B
             sendNack(1) := false.B
             io.lsu.resp(0).bits.data := io.lsu.llbit.asUInt
+            io.lsu.resp(0).bits.uop := mmioreq.uop
         }.otherwise{
             // mmiou必须空闲
             assert(mmiou.io.ready , "mmiou must be idle")
