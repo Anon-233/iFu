@@ -20,7 +20,6 @@ class Missarbiter extends CoreModule with HasDcacheParameters {
 
         val mshrReq = Decoupled(new DCacheReq)
     })
-
     if (!FPGAPlatform) dontTouch(io)
 
     io.sendResp    := 0.U.asTypeOf(Vec(memWidth, Bool()))
