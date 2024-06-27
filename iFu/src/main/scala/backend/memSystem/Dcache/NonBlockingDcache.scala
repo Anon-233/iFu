@@ -74,15 +74,15 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     // 替换单元
     val wfu = Module(new WriteFetchUnit)
-    wfu.io.valid := false.B
-    wfu.io.fetchAddr := 0.U
-    wfu.io.metaresp := 0.U.asTypeOf(new DcacheMetaResp)
-    wfu.io.wbOnly := false.B
-    wfu.io.axiReadResp := 0.U.asTypeOf(Valid(new DCacheResp))
-    wfu.io.cbusResp := 0.U.asTypeOf(new CBusResp)
+    wfu.io.req_valid := false.B
+    wfu.io.req_addr := 0.U
+    wfu.io.meta_resp := 0.U.asTypeOf(new DcacheMetaResp)
+    wfu.io.req_wb_only := false.B
+    wfu.io.wfu_read_resp := 0.U.asTypeOf(Valid(new DCacheResp))
+    wfu.io.cbus_resp := 0.U.asTypeOf(new CBusResp)
 
-    val wbValid = wfu.io.axiReadReq.valid
-    val refillValid = wfu.io.axiWriteReq.valid
+    val wbValid = wfu.io.wfu_read_req.valid
+    val refillValid = wfu.io.wfu_write_req.valid
 
     val mmiou = Module(new MMIOUnit) 
     mmiou.io.mmioReq := 0.U.asTypeOf(Valid(new DCacheReq))
@@ -91,8 +91,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     // arbiter
     when(!wfu.io.ready){
-        io.cbusReq := wfu.io.cbusReq
-        wfu.io.cbusResp := io.cbusResp
+        io.cbusReq := wfu.io.cbus_req
+        wfu.io.cbus_resp := io.cbusResp
     }.otherwise{
         io.cbusReq := mmiou.io.cbusReq
         mmiou.io.cbusResp := io.cbusResp
@@ -190,7 +190,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     fenceReadValid :=/*  false.B && */ (io.lsu.fence_dmem && meta.io.fetchDirty.resp.bits.hasDirty) && axiReady 
 
     // wfu做完之后去清除掉对应的meta行
-    fenceClearValid := wfu.io.fenceClearReq.valid
+    fenceClearValid := wfu.io.line_clear_req.valid
 
     // 只要meta没有dirty，就可以回应fence，不需要管流水线和mshr状态（如果里面有没做完的指令，lsu肯定非空，unique仍然会停留在dispatch）
     io.lsu.ordered := /* true.B || */ !meta.io.fetchDirty.resp.bits.hasDirty
@@ -249,9 +249,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     for(w <- 0 until memWidth){
         when(w.U === 0.U){
-            s0req(w)  := Mux(wbValid, wfu.io.axiReadReq.bits,
-                        Mux( refillValid,   wfu.io.axiWriteReq.bits, 
-                        Mux( fenceClearValid,     wfu.io.fenceClearReq.bits,        
+            s0req(w)  := Mux(wbValid, wfu.io.wfu_read_req.bits,
+                        Mux( refillValid,   wfu.io.wfu_write_req.bits, 
+                        Mux( fenceClearValid,     wfu.io.line_clear_req.bits,        
                         Mux( lsuMMIOValid,   io.lsu.req.bits(w).bits,
                         // 这里的mmioresp是DcacheReq作为载体,data是可能的rdata,uop是对应uop
                         Mux( mmioRespValid    , mmiou.io.mmioResp.bits,
@@ -284,8 +284,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
 
     //wfu拿到的新的写回信息 
-    val s0newMeta = wfu.io.newMeta
-    val s0fetchReady = wfu.io.fetchReady
+    val s0newMeta = wfu.io.new_meta
+    val s0fetchReady = wfu.io.fetch_ready
 
     // 需要s0pos的一定是单条流水线并且处理cache的请求类型
     val s0pos = WireInit(0.U(log2Ceil(nWays).W))
@@ -300,7 +300,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s0fetchAddr = WireInit(0.U(vaddrBits.W)) 
 
     //最后一个refill进行到s2到告诉mshr去激活(将表1的waiting转成ready)
-    val s0activateAddr = wfu.io.fetchedAddrOut
+    val s0activateAddr = wfu.io.fetched_addr
 
     // TODO prefetch
 
@@ -446,9 +446,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
         when(meta.io.missReplace.resp.valid){
             // 直接把mshr的被替换的行的返回结果以及fetchAddr拉给wfu,激活wfu
-            wfu.io.valid := s1valid(0)
-            wfu.io.fetchAddr := s1fetchAddr
-            wfu.io.metaresp := meta.io.missReplace.resp.bits
+            wfu.io.req_valid := s1valid(0)
+            wfu.io.req_addr := s1fetchAddr
+            wfu.io.meta_resp := meta.io.missReplace.resp.bits
         }
 
     }.elsewhen(s1state === refill){
@@ -468,9 +468,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             //没有Dirty就不做了
         }.otherwise{
             // 把fenceMeatRead的结果拉给wfu
-            wfu.io.valid := s1valid(0)
-            wfu.io.wbOnly := true.B
-            wfu.io.metaresp := meta.io.fetchDirty.resp.bits
+            wfu.io.req_valid := s1valid(0)
+            wfu.io.req_wb_only := true.B
+            wfu.io.meta_resp := meta.io.fetchDirty.resp.bits
         }
     }
 
@@ -626,8 +626,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // 激活wfu在1阶段就做完了,这里可能之后做fenceWrite的清除对应meta行
     }.elsewhen(s2state === wb){
         // 将读到的data给wfu
-        wfu.io.axiReadResp.valid :=  data.io.wfuRead.resp.valid
-        wfu.io.axiReadResp.bits.data :=  data.io.wfuRead.resp.bits.data
+        wfu.io.wfu_read_resp.valid :=  data.io.wfuRead.resp.valid
+        wfu.io.wfu_read_resp.bits.data :=  data.io.wfuRead.resp.bits.data
 
         // wb的时候,判断addr的地址是不是那一行的最后一个字,如果是,废除掉对应那个pos的metaline（即将被refill 破坏）
         when(s2req(0).addr(nOffsetBits -1, 2) === 0xf.U){
