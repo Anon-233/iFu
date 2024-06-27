@@ -71,21 +71,23 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
         val lsuWrite    = new DcacheMetaIO
 
         // 计算并拿到被替换的行，紧接着会发给总线那边
-        val mshrRead    = new DcacheMetaIO
+        val missReplace  = new DcacheMetaIO
 
         // axi的读请求，用于判断快速refill报废一行
-        val axiRead     = new DcacheMetaIO
+        val refillLogout = new DcacheMetaIO//axiread
         // axi的写回请求, 第一次来写的时候来meta废除掉对应行的valid
-        val axiWrite    = new DcacheMetaIO
-
+        val wfuWrite    = new DcacheMetaIO
+        // mshr 送给wfu一行去wb，期间该行不能被修改
+        val lineFreeze = new DcacheMetaIO
 
         // replay的读请求,用于mshr的replay
         val replayRead  = new DcacheMetaIO
         // replay的写请求,用于mshr的replay
         val replayWrite = new DcacheMetaIO
 
-        val fenceRead   = new DcacheMetaIO
-        val fenceWrite  = new DcacheMetaIO
+        // fence
+        val fetchDirty   = new DcacheMetaIO
+        val lineClear  = new DcacheMetaIO
 
         val cacopRead   = new DcacheMetaIO
         val cacopWrite  = new DcacheMetaIO
@@ -96,13 +98,14 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
         io.lsuRead(w).resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
     }
     io.lsuWrite.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
-    io.mshrRead.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
-    io.axiRead.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
-    io.axiWrite.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
+    io.missReplace.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
+    io.refillLogout.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
+    io.wfuWrite.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
+    io.lineFreeze.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
     io.replayRead.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
     io.replayWrite.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
-    io.fenceRead.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
-    io.fenceWrite.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
+    io.fetchDirty.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
+    io.lineClear.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
     io.cacopRead.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
     io.cacopWrite.resp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
 
@@ -117,7 +120,7 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
 
 
 
-    val lsu_R :: lsu_W :: mshr_R :: axi_R :: axi_W :: replay_R :: replay_W :: fence_R :: fence_W :: cacop_R :: cacop_W :: none :: Nil = Enum(12)
+    val lsu_R :: lsu_W :: miss_R :: refill_L :: axi_W :: line_F :: replay_R :: replay_W :: fence_R :: fence_W :: cacop_R :: cacop_W :: none :: Nil = Enum(13)
     
     //read
     val haslsuRead = io.lsuRead.map(_.req.valid).reduce(_|_)
@@ -141,43 +144,43 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
 
     for(w <- 0 until memWidth){
         readType :=  Mux(haslsuRead , lsu_R,
-                        Mux(io.mshrRead.req.valid, mshr_R,
+                        Mux(io.missReplace.req.valid, miss_R,
                         Mux(io.replayRead.req.valid, replay_R,
-                        Mux(io.fenceRead.req.valid, fence_R,
+                        Mux(io.fetchDirty.req.valid, fence_R,
                         Mux(io.cacopRead.req.valid, cacop_R,
-                        Mux(io.axiRead.req.valid ,  axi_R,
+                            Mux(io.refillLogout.req.valid, refill_L,
                                                     none))))))
 
         readValid(w) := io.lsuRead(w).req.valid ||
-                        io.mshrRead.req.valid ||
+                        io.missReplace.req.valid ||
                         io.replayRead.req.valid ||
-                        io.fenceRead.req.valid ||
+                        io.fetchDirty.req.valid ||
                         io.cacopRead.req.valid ||
-                        io.axiRead.req.valid
+                        io.refillLogout.req.valid
 
         readReq(w) := Mux(io.lsuRead(w).req.valid, io.lsuRead(w).req.bits,
-                        Mux(io.mshrRead.req.valid, io.mshrRead.req.bits,
+                        Mux(io.missReplace.req.valid, io.missReplace.req.bits,
                         Mux(io.replayRead.req.valid, io.replayRead.req.bits,
-                        Mux(io.fenceRead.req.valid, io.fenceRead.req.bits,
+                        Mux(io.fetchDirty.req.valid, io.fetchDirty.req.bits,
                         Mux(io.cacopRead.req.valid, io.cacopRead.req.bits,
-                        Mux(io.axiRead.req.valid , io.axiRead.req.bits,
+                        Mux(io.refillLogout.req.valid , io.refillLogout.req.bits,
                                                     0.U.asTypeOf(new DcacheMetaReq)))))))
 
         readIdx(w) := Mux(io.lsuRead(w).req.valid, io.lsuRead(w).req.bits.idx,
-                        Mux(io.mshrRead.req.valid, io.mshrRead.req.bits.idx,
+                        Mux(io.missReplace.req.valid, io.missReplace.req.bits.idx,
                         Mux(io.replayRead.req.valid, io.replayRead.req.bits.idx,
-                        Mux(io.fenceRead.req.valid, io.fenceRead.req.bits.idx,
+                        Mux(io.fetchDirty.req.valid, io.fetchDirty.req.bits.idx,
                         Mux(io.cacopRead.req.valid, io.cacopRead.req.bits.idx,
-                        Mux(io.axiRead.req.valid , io.axiRead.req.bits.idx,
+                        Mux(io.refillLogout.req.valid , io.refillLogout.req.bits.idx,
                                                     0.U(nIdxBits.W)))))))
 
 
         readPos(w) := Mux(io.lsuRead(w).req.valid, io.lsuRead(w).req.bits.pos,
-                        Mux(io.mshrRead.req.valid, io.mshrRead.req.bits.pos,
+                        Mux(io.missReplace.req.valid, io.missReplace.req.bits.pos,
                         Mux(io.replayRead.req.valid, io.replayRead.req.bits.pos,
-                        Mux(io.fenceRead.req.valid, io.fenceRead.req.bits.pos,
+                        Mux(io.fetchDirty.req.valid, io.fetchDirty.req.bits.pos,
                         Mux(io.cacopRead.req.valid, io.cacopRead.req.bits.pos,
-                        Mux(io.axiRead.req.valid , io.axiRead.req.bits.pos,
+                        Mux(io.refillLogout.req.valid , io.refillLogout.req.bits.pos,
                                                     0.U(log2Ceil(nWays).W)))))))
 
         // only lsuRead and cacopRead need tag 
@@ -203,36 +206,36 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     }
 
 
-    // 代一个周期，快速该行设为readOnly
-    val fastROval = RegInit(false.B)
-    val fastROidx = RegInit(0.U(nIdxBits.W))
-    val fastROtag = RegInit(0.U(nTagBits.W))
-    val fastDirval = RegInit(false.B)
-    val fastDiridx = RegInit(0.U(nIdxBits.W))
-    val fastDirpos = RegInit(0.U(log2Ceil(nWays).W))
-    val fastRefillval = RegInit(false.B)
-    val fastRefillidx = RegInit(0.U(nIdxBits.W))
-    val fastRefillpos = RegInit(0.U(log2Ceil(nWays).W))
+    // 一些信息的s2内部转发
+    val s2ROval = RegInit(false.B)
+    val s2ROidx = RegInit(0.U(nIdxBits.W))
+    val s2ROtag = RegInit(0.U(nTagBits.W))
+    val s2Dirval = RegInit(false.B)
+    val s2Diridx = RegInit(0.U(nIdxBits.W))
+    val s2Dirpos = RegInit(0.U(log2Ceil(nWays).W))
+    val s2Refillval = RegInit(false.B)
+    val s2Refillidx = RegInit(0.U(nIdxBits.W))
+    val s2Refillpos = RegInit(0.U(log2Ceil(nWays).W))
 
-    dontTouch(fastROval)
-    dontTouch(fastROidx)
-    dontTouch(fastROtag)
-    dontTouch(fastDirval)
-    dontTouch(fastDiridx)
-    dontTouch(fastDirpos)
-    dontTouch(fastRefillval)
-    dontTouch(fastRefillidx)
-    dontTouch(fastRefillpos)
+    dontTouch(s2ROval)
+    dontTouch(s2ROidx)
+    dontTouch(s2ROtag)
+    dontTouch(s2Dirval)
+    dontTouch(s2Diridx)
+    dontTouch(s2Dirpos)
+    dontTouch(s2Refillval)
+    dontTouch(s2Refillidx)
+    dontTouch(s2Refillpos)
 
-    fastROval := false.B
-    fastROidx := 0.U
-    fastROtag := 0.U
-    fastDirval := false.B
-    fastDiridx := 0.U
-    fastDirpos := 0.U
-    fastRefillval := false.B
-    fastRefillidx := 0.U
-    fastRefillpos := 0.U
+    s2ROval := false.B
+    s2ROidx := 0.U
+    s2ROtag := 0.U
+    s2Dirval := false.B
+    s2Diridx := 0.U
+    s2Dirpos := 0.U
+    s2Refillval := false.B
+    s2Refillidx := 0.U
+    s2Refillpos := 0.U
 
 
     for(w <- 0 until memWidth){
@@ -252,21 +255,21 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                 
                 val rtag = RegNext(readTag(w))// no need RegNext(readTag(w)) , because  the tag is from io.lsu.s1_paddr
                 hitoh(w) := VecInit(rmetaSet.map((x: MetaLine) => x.valid && x.tag === rtag &&
-                    // 如果是一个试图访问只读块(这行被设置成只读，或者上个周期有条mshrread将把这里设置成只读)的store指令，就认为是miss
-                     !( isLsuStore && (x.readOnly || (fastROval && fastROtag === rtag && fastROidx === ridx)))
+                    // 如果是一个试图访问只读块(这行被设置成只读，或者上个周期有条missReplace将把这里设置成只读)的store指令，就认为是miss
+                     !( isLsuStore && (x.readOnly || (s2ROval && s2ROtag === rtag && s2ROidx === ridx)))
                      )).asUInt
                 assert(PopCount(hitoh(w)) <= 1.U,"At most one hit")
                 val hitpos = PriorityEncoder(hitoh(w))
                 //  如果是被refill第一个字报废的行，此时算未命中
-                readResp(w).bits.hit := hitoh(w).orR && !( fastRefillval && fastRefillidx === ridx && fastRefillpos === hitpos)
+                readResp(w).bits.hit := hitoh(w).orR && !( s2Refillval && s2Refillidx === ridx && s2Refillpos === hitpos)
                 readResp(w).bits.pos := hitpos
                 readResp(w).bits.rmeta := rmetaSet(hitpos)
                 
                 when(hitoh(w).orR && isLsuStore){
-                    // 如果是一个命中的store指令，存fastDir信息，以防来不及告诉下个周期的mshrread这里脏了
-                    fastDirval := true.B
-                    fastDiridx := ridx
-                    fastDirpos := hitpos
+                    // 如果是一个命中的store指令，存s2Dir信息，以防来不及告诉下个周期的missReplace这里脏了
+                    s2Dirval := true.B
+                    s2Diridx := ridx
+                    s2Dirpos := hitpos
                 }
 
             }
@@ -289,13 +292,13 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                 readResp(w).bits.pos := rpos
 
                 when(isReplayStore){
-                    // 如果是一个replay的store指令，存fastDir信息，以防来不及告诉下个周期的mshrread这里脏了
-                    fastDirval := true.B
-                    fastDiridx := ridx
-                    fastDirpos := rpos
+                    // 如果是一个replay的store指令，存s2Dir信息，以防来不及告诉下个周期的missReplace这里脏了
+                    s2Dirval := true.B
+                    s2Diridx := ridx
+                    s2Dirpos := rpos
                 }
             }
-            is(mshr_R){
+            is(miss_R){
                 
                 val isfull = rmetaSet.map(_.valid).reduce(_ && _)
                 // 读到的是一个set，里面有nWays个age
@@ -317,14 +320,14 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                 // 可能读到的是有效的，也可能是无效的行 ,送到axi那边自行判断要不要先写回总线
                 readResp(w).bits.rmeta := rmetaSet(replacePos)
                 // 做快速dirty的转发
-                when(fastDirval && fastDiridx === ridx && fastDirpos === replacePos){
+                when(s2Dirval && s2Diridx === ridx && s2Dirpos === replacePos){
                     readResp(w).bits.rmeta.dirty := true.B
                 }
                 
                 // 记录这个s1取出来的，该被设为readOnly的行的信息
-                fastROval := true.B
-                fastROidx := ridx
-                fastROtag := rmetaSet(replacePos).tag
+                s2ROval := true.B
+                s2ROidx := ridx
+                s2ROtag := rmetaSet(replacePos).tag
 
             }
 
@@ -336,11 +339,11 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                 readResp(w).bits.pos := dirtyPos
             }
 
-            is(axi_R){
+            is(refill_L){
                 // 记录第一个字refill来，以便报废那一行
-                fastRefillval := true.B
-                fastRefillidx := ridx
-                fastRefillpos := rpos
+                s2Refillval := true.B
+                s2Refillidx := ridx
+                s2Refillpos := rpos
             }
 
             // TODO cacop_R
@@ -352,21 +355,21 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
             is(lsu_R){
                 io.lsuRead(w).resp := readResp(w)
             }
-            is(mshr_R){
-                io.mshrRead.resp := readResp(w)
+            is(miss_R){
+                io.missReplace.resp := readResp(w)
             }
             is(replay_R){
                 io.replayRead.resp := readResp(w)
             }
             is(fence_R){
-                io.fenceRead.resp := readResp(w)
+                io.fetchDirty.resp := readResp(w)
 
             }
         }
     }
 
-    // 这个hasDirty要始终通过fenceRead返回hasDirty给外界
-    io.fenceRead.resp.bits.hasDirty := meta.io.hasDirty
+    // 这个hasDirty要始终通过fetchDirty返回hasDirty给外界
+    io.fetchDirty.resp.bits.hasDirty := meta.io.hasDirty
 
 
     //write
@@ -375,23 +378,26 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     writeResp := 0.U.asTypeOf(Valid(new DcacheMetaResp))
 
     val writeValid = io.lsuWrite.req.valid ||
-                     io.axiWrite.req.valid ||
+                     io.wfuWrite.req.valid ||
+                     io.lineFreeze.req.valid ||
                      io.replayWrite.req.valid ||
-                     io.fenceWrite.req.valid ||
+                     io.lineClear.req.valid ||
                      io.cacopWrite.req.valid
 
     val writeType   = Mux(io.lsuWrite.req.valid,lsu_W,
-                    Mux(io.axiWrite.req.valid,axi_W,
+                    Mux(io.wfuWrite.req.valid,axi_W,
+                    Mux(io.lineFreeze.req.valid,line_F,
                     Mux(io.replayWrite.req.valid,replay_W,
-                    Mux(io.fenceWrite.req.valid,fence_W,
+                    Mux(io.lineClear.req.valid,fence_W,
                     Mux(io.cacopWrite.req.valid,cacop_W,
-                                                none)))))
+                                                none))))))
     val writeReq    = Mux(io.lsuWrite.req.valid, io.lsuWrite.req.bits,
-                    Mux(io.axiWrite.req.valid, io.axiWrite.req.bits,
+                    Mux(io.wfuWrite.req.valid, io.wfuWrite.req.bits,
+                    Mux(io.lineFreeze.req.valid, io.lineFreeze.req.bits,
                     Mux(io.replayWrite.req.valid, io.replayWrite.req.bits,
-                    Mux(io.fenceWrite.req.valid, io.fenceWrite.req.bits,
+                    Mux(io.lineClear.req.valid, io.lineClear.req.bits,
                     Mux(io.cacopWrite.req.valid, io.cacopWrite.req.bits,
-                                                0.U.asTypeOf(new DcacheMetaReq))))))
+                                                0.U.asTypeOf(new DcacheMetaReq)))))))
 
     // write 的行为由传入方定义好了,因此此处统一正常读写就好
     meta.io.write.req.valid := writeValid
@@ -404,13 +410,16 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
             io.lsuWrite.resp := writeResp
         }
         is(axi_W){
-            io.axiWrite.resp := writeResp
+            io.wfuWrite.resp := writeResp
+        }
+        is(line_F){
+            io.lineFreeze.resp := writeResp
         }
         is(replay_W){
             io.replayWrite.resp := writeResp
         }
         is(fence_W){
-            io.fenceWrite.resp := writeResp
+            io.lineClear.resp := writeResp
         }
         is(cacop_W){
             io.cacopWrite.resp := writeResp

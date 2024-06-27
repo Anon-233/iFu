@@ -31,27 +31,25 @@ class DcacheDataLogic extends Module with HasDcacheParameters{
     val io = IO(new CoreBundle{
         val lsuRead     = Vec( memWidth ,new DcacheDataIO)
         val lsuWrite    = new DcacheDataIO
-        val axiRead    = new DcacheDataIO
-        val axiWrite    = new DcacheDataIO
+        val wfuRead    = new DcacheDataIO
+        val wfuWrite    = new DcacheDataIO
         val replayRead  = new DcacheDataIO
         val replayWrite = new DcacheDataIO
-        val fenceRead   = new DcacheDataIO
     })
 
     for (w <- 0 until memWidth) {
         io.lsuRead(w).resp  := 0.U.asTypeOf(Valid(new DcacheDataResp))
     }
     io.lsuWrite.resp := 0.U.asTypeOf(Valid(new DcacheDataResp))
-    io.axiRead.resp    := 0.U.asTypeOf(Valid(new DcacheDataResp))
-    io.axiWrite.resp    := 0.U.asTypeOf(Valid(new DcacheDataResp))
+    io.wfuRead.resp    := 0.U.asTypeOf(Valid(new DcacheDataResp))
+    io.wfuWrite.resp    := 0.U.asTypeOf(Valid(new DcacheDataResp))
     io.replayRead.resp  := 0.U.asTypeOf(Valid(new DcacheDataResp))
     io.replayWrite.resp := 0.U.asTypeOf(Valid(new DcacheDataResp))
-    io.fenceRead.resp   := 0.U.asTypeOf(Valid(new DcacheDataResp))
 
     // data
     val data = Module(new DcacheData)
 
-    val lsu_R :: lsu_W :: axi_R :: axi_W :: replay_R :: replay_W :: fence_R :: fence_C :: none :: Nil = Enum(9)
+    val lsu_R :: lsu_W :: wfu_R :: wfu_W :: replay_R :: replay_W :: none :: Nil = Enum(7)
 
     // Read
     val haslsuRead = io.lsuRead.map(x=>x.req.valid).reduce(_|_)
@@ -66,21 +64,18 @@ class DcacheDataLogic extends Module with HasDcacheParameters{
 
     for (w <- 0 until memWidth) {
         readType := Mux(haslsuRead, lsu_R,
-                       Mux(io.axiRead.req.valid,   axi_R,
+                       Mux(io.wfuRead.req.valid,   wfu_R,
                        Mux(io.replayRead.req.valid, replay_R,
-                       Mux(io.fenceRead.req.valid,  fence_R,
-                                                    none))))
+                                                    none)))
         
         readValid(w) := io.lsuRead(w).req.valid ||
-                        io.axiRead.req.valid ||
-                        io.replayRead.req.valid ||
-                        io.fenceRead.req.valid
+                        io.wfuRead.req.valid ||
+                        io.replayRead.req.valid
 
         readReq(w) := Mux(io.lsuRead(w).req.valid, io.lsuRead(w).req.bits,
-                               Mux(io.axiRead.req.valid,   io.axiRead.req.bits,
+                               Mux(io.wfuRead.req.valid,   io.wfuRead.req.bits,
                                Mux(io.replayRead.req.valid, io.replayRead.req.bits,
-                               Mux(io.fenceRead.req.valid,  io.fenceRead.req.bits,
-                                                            0.U.asTypeOf(new DcacheDataReq)))))
+                                                            0.U.asTypeOf(new DcacheDataReq))))
         
         
     }
@@ -100,14 +95,11 @@ class DcacheDataLogic extends Module with HasDcacheParameters{
             is (lsu_R) {
                 io.lsuRead(w).resp := readResp(w)
             }
-            is (axi_R) {
-                io.axiRead.resp := readResp(w)
+            is (wfu_R) {
+                io.wfuRead.resp := readResp(w)
             }
             is (replay_R) {
                 io.replayRead.resp := readResp(w)
-            }
-            is (fence_R) {
-                io.fenceRead.resp := readResp(w)
             }
         }
     }
@@ -121,16 +113,16 @@ class DcacheDataLogic extends Module with HasDcacheParameters{
     writeResp := 0.U.asTypeOf(Valid(new DcacheDataResp))
 
     writeValid := io.lsuWrite.req.valid ||
-                  io.axiWrite.req.valid ||
+                  io.wfuWrite.req.valid ||
                   io.replayWrite.req.valid
 
     writeType := Mux(io.lsuWrite.req.valid, lsu_W,
-                    Mux(io.axiWrite.req.valid, axi_W,
+                    Mux(io.wfuWrite.req.valid, wfu_W,
                     Mux(io.replayWrite.req.valid, replay_W,
                                                 none)))
 
     writeReq := Mux(io.lsuWrite.req.valid, io.lsuWrite.req.bits,
-                        Mux(io.axiWrite.req.valid, io.axiWrite.req.bits,
+                        Mux(io.wfuWrite.req.valid, io.wfuWrite.req.bits,
                         Mux(io.replayWrite.req.valid, io.replayWrite.req.bits,
                                                         0.U.asTypeOf(new DcacheDataReq))))
 
@@ -145,8 +137,8 @@ class DcacheDataLogic extends Module with HasDcacheParameters{
         is(lsu_W){
             io.lsuWrite.resp := writeResp
         }
-        is(axi_W){
-            io.axiWrite.resp := writeResp
+        is(wfu_W){
+            io.wfuWrite.resp := writeResp
         }
         is(replay_W){
             io.replayWrite.resp := writeResp

@@ -32,7 +32,7 @@ s2:
             如果mshr有st指令，那就说明前面的st指令还在等待自己完成，后面的不要去做，按照storefailed的方式返回
     若miss经过missAribiter的处理，将miss的请求存入mshr中，等待有机会发出replay
 
-- mshrread : 处理mshr指令的第一步，向wfu发请求
+- replayfind : 处理mshr指令的第一步，向wfu发请求
 s0:按miss的地址去meta里面寻一个可替换的行
 s1:meta将这个寻得的pos以及其他有关信息(要去fetch的自己的地址，以及可能写回内存的脏行的地址)送入wfu
     hai
@@ -80,7 +80,7 @@ s2:将resp通过0号流水线送回给lsu
     wb和refill最高,因为wb一旦开始,必须保证从cache行读字的速度,比axi总线向内存写回要快,否则会出现数据混乱的情况.
     然后是mmio的req和resp
     再之后是replay,因为replay信号等了很久了,优先处理
-    再之后是mshrread,因为mshrread是为了给replay提供激活wfu功能的
+    再之后是replayfind,因为replayfind是为了给replay提供激活wfu功能的
     再之后,在所有总线相关和处理miss指令之后,是普通的lsu请求
 
 - axi线的互斥
