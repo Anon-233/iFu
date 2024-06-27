@@ -84,7 +84,6 @@ class LSUDMemIO extends CoreBundle {
 
     val brupdate    = Output(new BrUpdateInfo)
     val exception   = Output(Bool())
-    val rob_head_idx = Output(UInt(robAddrSz.W))
 
     val llbit       = Output(Bool())
     val fence_dmem  = Output(Bool())
