@@ -22,8 +22,6 @@ class iFuCore extends CoreModule {
     val io = IO(new CoreBundle {
         val ext_int = Input(UInt(8.W))
         val axi3    = new AXI3
-        val dreq    = Output(new CBusReq)
-        val dresp   = Input(new CBusResp)
     })
 /*-----------------------------*/
 
@@ -115,11 +113,13 @@ class iFuCore extends CoreModule {
 
 /*-----------------------------*/
 
-    io.dreq := lsu.io.dreq
-    lsu.io.dresp := io.dresp
-
     val sma_arb = Module(new SMAR_Arbiter(3, 2))
-    sma_arb.io.smar(0) <> ifu.io.smar
+    sma_arb.io.smar(0) <> lsu.io.smar(0)
+    sma_arb.io.smar(1) <> lsu.io.smar(1)
+    sma_arb.io.smar(2) <> ifu.io.smar
+
+    sma_arb.io.smaw(0) <> lsu.io.smaw(0)
+    sma_arb.io.smaw(1) <> lsu.io.smaw(1)
 
     io.axi3 <> sma_arb.io.axi3
 

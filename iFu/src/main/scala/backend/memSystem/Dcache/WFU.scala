@@ -3,9 +3,10 @@ package iFu.backend
 import chisel3._
 import chisel3.util._
 
+import iFu.axi3._
+import iFu.sma._
+
 import iFu.common._
-import iFu.common.Consts._
-import iFu.util._
 
 class WriteFetchUnit extends Module with HasDcacheParameters {
     val io = IO(new CoreBundle {
@@ -37,8 +38,8 @@ class WriteFetchUnit extends Module with HasDcacheParameters {
         // clear a dirty line
         val line_clear_req = Output(Valid(new DCacheReq))
 
-        val cbus_resp = Input(new CBusResp)
-        val cbus_req  = Output(new CBusReq)
+        val smar = new SMAR
+        val smaw = new SMAW
     })
 
     // ready -> no thing to do, fetch -> fetch data from memory, wb -> write back dirty line to memory
@@ -78,20 +79,27 @@ class WriteFetchUnit extends Module with HasDcacheParameters {
     io.wfu_write_req := DontCare
     io.wfu_write_req.valid     := false.B
     io.wfu_write_req.bits.addr := fetchAddr | (refillIdx << 2.U).asUInt
-    io.wfu_write_req.bits.data := io.cbus_resp.data
+    io.wfu_write_req.bits.data := io.smar.resp.rdata
 
     io.line_clear_req := DontCare
     io.line_clear_req.valid     := false.B
     io.line_clear_req.bits.addr := replaceAddr
 
-    io.cbus_req.valid        := state === fetch || (state === wb && getfirstWord)
-    io.cbus_req.isStore      := state === wb
-    io.cbus_req.mask         := Mux(state === wb , 0xf.U, 0x0.U)
-    io.cbus_req.axiLen       := MLEN16
-    io.cbus_req.axiBurstType := AXI_BURST_INCR
-    io.cbus_req.size         := MSIZE4
-    io.cbus_req.addr         := Mux(state === fetch, fetchAddr, replaceAddr)
-    io.cbus_req.data         := dataLineBuffer(execute_head)
+    io.smar.req.arvalid := state === fetch
+    io.smar.req.arlen   := AXI3Parameters.MLEN16
+    io.smar.req.arburst := AXI3Parameters.BURST_INCR
+    io.smar.req.arsize  := AXI3Parameters.MSIZE4
+    io.smar.req.araddr  := fetchAddr
+
+    io.smaw.req.awvalid := state === wb && getfirstWord
+    io.smaw.req.wvalid  := state === wb && getfirstWord
+    io.smaw.req.wstrb   := 0xf.U
+    io.smaw.req.awlen   := AXI3Parameters.MLEN16
+    io.smaw.req.awburst := AXI3Parameters.BURST_INCR
+    io.smaw.req.awsize  := AXI3Parameters.MSIZE4
+    io.smaw.req.awaddr  := replaceAddr
+    io.smaw.req.wdata   := dataLineBuffer(execute_head)
+    io.smaw.req.wlast   := execute_head === 0xf.U
 
     when (state === ready) {
         when (io.req_valid) {
@@ -109,14 +117,14 @@ class WriteFetchUnit extends Module with HasDcacheParameters {
             state := Mux(io.meta_resp.rmeta.valid && io.meta_resp.rmeta.dirty, wb, fetch)
         }
     } .elsewhen (state === fetch) {
-        when (io.cbus_resp.ready) {
-            state := Mux(io.cbus_resp.isLast, ready, fetch)
+        when (io.smar.resp.rvalid) {
+            state := Mux(io.smar.resp.rlast, ready, fetch)
 
             // refill Meta Array and Data Array(when first word comes, it will invalidate the old meta)
             io.wfu_write_req.valid := true.B
             refillIdx := refillIdx + 1.U
 
-            when (io.cbus_resp.isLast) { // finish fetch
+            when (io.smar.resp.rlast) { // finish fetch
                 io.fetch_ready := true.B
             }
         }
@@ -134,14 +142,14 @@ class WriteFetchUnit extends Module with HasDcacheParameters {
         }
 
         // write back to memory
-        when (io.cbus_resp.ready) {
-            state := Mux(!io.cbus_resp.isLast, wb, 
+        when (io.smaw.resp.wready) {
+            state := Mux(!io.smaw.req.wlast, wb,
                      Mux(wbOnly             , ready,    // do not fetch, only write back
                                               fetch))
 
             execute_head := execute_head + 1.U
 
-            when (io.cbus_resp.isLast) { // finish write back
+            when (io.smaw.req.wlast) { // finish write back
                 when (wbOnly) {
                     // clear a dirty line
                     io.line_clear_req.valid := true.B

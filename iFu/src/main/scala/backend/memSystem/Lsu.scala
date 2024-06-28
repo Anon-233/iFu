@@ -3,6 +3,8 @@ package iFu.backend
 import chisel3._
 import chisel3.util._
 
+import iFu.sma._
+
 import iFu.tlb._
 
 import iFu.common._
@@ -83,8 +85,8 @@ class LSUCsrIO extends CoreBundle {
 
 class LSUIO extends CoreBundle {
     val core  = new LSUCoreIO
-    val dreq  = Output(new CBusReq)
-    val dresp = Input(new CBusResp)
+    val smar = Vec(2, new SMAR)
+    val smaw = Vec(2, new SMAW)
     val csr   = new LSUCsrIO
 }
 
@@ -156,8 +158,10 @@ class Lsu extends CoreModule {
     dcache.io.lsu.llbit        := io.csr.llbit
     dcache.io.lsu.brupdate     := io.core.brupdate
     dcache.io.lsu.exception    := io.core.exception
-    io.dreq                    := dcache.io.cbusReq
-    dcache.io.cbusResp         := io.dresp
+    io.smar(0) <> dcache.io.smar(0)
+    io.smar(1) <> dcache.io.smar(1)
+    io.smaw(0) <> dcache.io.smaw(0)
+    io.smaw(1) <> dcache.io.smaw(1)
     // -------------------------------------------------------------
 
     // -------------------------------------------------------------

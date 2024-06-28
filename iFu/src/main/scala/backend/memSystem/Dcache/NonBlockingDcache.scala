@@ -4,9 +4,13 @@ package iFu.backend
 import chisel3._
 import chisel3.util._
 
+import iFu.axi3._
+import iFu.sma._
+
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
+
 
 import iFu.difftest._
 
@@ -43,8 +47,8 @@ trait HasDcacheParameters extends HasCoreParameters{
 class DCacheBundle  extends CoreBundle with HasDcacheParameters{
     // val error = new DCacheErrors
     val lsu = Flipped(new LSUDMemIO)
-    val cbusReq = Output(new CBusReq)
-    val cbusResp = Input(new CBusResp)
+    val smar = Vec(2, new SMAR)
+    val smaw = Vec(2, new SMAW)
 }
 
 
@@ -72,6 +76,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     val replay :: wb :: refill ::  replace_find :: lsu :: mmio_req :: mmio_resp  :: prefetch  :: fence_read :: fence_clear :: cacop :: nil :: Nil = Enum(12)
 
+    val mmiou = Module(new MMIOUnit) 
+    mmiou.io.mmioReq := 0.U.asTypeOf(Valid(new DCacheReq))
+    io.smaw(0) <> mmiou.io.smaw
+    io.smar(0) <> mmiou.io.smar
+
     // 替换单元
     val wfu = Module(new WriteFetchUnit)
     wfu.io.req_valid := false.B
@@ -79,27 +88,17 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     wfu.io.meta_resp := 0.U.asTypeOf(new DcacheMetaResp)
     wfu.io.req_wb_only := false.B
     wfu.io.wfu_read_resp := 0.U.asTypeOf(Valid(new DCacheResp))
-    wfu.io.cbus_resp := 0.U.asTypeOf(new CBusResp)
+    io.smaw(1) <> wfu.io.smaw
+    io.smar(1) <> wfu.io.smar
 
     val wbValid = wfu.io.wfu_read_req.valid
     val refillValid = wfu.io.wfu_write_req.valid
 
-    val mmiou = Module(new MMIOUnit) 
-    mmiou.io.mmioReq := 0.U.asTypeOf(Valid(new DCacheReq))
-    mmiou.io.cbusResp := 0.U.asTypeOf(new CBusResp)
-    val mmioRespValid = mmiou.io.mmioResp.valid
-
-    // arbiter
-    when(!wfu.io.ready){
-        io.cbusReq := wfu.io.cbus_req
-        wfu.io.cbus_resp := io.cbusResp
-    }.otherwise{
-        io.cbusReq := mmiou.io.cbusReq
-        mmiou.io.cbusResp := io.cbusResp
-    }
-
+    
     // 判断axi会空闲的要求是,wfu和mmiou都要ready,并且流水线中没有正在运行的replace_find,wb,refill和mmioreq,mmio_resp
-    val axiReady = WireInit(false.B)
+    
+    val mmiouReady = WireInit(false.B)
+    val wfuReady = WireInit(false.B)
 
 
     // 存储meta信息
@@ -165,7 +164,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     ).reduce(_||_)
 
     // 流水线里面有mmioresp的时候，下一个fire的请求不要进来
-    lsuMMIOValid := io.lsu.req.fire && lsuhasMMIO && axiReady
+    lsuMMIOValid := io.lsu.req.fire && lsuhasMMIO && mmiouReady
     lsuNormalValid := io.lsu.req.fire && !lsuhasMMIO
 
     // val lsuhasStore = io.lsu.req.bits.map( req =>
@@ -175,7 +174,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // 存储mshr的信息
     val mshrs = Module(new MSHRFile)
 
-    replace_findValid := mshrs.io.newFetchreq.valid && axiReady
+    replace_findValid := mshrs.io.newFetchreq.valid && wfuReady
 
     mshrs.io.brupdate := io.lsu.brupdate
     mshrs.io.exception := io.lsu.exception
@@ -187,7 +186,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     mshrs.io.req.bits := 0.U.asTypeOf(new DCacheReq)
 
     // lsu还在发force_order并且dcache行里面还有dirty，就进行在总线空闲时进行fence操作
-    fenceReadValid :=/*  false.B && */ (io.lsu.fence_dmem && meta.io.fetchDirty.resp.bits.hasDirty) && axiReady 
+    fenceReadValid :=/*  false.B && */ (io.lsu.fence_dmem && meta.io.fetchDirty.resp.bits.hasDirty) && wfuReady 
 
     // wfu做完之后去清除掉对应的meta行
     fenceClearValid := wfu.io.line_clear_req.valid
@@ -209,13 +208,13 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     io.lsu.req.ready := !(wbValid   ||
                           refillValid ||
                           fenceClearValid  || 
-                          mmioRespValid ||
+
                           mshrReplayValid ||
                           replace_findValid ||
                         // 这个信号用于判断s2storeFailed的时候不去接当周期lsu的store请求
                           (/* lsuhasStore && */ s2StoreFailed) || 
                         // 如果lsu是mmo  
-                          (/* io.lsu.req.valid &&  */lsuhasMMIO && !axiReady)
+                          (/* io.lsu.req.valid &&  */lsuhasMMIO && !mmiouReady)
                         // 在一条mmio从进来到做完返回之前的全程，不要接下一个store请求(即使是普通的store)，防止提交顺序不同对不上difftest
                         //   (lsuhasStore && doingMMIO)
                         )
@@ -236,7 +235,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     for(w<- 0 until memWidth){
         when(w.U === 0.U){
             s0valid(w) := Mux(lsuMMIOValid || lsuNormalValid, io.lsu.req.bits(w).valid,
-                wbValid || refillValid || fenceClearValid || mmioRespValid || mshrReplayValid || replace_findValid || fenceReadValid || prefetchValid)
+                wbValid || refillValid || fenceClearValid || mshrReplayValid || replace_findValid || fenceReadValid || prefetchValid)
         }.otherwise{
             // 能用到这个else的只有lsu的请求,包括lsuMMIOValid/lsuNormalValid
             s0valid(w) := Mux( lsuMMIOValid || lsuNormalValid, io.lsu.req.bits(w).valid, false.B)
@@ -249,17 +248,16 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     for(w <- 0 until memWidth){
         when(w.U === 0.U){
-            s0req(w)  := Mux(wbValid, wfu.io.wfu_read_req.bits,
+            s0req(w) := Mux(wbValid, wfu.io.wfu_read_req.bits,
                         Mux( refillValid,   wfu.io.wfu_write_req.bits, 
                         Mux( fenceClearValid,     wfu.io.line_clear_req.bits,        
                         Mux( lsuMMIOValid,   io.lsu.req.bits(w).bits,
                         // 这里的mmioresp是DcacheReq作为载体,data是可能的rdata,uop是对应uop
-                        Mux( mmioRespValid    , mmiou.io.mmioResp.bits,
                         Mux( mshrReplayValid, mshrs.io.replay.bits,
                         Mux( replace_findValid,   mshrs.io.newFetchreq.bits,
                         Mux( lsuNormalValid,  io.lsu.req.bits(w).bits,
                         Mux( fenceReadValid,      dontCareReq,
-                        Mux( prefetchValid ,    dontCareReq, dontCareReq))))))))))
+                        Mux( prefetchValid ,    dontCareReq, dontCareReq)))))))))
         }otherwise{
             s0req(w) := Mux(lsuMMIOValid || lsuNormalValid, io.lsu.req.bits(w).bits, dontCareReq)
         }
@@ -272,12 +270,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                     Mux( refillValid,   refill,
                     Mux( fenceClearValid, fence_clear,        
                     Mux( lsuMMIOValid,   mmio_req,
-                    Mux( mmioRespValid    , mmio_resp,
                     Mux( mshrReplayValid, replay,
                     Mux( replace_findValid,   replace_find,
                     Mux( lsuNormalValid,  lsu,
                     Mux( fenceReadValid,      fence_read,
-                    Mux( prefetchValid ,    prefetch, nil))))))))))
+                    Mux( prefetchValid ,    prefetch, nil)))))))))
 
     // 做判断接replay请求
     mshrs.io.replay.ready := s0state === replay
@@ -474,10 +471,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         }
     }
 
+    mmiou.io.mmioResp.ready := s1state === nil
     // ================================ s2 ==================================
-
-    val s2state = RegNext(s1state)
-    val s2req = RegNext(s1req)
+    
+    val s2state = RegNext(Mux(mmiou.io.mmioResp.fire, mmio_resp,              s1state))
+    val s2req   = RegNext(Mux(mmiou.io.mmioResp.fire, VecInit(Seq.fill(memWidth)(mmiou.io.mmioResp.bits)),
+                                                        s1req))
 
     // when(s2state === lsu || s2state === replay || s2state === mmio_req){
     for (w <- 0 until memWidth){ 
@@ -488,18 +487,23 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s2valid = WireInit(0.U.asTypeOf(Vec(memWidth , Bool())))
     for(w <- 0 until memWidth){
                         // 上个周期没被kill
-        s2valid(w) := RegNext(s1valid(w) &&
+        s2valid(w) := RegNext((s1valid(w) &&
                             !(s1state === lsu && (isStore(s1req(w)) && s2StoreFailed)) && 
                             !(s1state === lsu && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop))) &&
                             !(s1state === replay && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)))  &&
                             !(s1state === lsu && (!isStore(s1req(w)) && io.lsu.exception)) &&
                             !(s1state === replay && (!isStore(s1req(w)) && io.lsu.exception))
-                            )   &&
-                        // s2周期没有被kill才行，s2周期被kill的只可能分支kill,s2storeFailed本身不会对自己kill
-                        !(s2state === lsu && (!isStore(s2req(w)) && IsKilledByBranch(io.lsu.brupdate, s2req(w).uop))) &&
-                        !(s2state === replay && (!isStore(s2req(w)) && IsKilledByBranch(io.lsu.brupdate, s2req(w).uop))) &&
-                        !(s2state === lsu && (!isStore(s2req(w)) && io.lsu.exception)) &&
-                        !(s2state === replay && (!isStore(s2req(w)) && io.lsu.exception))
+                            ) ||
+                            mmiou.io.mmioResp.fire // mmio_resp成功fire，说明s1一定nil，此时mmiou要把s2valid拉高
+                            ) && 
+                        (
+                            // s2周期没有被kill才行，s2周期被kill的只可能分支kill,s2storeFailed本身不会对自己kill
+                            !(s2state === lsu && (!isStore(s2req(w)) && IsKilledByBranch(io.lsu.brupdate, s2req(w).uop))) &&
+                            !(s2state === replay && (!isStore(s2req(w)) && IsKilledByBranch(io.lsu.brupdate, s2req(w).uop))) &&
+                            !(s2state === lsu && (!isStore(s2req(w)) && io.lsu.exception)) &&
+                            !(s2state === replay && (!isStore(s2req(w)) && io.lsu.exception))
+                        )
+
     }
 
     val s2hit = WireInit(0.U.asTypeOf(Vec(memWidth , Bool())))
@@ -787,10 +791,13 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     }
     
 
-    // 当两个都ready并且流水线中没有fence,mmio_req,replace_find,mmio_resp,wb,refill的时候，axiReady才会拉高
-    axiReady := (wfu.io.ready && mmiou.io.ready) &&
-                (s1state =/= fence_read && s1state =/= fence_clear && s1state =/= mmio_resp && s1state =/= mmio_req && s1state =/= replace_find && s1state =/= wb && s1state =/= refill) &&
-                (s1state =/= fence_read && s2state =/= fence_clear && s2state =/= mmio_resp && s2state =/= mmio_req && s2state =/= replace_find && s2state =/= wb && s2state =/= refill)
+    mmiouReady := mmiou.io.ready &&
+                 (s1state =/= mmio_req) && 
+                 (s2state =/= mmio_req)
+    
+    wfuReady  := wfu.io.ready && 
+                 (s1state =/= fence_read && s1state =/= fence_clear && s1state =/= replace_find && s1state =/= wb && s1state =/= refill) &&
+                 (s2state =/= fence_read && s2state =/= fence_clear && s2state =/= replace_find && s2state =/= wb && s2state =/= refill)
 
     doingMMIO := s1state === mmio_req || s2state === mmio_req || !mmiou.io.ready
 

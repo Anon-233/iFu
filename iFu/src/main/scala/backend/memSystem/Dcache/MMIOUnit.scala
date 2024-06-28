@@ -5,9 +5,11 @@ import scala.collection.View.Fill
 import chisel3._
 import chisel3.util._
 
+import  iFu.sma._
+import  iFu.axi3._
+
 import iFu.common._
 import iFu.common.Consts._
-import iFu.util._
 
 class MMIOUnit extends Module with HasDcacheParameters {
     val io = IO(new CoreBundle{
@@ -15,63 +17,65 @@ class MMIOUnit extends Module with HasDcacheParameters {
 
         val mmioReq  = Input(Valid(new DCacheReq))
         // mmioResp is a replay request
-        val mmioResp = Output(Valid(new DCacheReq))
+        val mmioResp = Decoupled(new DCacheReq)
 
-        val cbusResp = Input(new CBusResp)
-        val cbusReq = Output(new CBusReq)
+        val smar = new SMAR
+        val smaw = new SMAW
     })
     if (!FPGAPlatform) dontTouch (io)
 
-    val ready :: fetch :: wb :: Nil = Enum(3)
-    val state = RegInit(ready)
+    val s_ready :: s_fetch :: s_wb :: s_resp :: Nil = Enum(4)
+    val state = RegInit(s_ready)
 
     val mmioReq = RegInit(0.U.asTypeOf(new DCacheReq))
     if (!FPGAPlatform) dontTouch(mmioReq)
 
-    io.ready := state === ready
+    io.ready := state === s_ready
 
-    io.mmioResp := DontCare
-    io.mmioResp.valid := false.B
+    io.mmioResp.valid := state === s_resp
     io.mmioResp.bits  := mmioReq
 
-    io.cbusReq.valid        := state === fetch || state === wb
-    io.cbusReq.isStore      := state === wb
-    io.cbusReq.mask         := Mux(state === fetch, 0.U, mmioReq.mask)
-    io.cbusReq.axiLen       := MLEN1
-    io.cbusReq.axiBurstType := AXI_BURST_INCR
-    io.cbusReq.size         := mmioReq.uop.mem_size
-    io.cbusReq.addr         := mmioReq.addr
-    io.cbusReq.data         :=
+    io.smar.req.arvalid     := state === s_fetch
+    io.smaw.req.awvalid     := state === s_wb
+    io.smaw.req.wvalid      := state === s_wb
+
+    io.smaw.req.wstrb       := mmioReq.mask
+
+    io.smar.req.arlen       := AXI3Parameters.MLEN1
+    io.smaw.req.awlen       := AXI3Parameters.MLEN1
+
+    io.smar.req.arburst     := AXI3Parameters.BURST_INCR
+    io.smaw.req.awburst     := AXI3Parameters.BURST_INCR
+
+    io.smar.req.arsize      := mmioReq.uop.mem_size
+    io.smaw.req.awsize      := mmioReq.uop.mem_size
+
+    io.smar.req.araddr      := mmioReq.addr
+    io.smaw.req.awaddr      := mmioReq.addr
+
+    io.smaw.req.wdata       :=
         Mux(mmioReq.uop.mem_size === 0.U, Fill(4, mmioReq.data( 7, 0)),
         Mux(mmioReq.uop.mem_size === 1.U, Fill(2, mmioReq.data(15, 0)),
                                           mmioReq.data))
 
-    when (state === ready) {
+    io.smaw.req.wlast        := state === s_wb
+
+    when (state === s_ready) {
         when (io.mmioReq.valid) {
-            state := Mux(isStore(io.mmioReq.bits), wb, fetch)
+            state := Mux(isStore(io.mmioReq.bits), s_wb, s_fetch)
             mmioReq := io.mmioReq.bits
         }
-    } .elsewhen (state === fetch) {
-        when (io.cbusResp.ready) {
-            assert(io.cbusResp.isLast, "mmio fetch must be single word")
-
-            state := Mux(io.cbusResp.isLast, ready, fetch)
-
-            io.mmioResp.valid     := true.B
-            io.mmioResp.bits.data := io.cbusResp.data
-        }
-    } .elsewhen (state === wb) {
+    } .elsewhen (state === s_fetch) {
+        state := Mux(io.smar.resp.rvalid, s_resp, s_fetch)
+        mmioReq.data := io.smar.resp.rdata
+    } .elsewhen (state === s_wb){
         val debug_lo_byte = mmioReq.data(7, 0)
         val debug_lo_half = mmioReq.data(15, 0)
         dontTouch(debug_lo_byte)
         dontTouch(debug_lo_half)
 
-        when (io.cbusResp.ready) {
-            assert(io.cbusResp.isLast, "mmio write must be single word")
-
-            state := Mux(io.cbusResp.isLast, ready, fetch)
-
-            io.mmioResp.valid := true.B
-        }
+        state := Mux(io.smaw.resp.wready, s_resp, s_wb)
+    } .elsewhen(state === s_resp) {
+        state := Mux(io.mmioResp.ready, s_ready, s_resp)
     }
 }
