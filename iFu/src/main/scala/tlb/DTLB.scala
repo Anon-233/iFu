@@ -53,6 +53,7 @@ class DTLBIO extends CoreBundle {
 
 class DTLB extends CoreModule() {
     val io = IO(new DTLBIO)
+    io.r_req := DontCare
 
     val csr_regs = io.dtlb_csr_context
     val da_mode = csr_regs.crmd_da && !csr_regs.crmd_pg
@@ -61,7 +62,7 @@ class DTLB extends CoreModule() {
     if (!FPGAPlatform) dontTouch(pg_mode)
 
     for (w <- 0 until memWidth) {
-        val trans_resp := 0.U.asTypeOf(new DTLBResp)
+        val trans_resp = WireInit(0.U.asTypeOf(new DTLBResp))
         val vaddr = io.req(w).vaddr
         when(
             (vaddr(0) && io.req(w).size === 1.U) ||
