@@ -134,32 +134,6 @@ object Consts {
     val MEN_0 = false.B
     val MEN_1 = true.B
 
-
-    val AXI_BURST_FIXED    = 0.U(2.W)
-    val AXI_BURST_INCR     = 1.U(2.W)
-    val AXI_BURST_WRAP     = 2.U(2.W)
-    val AXI_BURST_RESERVED = 3.U(2.W)
-
-    val MLEN1   = 0x0.U(8.W)
-    val MLEN2   = 0x1.U(8.W)
-    val MLEN4   = 0x3.U(8.W)
-    val MLEN8   = 0x7.U(8.W)
-    val MLEN16  = 0xf.U(8.W)  // 最大是16拍???
-    val MLEN32  = 0x1f.U(8.W)
-    val MLEN64  = 0x3f.U(8.W)
-    val MLEN128 = 0x7f.U(8.W)
-    val MLEN256 = 0xff.U(8.W)
-
-    // bytes per beat
-    val MSIZE1   = 0.U(3.W)
-    val MSIZE2   = 1.U(3.W)
-    val MSIZE4   = 2.U(3.W) // 最大是一拍4个bytes（32位)??????
-    val MSIZE8   = 3.U(3.W)
-    val MSIZE16  = 4.U(3.W)
-    val MSIZE32  = 5.U(3.W)
-    val MSIZE64  = 6.U(3.W)
-    val MSIZE128 = 7.U(3.W)
-
     val BUBBLE = 0.U(32.W)
 
     val UOPC_SZ = 7

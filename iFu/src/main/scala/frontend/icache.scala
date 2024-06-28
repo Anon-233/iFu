@@ -4,9 +4,12 @@ import chisel3._
 import chisel3.util._
 import chisel3.util.random.LFSR
 
-import iFu.common._
+import iFu.axi3._
+import iFu.sma._
+
 import iFu.frontend.FrontendUtils._
-import iFu.common.Consts._
+
+import iFu.common._
 
 class ICacheReq extends CoreBundle {
   val addr = UInt(vaddrBits.W)
@@ -27,16 +30,15 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         val resp = Valid(new ICacheResp)
         val invalidate = Input(Bool())
 
-        val cbusResp = Input(new CBusResp)
-        val cbusReq = Output(new CBusReq)
+        val smar = new SMAR
     })
 /*---------------------------------------------------------------------*/
 //========== ----i$ params--- ==========
     val banksPerLine = iParams.banksPerLine
     val lineBytes = iParams.lineBytes
-    val refillCycles = iParams.lineBytes * 8 / io.cbusResp.data.getWidth
+    val refillCycles = iParams.lineBytes * 8 / io.smar.resp.rdata.getWidth
     require(
-        iParams.lineBytes % io.cbusResp.data.getWidth == 0,
+        iParams.lineBytes % io.smar.resp.rdata.getWidth == 0,
         "LineBytes must be divisible by data width."
     )
     require(
@@ -163,30 +165,30 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     var refillOneBankData: UInt = null
     var refillLastBank: Bool = null
     if (refillToOneBank) {
-        refillOneBankEn = io.cbusReq.valid && io.cbusResp.ready
-        refillOneBankData = io.cbusResp.data
-        refillLastBank = io.cbusResp.ready && io.cbusResp.isLast
+        refillOneBankEn = io.smar.req.arvalid && io.smar.resp.rvalid
+        refillOneBankData = io.smar.resp.rdata
+        refillLastBank = io.smar.resp.rvalid && io.smar.resp.rlast
     } else {
         val refillBufCnt = RegInit(0.U(log2Ceil(refillCycles / banksPerLine).W))
         val refillBuf = RegInit(
             VecInit(Seq.fill(refillCycles / banksPerLine)(0.U((lineBytes * 8 / refillCycles).W)))
         )
-        val refillBufWriteEn = io.cbusReq.valid && io.cbusResp.ready
+        val refillBufWriteEn = io.smar.req.arvalid && io.smar.resp.rvalid
         when (refillBufWriteEn) {
             refillBufCnt := refillBufCnt + 1.U
-            refillBuf(refillBufCnt) := io.cbusResp.data
+            refillBuf(refillBufCnt) := io.smar.resp.rdata
         }
 
         refillOneBankEn = RegNext(refillBufWriteEn) && refillBufCnt === 0.U
         refillOneBankData = refillBuf.asUInt
-        refillLastBank = RegNext(io.cbusResp.ready && io.cbusResp.isLast)
+        refillLastBank = RegNext(io.smar.resp.rvalid && io.smar.resp.rlast)
     }
 
     val refillCnt = RegInit(0.U(log2Ceil(iParams.banksPerLine).W))
     when (refillOneBankEn) {
         refillCnt := refillCnt + 1.U
     }
-    
+
     for (i <- 0 until iParams.nWays) {
         val dataArray0Idx = Mux(
             refillOneBankEn,
@@ -241,29 +243,11 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     io.resp.valid := s2_valid && s2_hit
     io.resp.bits.data := s2_data
 
-    io.cbusReq.valid := ((s2_miss && !io.s2_kill) || (iCacheState === s_Fetch)) && !RegNext(io.cbusResp.isLast)
-    io.cbusReq.isStore := false.B
-    io.cbusReq.size := MSIZE4
-    io.cbusReq.addr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
-    io.cbusReq.mask := 0.U
-    io.cbusReq.axiBurstType := AXI_BURST_INCR
-    io.cbusReq.axiLen := MLEN16
-    io.cbusReq.data := DontCare
+    io.smar.req.arvalid := ((s2_miss && !io.s2_kill) || (iCacheState === s_Fetch)) && !RegNext(io.smar.resp.rlast)
+    io.smar.req.arsize := AXI3Parameters.MSIZE4
+    io.smar.req.araddr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
+    io.smar.req.arburst := AXI3Parameters.BURST_INCR
+    io.smar.req.arlen := AXI3Parameters.MLEN16
     require(iParams.lineBytes == 64)
 //========== ------ IO ------ ==========
-/*---------------------------------------------------------------------*/
-//========== ----for debug--- ==========
-    // val clk = RegInit(0.U(64.W))
-    // printf(p"=>=>=>=>=>=>=welcom to iCache=<=<=<=<=<=<=\n")
-    // printf(p"\tnow state: ${iCacheState}\n")
-    // printf(p"\ts0_valid: ${s0_valid}, s0_vaddr: ${s0_vaddr}\n")
-    // printf(p"\ts1_valid: ${s1_valid}, s1_paddr: ${io.s1_paddr}\n")
-    // printf(p"\ts1_kill: ${io.s1_kill}, s2_kill: ${io.s2_kill}\n")
-    // printf(p"\tibusreq: ${io.cbusReq}\n")
-    // when (io.cbusResp.ready) {
-    //     printf(p"\tibusresp: ${io.cbusResp}\n")
-    // }
-    // printf(p"\trefillbuf: ${refillBuf}, refillbufcnt: ${refillBufCnt}\n")
-//========== ----for debug--- ==========
-/*---------------------------------------------------------------------*/
 }

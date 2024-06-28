@@ -9,6 +9,9 @@ import iFu.frontend.FrontendUtils.bankAlign
 import iFu.backend._
 import iFu.tlb._
 
+import iFu.sma._
+import iFu.axi3._
+
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
@@ -18,8 +21,7 @@ import iFu.difftest._
 class iFuCore extends CoreModule {
     val io = IO(new CoreBundle {
         val ext_int = Input(UInt(8.W))
-        val ireq    = Output(new CBusReq)
-        val iresp   = Input(new CBusResp)
+        val axi3    = new AXI3
         val dreq    = Output(new CBusReq)
         val dresp   = Input(new CBusResp)
     })
@@ -113,10 +115,13 @@ class iFuCore extends CoreModule {
 
 /*-----------------------------*/
 
-    io.ireq := ifu.io.ireq
-    ifu.io.iresp := io.iresp
     io.dreq := lsu.io.dreq
     lsu.io.dresp := io.dresp
+
+    val sma_arb = Module(new SMAR_Arbiter(3, 2))
+    sma_arb.io.smar(0) <> ifu.io.smar
+
+    io.axi3 <> sma_arb.io.axi3
 
 /*-----------------------------*/
 

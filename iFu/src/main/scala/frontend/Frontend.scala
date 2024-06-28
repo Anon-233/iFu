@@ -3,13 +3,14 @@ package iFu.frontend
 import chisel3._
 import chisel3.util._
 
+import iFu.sma._
+
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
 import iFu.tlb._
 import iFu.backend.PreDecode
 import iFu.frontend.FrontendUtils._
-import iFu.common.CauseCode._
 
 //TODO 重命名GlobalHistory,如果之后RAS增加计数器，Histories的update函数需要更改，
 
@@ -88,8 +89,7 @@ class FrontendToCoreIO extends CoreBundle {
 class FrontendIO extends CoreBundle {
     val core = new FrontendToCoreIO
 
-    val ireq  = Output(new CBusReq)
-    val iresp = Input(new CBusResp)
+    val smar = new SMAR
 }
 
 class Frontend extends CoreModule {
@@ -114,8 +114,7 @@ class Frontend extends CoreModule {
     val fetch_buffer = Module(new FetchBuffer)
     val ftq          = Module(new FetchTargetQueue)
 
-    io.ireq            := icache.io.cbusReq
-    icache.io.cbusResp := io.iresp
+    io.smar <> icache.io.smar
 
     icache.io.invalidate := io.core.flush_icache
 
