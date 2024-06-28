@@ -286,17 +286,17 @@ class Lsu extends CoreModule {
 
 // -----------------------------------------------------------------------
 // s0 stage: dtlb access
-    val s0_exe_tlb_uop   = widthMap(w => io.core.exe.req(w).bits.uop)
+    val s0_exe_tlb_uop   = widthMap(w => io.core.exe(w).req.bits.uop)
     // we send a request current cycle(s0)
     val s0_exe_tlb_valid = widthMap(w =>
-        io.core.exe.req(w).valid && (
-            io.core.exe.req(w).bits.uop.ctrl.is_load ||
-            io.core.exe.req(w).bits.uop.ctrl.is_sta
+        io.core.exe(w).req.valid && (
+            io.core.exe(w).req.bits.uop.ctrl.is_load ||
+            io.core.exe(w).req.bits.uop.ctrl.is_sta
         )                                                   &&
         !io.core.exception                                  &&
         !IsKilledByBranch(io.core.brupdate, s0_exe_tlb_uop(w))
     )
-    val s0_exe_tlb_vaddr = widthMap(w => io.core.exe.req(w).bits.addr)
+    val s0_exe_tlb_vaddr = widthMap(w => io.core.exe(w).req.bits.addr)
 
     for (w <- 0 until memWidth) {
         dtlb.io.req(w).vaddr   := s0_exe_tlb_vaddr(w)
@@ -309,13 +309,13 @@ class Lsu extends CoreModule {
     val s1_exe_req = Reg(Vec(memWidth, Valid(new FuncUnitResp)))
     for (w <- 0 until memWidth) {
         s1_exe_req(w).valid :=
-            io.core.exe.req(w).valid &&
+            io.core.exe(w).req.valid &&
             !io.core.exception       &&
-            !IsKilledByBranch(io.core.brupdate, io.core.exe.req(w).bits.uop)
+            !IsKilledByBranch(io.core.brupdate, io.core.exe(w).req.bits.uop)
 
-        s1_exe_req(w).bits := io.core.exe.req(w).bits
+        s1_exe_req(w).bits := io.core.exe(w).req.bits
         s1_exe_req(w).bits.uop.brMask :=
-            GetNewBrMask(io.core.brupdate, io.core.exe.req(w).bits.uop)
+            GetNewBrMask(io.core.brupdate, io.core.exe(w).req.bits.uop)
     }
 
     val s1_tlb_xcpt_valids = Wire(Vec(memWidth, Bool()))
@@ -338,22 +338,21 @@ class Lsu extends CoreModule {
     val s1_tlb_xcpt_cause = Wire(UInt())
     val s1_tlb_xcpt_uop   = Wire(new MicroOp)
     val s1_tlb_xcpt_vaddr = Wire(UInt())
-    {
-        s1_tlb_xcpt_cause := s1_tlb_xcpt_causes(0)
-        s1_tlb_xcpt_uop   := s1_tlb_xcpt_uops(0)
-        s1_tlb_xcpt_vaddr := s1_tlb_xcpt_vaddrs(0)
 
-        when (
-            s1_tlb_xcpt_valids(1) &&
-            (
-                !s1_tlb_xcpt_valids(0) ||   // pipeline 0 has no exception, choose pipeline 1
-                IsOlder(s1_tlb_xcpt_uops(1).robIdx, s1_tlb_xcpt_uops(0).robIdx, io.core.rob_head_idx)
-            )
-        ) {
-            s1_tlb_xcpt_cause := s1_tlb_xcpt_causes(1)
-            s1_tlb_xcpt_uop   := s1_tlb_xcpt_uops(1)
-            s1_tlb_xcpt_vaddr := s1_tlb_xcpt_vaddrs(1)
-        }
+    s1_tlb_xcpt_cause := s1_tlb_xcpt_causes(0)
+    s1_tlb_xcpt_uop   := s1_tlb_xcpt_uops(0)
+    s1_tlb_xcpt_vaddr := s1_tlb_xcpt_vaddrs(0)
+
+    when (
+        s1_tlb_xcpt_valids(1) &&
+        (
+            !s1_tlb_xcpt_valids(0) ||   // pipeline 0 has no exception, choose pipeline 1
+            IsOlder(s1_tlb_xcpt_uops(1).robIdx, s1_tlb_xcpt_uops(0).robIdx, io.core.rob_head_idx)
+        )
+    ) {
+        s1_tlb_xcpt_cause := s1_tlb_xcpt_causes(1)
+        s1_tlb_xcpt_uop   := s1_tlb_xcpt_uops(1)
+        s1_tlb_xcpt_vaddr := s1_tlb_xcpt_vaddrs(1)
     }
 
     val s1_exe_tlb_xcpt = widthMap(w =>
@@ -615,6 +614,9 @@ class Lsu extends CoreModule {
     val mem_paddr           = RegNext(widthMap(w => dmem_req(w).bits.addr))
     val mem_tlb_uncacheable = RegNext(s1_exe_tlb_uncacheable)
 
+    val do_ld_search = widthMap(w => ((fired_load_incoming(w) && !mem_tlb_xcpt(w)) || fired_load_wakeup(w)))
+    val do_st_search = widthMap(w => (fired_stad_incoming(w) || fired_sta_incoming(w)) && !mem_tlb_xcpt(w))
+
     // we get store address from dtlb, and load address from pipeline
     val lcam_addr = widthMap(w =>
         Mux(fired_stad_incoming(w) || fired_sta_incoming(w), RegNext(s1_exe_tlb_paddr(w)),
@@ -654,8 +656,6 @@ class Lsu extends CoreModule {
     val wb_forward_stq_idx  = RegNext(mem_forward_stq_idx)
 // -----------------------------------------------------------------------
 // s2 stage: st-ld search for ordering failures
-    val do_st_search = widthMap(w => (fired_stad_incoming(w) || fired_sta_incoming(w)) && !mem_tlb_xcpt(w))
-
     // loads which we will throws a mini-exception
     val failed_loads = WireInit(VecInit((0 until numLdqEntries).map(x => false.B)))
     for (i <- 0 until numLdqEntries) {
@@ -700,8 +700,6 @@ class Lsu extends CoreModule {
     }
 // -----------------------------------------------------------------------
 // s2 stage: ld-st search for forwarding opportunities
-    val do_ld_search = widthMap(w => ((fired_load_incoming(w) && !mem_tlb_xcpt(w)) || fired_load_wakeup(w)))
-
     for (w <- 0 until memWidth) {
         dcache.io.lsu.s1_kill(w) := false.B
     }
@@ -788,14 +786,14 @@ class Lsu extends CoreModule {
         !ld_xcpt_valid ||
         (s1_tlb_xcpt_valid && IsOlder(s1_tlb_xcpt_uop.robIdx, ld_xcpt_uop.robIdx, io.core.rob_head_idx))
 
-    val xcpt_uop = Mux(use_tlb_xcpt, tlb_xcpt_uop, ld_xcpt_uop)
+    val xcpt_uop = Mux(use_tlb_xcpt, s1_tlb_xcpt_uop, ld_xcpt_uop)
 
     r_xcpt_valid := (ld_xcpt_valid || s1_tlb_xcpt_valid) &&
                     !io.core.exception                   &&
                     !IsKilledByBranch(io.core.brupdate, xcpt_uop)
     r_xcpt.uop        := xcpt_uop
     r_xcpt.uop.brMask := GetNewBrMask(io.core.brupdate, xcpt_uop)
-    r_xcpt.cause      := Mux(use_tlb_xcpt, tlb_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
+    r_xcpt.cause      := Mux(use_tlb_xcpt, s1_tlb_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
     r_xcpt.badvaddr   := s1_tlb_xcpt_vaddr
 
     // s3 stage: throw the exception
