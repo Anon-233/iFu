@@ -175,8 +175,6 @@ class SMAR_Arbiter(num_r_reqs: Int, num_w_reqs: Int) extends CoreModule {
     io.axi3.aw.bits.cache := 0.U
     io.axi3.aw.bits.prot  := 0.U
 
-    io.axi3.aw.ready := true.B
-
     val chosen_w = PriorityEncoder(in_w_reqs.map(_.wvalid))
     io.axi3.w.valid      := in_w_reqs(chosen_w).wvalid
     io.axi3.w.bits.id    := chosen_w
@@ -184,7 +182,6 @@ class SMAR_Arbiter(num_r_reqs: Int, num_w_reqs: Int) extends CoreModule {
     io.axi3.w.bits.strb  := in_w_reqs(chosen_w).wstrb
     io.axi3.w.bits.last  := in_w_reqs(chosen_w).wlast
 
-    io.axi3.w.ready := true.B
     for (i <- 0 until num_w_reqs) {
         io.smaw(i).resp.wready := io.axi3.w.ready && (io.axi3.w.bits.id === i.U)
     }
