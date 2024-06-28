@@ -63,7 +63,7 @@ class AXI3BundleA extends Bundle with AXI3ID {
     val prot  = Output(UInt(AXI3Parameters.protBits.W))
 }
 
-class AXI3BundleB extends Bundle {
+class AXI3BundleB extends Bundle with AXI3ID {
     val resp = Output(UInt(AXI3Parameters.respBits.W))
 }
 

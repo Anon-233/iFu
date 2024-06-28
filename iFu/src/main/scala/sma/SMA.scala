@@ -186,5 +186,5 @@ class SMAR_Arbiter(num_r_reqs: Int, num_w_reqs: Int) extends CoreModule {
         io.smaw(i).resp.wready := io.axi3.w.ready && (io.axi3.w.bits.id === i.U)
     }
 
-    io.axi3.b <> DontCare
+    io.axi3.b.ready := false.B
 }
