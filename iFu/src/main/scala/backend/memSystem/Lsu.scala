@@ -501,8 +501,9 @@ class Lsu extends CoreModule {
 
     val s1_executing_loads = WireInit(VecInit((0 until numLdqEntries).map(x => false.B)))
     for (w <- 0 until memWidth) {
-        dmem_req(w).valid := false.B
-        dmem_req(w).bits  := DontCare
+        dmem_req(w).valid               := false.B
+        dmem_req(w).bits                := DontCare
+        dmem_req(w).bits.is_uncacheable := false.B
 
         when (will_fire_load_incoming(w)) {
             assert(!ldq_incoming_e(w).bits.executed)
