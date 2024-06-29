@@ -113,7 +113,7 @@ class iFuCore extends CoreModule {
 
 /*-----------------------------*/
 
-    val sma_arb = Module(new SMAR_Arbiter(3, 2))
+    val sma_arb = Module(new SMA_Arbiter(3, 2))
     sma_arb.io.smar(0) <> lsu.io.smar(0)
     sma_arb.io.smar(1) <> lsu.io.smar(1)
     sma_arb.io.smar(2) <> ifu.io.smar

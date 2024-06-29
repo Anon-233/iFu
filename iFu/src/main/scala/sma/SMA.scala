@@ -124,22 +124,27 @@ class SMAW_Adapter extends CoreModule {
     }
 }
 
-class SMAR_Arbiter(num_r_reqs: Int, num_w_reqs: Int) extends CoreModule {
+class SMA_Arbiter(num_r_reqs: Int, num_w_reqs: Int) extends CoreModule {
     val io = IO(new Bundle {
         val smar = Vec(num_r_reqs, Flipped(new SMAR))
         val smaw = Vec(num_w_reqs, Flipped(new SMAW))
         val axi3 = new AXI3
     })
 
-    val in_r_reqs = VecInit(io.smar.map(r => {
-        val adapter = Module(new SMAR_Adapter)
-        adapter.io.original := r.req
-        adapter.io.arready  := io.axi3.ar.ready
-        adapter.io.rlast    := io.axi3.r.bits.last
-        adapter.io.adapted
-    }))
+    val chosen_ar = RegInit(0.U)
+    val in_r_reqs = VecInit(io.smar.zipWithIndex.map{
+        case (r, i) => {
+            val adapter = Module(new SMAR_Adapter)
+            adapter.io.original := r.req
+            adapter.io.arready  := io.axi3.ar.fire && (chosen_ar === i.U)
+            adapter.io.rlast    := io.axi3.r.bits.last && io.axi3.r.valid && (chosen_ar === i.U)
+            adapter.io.adapted
+        }
+    })
 
-    val chosen_ar = PriorityEncoder(in_r_reqs.map(_.arvalid))
+    when (!in_r_reqs(chosen_ar).arvalid || io.axi3.ar.fire) {
+        chosen_ar := PriorityEncoder(in_r_reqs.map(_.arvalid))
+    }
     io.axi3.ar.valid      := in_r_reqs(chosen_ar).arvalid
     io.axi3.ar.bits.id    := chosen_ar
     io.axi3.ar.bits.addr  := in_r_reqs(chosen_ar).araddr
@@ -153,18 +158,24 @@ class SMAR_Arbiter(num_r_reqs: Int, num_w_reqs: Int) extends CoreModule {
     io.axi3.r.ready := true.B
     for (i <- 0 until num_r_reqs) {
         io.smar(i).resp.rdata  := io.axi3.r.bits.data
-        io.smar(i).resp.rlast  := io.axi3.r.bits.last
         io.smar(i).resp.rvalid := io.axi3.r.valid && (io.axi3.r.bits.id === i.U)
+        io.smar(i).resp.rlast  := io.axi3.r.bits.last && io.smar(i).resp.rvalid
     }
 
-    val in_w_reqs = VecInit(io.smaw.map(w => {
-        val adapter = Module(new SMAW_Adapter)
-        adapter.io.original := w.req
-        adapter.io.awready  := io.axi3.aw.ready
-        adapter.io.wlast    := io.axi3.w.bits.last
-        adapter.io.adapted
+    val chosen_aw = RegInit(0.U)
+    val in_w_reqs = VecInit((io.smaw.zipWithIndex.map {
+        case (w, i) => {
+            val adapter = Module(new SMAW_Adapter)
+            adapter.io.original := w.req
+            adapter.io.awready := io.axi3.aw.fire && (chosen_aw === i.U)
+            adapter.io.wlast := io.axi3.w.bits.last && io.axi3.w.ready
+            adapter.io.adapted
+        }
     }))
-    val chosen_aw = PriorityEncoder(in_w_reqs.map(_.awvalid))
+
+    when (!in_w_reqs(chosen_aw).awvalid || io.axi3.aw.fire) {
+        chosen_aw := PriorityEncoder(in_w_reqs.map(_.awvalid))
+    }
     io.axi3.aw.valid      := in_w_reqs(chosen_aw).awvalid
     io.axi3.aw.bits.id    := chosen_aw
     io.axi3.aw.bits.addr  := in_w_reqs(chosen_aw).awaddr
@@ -175,7 +186,10 @@ class SMAR_Arbiter(num_r_reqs: Int, num_w_reqs: Int) extends CoreModule {
     io.axi3.aw.bits.cache := 0.U
     io.axi3.aw.bits.prot  := 0.U
 
-    val chosen_w = PriorityEncoder(in_w_reqs.map(_.wvalid))
+    val chosen_w = RegInit(0.U)
+    when (!in_w_reqs(chosen_w).wvalid || io.axi3.w.fire) {
+        chosen_w := PriorityEncoder(in_w_reqs.map(_.wvalid))
+    }
     io.axi3.w.valid      := in_w_reqs(chosen_w).wvalid
     io.axi3.w.bits.id    := chosen_w
     io.axi3.w.bits.data  := in_w_reqs(chosen_w).wdata
@@ -183,8 +197,8 @@ class SMAR_Arbiter(num_r_reqs: Int, num_w_reqs: Int) extends CoreModule {
     io.axi3.w.bits.last  := in_w_reqs(chosen_w).wlast
 
     for (i <- 0 until num_w_reqs) {
-        io.smaw(i).resp.wready := io.axi3.w.ready && (io.axi3.w.bits.id === i.U)
+        io.smaw(i).resp.wready := io.axi3.w.fire && (io.axi3.w.bits.id === i.U)
     }
 
-    io.axi3.b.ready := false.B
+    io.axi3.b.ready := true.B
 }
