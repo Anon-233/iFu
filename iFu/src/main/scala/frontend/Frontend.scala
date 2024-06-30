@@ -124,13 +124,10 @@ class Frontend extends CoreModule {
     val s0_valid           = WireInit(false.B)
     val s0_vpc             = WireInit(0.U(vaddrBits.W))
     val s0_ghist           = WireInit((0.U).asTypeOf(new GlobalHistory))
-    val s0_is_replay       = WireInit(false.B)
-    val s0_replay_tlb_resp = Wire(new ITLBResp)
 
     if(!FPGAPlatform)dontTouch(s0_valid)
     if(!FPGAPlatform)dontTouch(s0_vpc)
     if(!FPGAPlatform)dontTouch(s0_ghist)
-    if(!FPGAPlatform)dontTouch(s0_is_replay)
 
     // the first cycle after reset, the frontend will fetch from resetPC
     when (RegNext(reset.asBool) && !reset.asBool) {
@@ -150,13 +147,11 @@ class Frontend extends CoreModule {
     val s1_valid     = RegNext(s0_valid, false.B)
     val s1_vpc       = RegNext(s0_vpc)
     val s1_ghist     = RegNext(s0_ghist)
-    val s1_is_replay = RegNext(s0_is_replay)
 
     if(!FPGAPlatform)dontTouch(f1_clear)
     if(!FPGAPlatform)dontTouch(s1_valid)
     if(!FPGAPlatform)dontTouch(s1_vpc)
     if(!FPGAPlatform)dontTouch(s1_ghist)
-    if(!FPGAPlatform)dontTouch(s1_is_replay)
 
 // --------------------------------------------------------
 // Stage 1 -> access tlb, send paddr to icache, and use bpd.f1 to predict next pc
@@ -165,11 +160,7 @@ class Frontend extends CoreModule {
     itlb.io.r_resp              := io.core.tlb_data.r_resp
     itlb.io.itlb_csr_cxt        := io.core.csr.itlb_csr_cxt
     itlb.io.req.vaddr           := s1_vpc
-    val f1_tlb_resp = Mux(
-        s1_is_replay,
-        RegNext(s0_replay_tlb_resp),
-        itlb.io.resp
-    )
+    val f1_tlb_resp = itlb.io.resp
 
     // send paddr to icache
     icache.io.s1_paddr := f1_tlb_resp.paddr
@@ -218,22 +209,17 @@ class Frontend extends CoreModule {
     val s2_valid     = RegNext(s1_valid && !f1_clear, false.B)
     val s2_vpc       = RegNext(s1_vpc)
     val s2_ghist     = Reg(new GlobalHistory)
-    val s2_is_replay = RegNext(s1_is_replay) && s2_valid
     val s2_tlb_resp  = RegNext(f1_tlb_resp)
 
     if(!FPGAPlatform)dontTouch(f2_clear)
     if(!FPGAPlatform)dontTouch(s2_valid)
     if(!FPGAPlatform)dontTouch(s2_vpc)
     if(!FPGAPlatform)dontTouch(s2_ghist)
-    if(!FPGAPlatform)dontTouch(s2_is_replay)
     if(!FPGAPlatform)dontTouch(s2_tlb_resp)
 // --------------------------------------------------------
-// Stage 2 -> check and prepare for replay, and use bpd.f2 to redirect(if needed)
-    // when replay happened, don't send request to tlb again
-    s0_replay_tlb_resp := s2_tlb_resp
-
+// Stage 2 -> use bpd.f2 to redirect(if needed)
     // handle tlb exceptions
-    val s2_xcpt = s2_valid && s2_tlb_resp.exception.valid && !s2_is_replay
+    val s2_xcpt = s2_valid && s2_tlb_resp.exception.valid
 
     icache.io.s2_kill := s2_xcpt
 
@@ -281,10 +267,9 @@ class Frontend extends CoreModule {
         (s2_valid && !icache.io.resp.valid) ||  // cache miss
         (s2_valid && icache.io.resp.valid && !f3_ready) // f3 full
     ) {
-        s0_valid     := !s2_tlb_resp.exception.valid || s2_is_replay
+        s0_valid     := !s2_tlb_resp.exception.valid
         s0_vpc       := s2_vpc
         s0_ghist     := s2_ghist
-        s0_is_replay := s2_valid && icache.io.resp.valid
         f1_clear     := true.B
     } .elsewhen (s2_valid && f3_ready) {
         when (s1_valid && s1_vpc === f2_predicted_target && !f2_correct_f1_ghist) {
@@ -293,7 +278,7 @@ class Frontend extends CoreModule {
         }
         when ((s1_valid && (s1_vpc =/= f2_predicted_target || f2_correct_f1_ghist)) || !s1_valid) {
             // redirect, next cycle, s2_ghist is meaningless, so we don't care
-            s0_valid := !(s2_tlb_resp.exception.valid && !s2_is_replay)
+            s0_valid := !s2_tlb_resp.exception.valid
             s0_vpc   := f2_predicted_target
             s0_ghist := f2_predicted_ghist
             f1_clear := true.B
@@ -473,7 +458,7 @@ class Frontend extends CoreModule {
     )
 
     ras.io.write_valid := false.B
-    ras.io.write_addr  := f3_aligned_pc + (f3_fetch_bundle.cfiIdx.bits << 2) + 4.U
+    ras.io.write_addr  := f3_aligned_pc + (f3_fetch_bundle.cfiIdx.bits << 2).asUInt + 4.U
     ras.io.write_idx   := WrapInc(f3_fetch_bundle.gHist.rasIdx, numRasEntries)
 
     val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist
@@ -497,7 +482,6 @@ class Frontend extends CoreModule {
             f1_clear     := true.B
             s0_valid     := !f3_fetch_bundle.exception.valid
             s0_vpc       := f3_predicted_target
-            s0_is_replay := false.B
             s0_ghist     := f3_predicted_ghist
         }
     }
@@ -620,7 +604,6 @@ class Frontend extends CoreModule {
         s0_valid     := io.core.redirect_val
         s0_vpc       := io.core.redirect_pc
         s0_ghist     := io.core.redirect_ghist
-        s0_is_replay := false.B
     }
 // --------------------------------------------------------
 
