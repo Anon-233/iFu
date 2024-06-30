@@ -44,8 +44,8 @@ class MMIOUnit extends Module with HasDcacheParameters {
     io.smar.req.arlen       := AXI3Parameters.MLEN1
     io.smaw.req.awlen       := AXI3Parameters.MLEN1
 
-    io.smar.req.arburst     := AXI3Parameters.BURST_INCR
-    io.smaw.req.awburst     := AXI3Parameters.BURST_INCR
+    io.smar.req.arburst     := AXI3Parameters.BURST_FIXED
+    io.smaw.req.awburst     := AXI3Parameters.BURST_FIXED
 
     io.smar.req.arsize      := mmioReq.uop.mem_size
     io.smaw.req.awsize      := mmioReq.uop.mem_size
