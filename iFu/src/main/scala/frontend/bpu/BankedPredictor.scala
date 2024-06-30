@@ -20,7 +20,6 @@ class PredictionMeta extends Bundle with HasBPUParameters{
     val BTBMeta  = Output(new BTBPredictMeta)
     val tageMeta = Output(new TagePredictMeta)
     val uBTBMeta = Output(new UBTBPredictMeta)
-    val loopMeta = Output(new LoopPredictMeta)
 }
 
 class BranchPredictionBundle extends Bundle with HasBPUParameters{
@@ -159,7 +158,6 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
     val bim = Module(new BimPredictor)
     val btb = Module(new BTBPredictor)
     // val tage = Module(new TagePredictor)
-    // val loop = Module(new LoopPredictor)
 
     // 预测器基本信息输入
 
@@ -168,7 +166,6 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
     btb.io.s1update := s1update
     bim.io.s1update := s1update
     // tage.io.f1update := s1update
-    // loop.io.f1update := s1update
 
     // 基本的pc和使能位
     faubtb.io.s1valid := s1valid
@@ -183,9 +180,6 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
     // tage.io.f1valid := s1valid
     // tage.io.f1pc := s1pc
 
-    // loop.io.f2valid := s2valid
-    // loop.io.f2pc := s2pc
-
     // f1接收faubtb输出结果
     for(w <- 0 until bankWidth){
         io.resp.f1(w).taken := faubtb.io.s1taken(w)
@@ -193,8 +187,6 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
         io.resp.f1(w).isJal := faubtb.io.s1jal(w)
         io.resp.f1(w).predictedpc := faubtb.io.s1targs(w)
     }
-
-
 
     // f2以f1为基础，接收btb，bim的输出结果
     io.resp.f2 := RegNext(io.resp.f1)
@@ -219,7 +211,7 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
     }
    
 
-    // f3以f2为基础，接收tage，loop的输出结果
+    // f3以f2为基础，接收tage的输出结果
     io.resp.f3 := RegNext(io.resp.f2)
 
     // 对于tage，还需要全局历史，以及前面f3taken传入之前的预测值作为参考，一并传入
@@ -232,27 +224,6 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
     // for(w <- 0 until bankWidth){
     //     io.resp.f3(w).taken := tage.io.f3taken(w)
     // }
-   
-
-
-    // 对于loop，还需要传入f2targs，f2isBr,f3fire,f3mask
-
-    // 接收f2的预测结果targs和br，loop会在内部筛出供f3的跳转指令
-    // loop.io.f2targs := VecInit(io.resp.f2.map(_.predictedpc))
-    // loop.io.f2isBr := VecInit(io.resp.f2.map(_.isBranch))
-
-    // 以及f3fire和s3mask
-    // loop.io.f3fire := io.f3fire
-    // loop.io.f3mask := s3mask
-
-    
-    // for(w <- 0 until bankWidth){
-    //     // 这里只有valid的预测信息才是真正有效，针对命中的循环br指令的，才可以覆盖f3的初值
-    //     when(loop.io.f3taken(w).valid){
-    //         io.resp.f3(w).taken := loop.io.f3taken(w).bits
-    //     }
-    // } 
-   
 
     // 最后收集五个计数器预测过程中产生的meta信息
     for(w <- 0 until bankWidth ){
@@ -260,10 +231,5 @@ class BankedPredictor(bank_id: Int) extends Module with HasBPUParameters
         io.f3meta(w).bimMeta := bim.io.s3meta(w)
         io.f3meta(w).BTBMeta := btb.io.s3meta(w)
         // io.f3meta(w).tageMeta := tage.io.f3meta(w)
-        // io.f3meta(w).loopMeta := loop.io.f3meta(w)
     }
 }
-
-
-
-

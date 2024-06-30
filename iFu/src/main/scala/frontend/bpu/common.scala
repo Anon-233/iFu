@@ -26,13 +26,6 @@ trait HasBPUParameters {
     val EnableBPD = true
 }
 
-trait HasLoopParameters extends HasBPUParameters {
-    val nSets = 16
-    val nWays = 4
-    def tagSz = vaddrBits - log2Ceil(nSets) - log2Ceil(fetchBytes)
-    val nWrBypassEntries = 2
-}
-
 trait HasTageParameters extends HasBPUParameters {
     val nWrBypassEntries = 2
     val tageNTables = 6
