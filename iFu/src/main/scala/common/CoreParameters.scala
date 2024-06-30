@@ -127,10 +127,8 @@ trait HasCoreParameters {
     val lsuParameters: LSUParameters = new LSUParameters
     val dcacheParameters: DcacheParameters = new DcacheParameters
     val issueParams: Seq[IssueParams] = Seq(
-        // IssueParams(issueWidth = 2, numIssueSlots = 24, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
-        // IssueParams(issueWidth = 4, numIssueSlots = 40, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4)
-        IssueParams(issueWidth = 2, numIssueSlots = 12, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
-        IssueParams(issueWidth = 4, numIssueSlots = 20, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4)
-        )
+        IssueParams(issueWidth = 2, numIssueSlots =  6, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
+        IssueParams(issueWidth = 4, numIssueSlots = 10, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4)
+    )
     val enableSFBOpt: Boolean = true
 }
