@@ -368,7 +368,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     for(w <- 0 until memWidth){
         s1valid(w) := RegNext(
                         s0valid(w) &&
-                        !(s0state === lsu && (isStore(s0req(w)) && s2StoreFailed)) && 
+                        !((s0state === lsu || s0state === mmio_req) && (isStore(s0req(w)) && s2StoreFailed)) && 
                         !(s0state === lsu && (!isStore(s0req(w)) && IsKilledByBranch(io.lsu.brupdate, s0req(w).uop))) &&
                         !(s0state === replay && (!isStore(s0req(w)) && IsKilledByBranch(io.lsu.brupdate, s0req(w).uop)))&&
                         !(s0state === lsu && (!isStore(s0req(w)) && io.lsu.exception)) &&
@@ -488,7 +488,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     for(w <- 0 until memWidth){
                         // 上个周期没被kill
         s2valid(w) := RegNext((s1valid(w) &&
-                            !(s1state === lsu && (isStore(s1req(w)) && s2StoreFailed)) && 
+                            !((s1state === lsu || s1state === mmio_req) && (isStore(s1req(w)) && s2StoreFailed)) && 
                             !(s1state === lsu && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop))) &&
                             !(s1state === replay && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)))  &&
                             !(s1state === lsu && (!isStore(s1req(w)) && io.lsu.exception)) &&
