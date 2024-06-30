@@ -58,12 +58,6 @@ object Consts {
     val TLB_F  =  9.U(CSR_SZ.W)  // tlbfill
     val TLB_I  = 10.U(CSR_SZ.W)  // invtlb
 
-    // val BSRC_SZ = 2
-    // val BSRC_1  = 0.U(BSRC_SZ.W) // 1-cycle branch pred
-    // val BSRC_2  = 1.U(BSRC_SZ.W) // 2-cycle branch pred
-    // val BSRC_3  = 2.U(BSRC_SZ.W) // 3-cycle branch pred
-    // val BSRC_C  = 3.U(BSRC_SZ.W) // core branch resolution
-
     val CFI_SZ   = 2
     val CFI_X    = 0.U(CFI_SZ.W) // Not a CFI instruction
     val CFI_BR   = 1.U(CFI_SZ.W) // Branch

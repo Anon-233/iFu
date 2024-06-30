@@ -12,7 +12,6 @@ class BrUpdateMasks extends CoreBundle {
 }
 
 class BrResolutionInfo extends CoreBundle {
-    val CFI_SZ = 2
     val uop = new MicroOp()
     val valid = Bool()
     val mispredict = Bool()

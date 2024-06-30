@@ -48,7 +48,6 @@ class FetchTargetQueue extends CoreModule {
     val numFTQEntries      = frontendParams.numFTQEntries
     val numRasEntries      = frontendParams.bpdParams.numRasEntries
     val nBanks             = frontendParams.iCacheParams.nBanks
-    val localHistoryLength = frontendParams.bpdParams.localHistoryLength
     val bankBytes          = frontendParams.iCacheParams.bankBytes
     val fetchWidth         = frontendParams.fetchWidth
     val idxSz              = log2Ceil(numFTQEntries)

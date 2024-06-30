@@ -8,7 +8,6 @@ import iFu.common.Consts._
 class BPUParameters {
     val globalHistoryLength: Int = 8
     val numRasEntries: Int       = 16
-    val localHistoryLength:Int = 2 
 }
 
 class ICacheParameters {
