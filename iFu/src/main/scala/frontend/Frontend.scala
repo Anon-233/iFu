@@ -506,8 +506,6 @@ class Frontend extends CoreModule {
 // -------------------------------------------------------
     f4_btb_corrections.io.enq.valid                   := f3_ifu_resp.io.deq.fire && f3_btb_mispredicts.reduce(_||_)
     f4_btb_corrections.io.enq.bits                    := DontCare
-    f4_btb_corrections.io.enq.bits.isMispredictUpdate := false.B
-    f4_btb_corrections.io.enq.bits.isRepairUpdate     := false.B
     f4_btb_corrections.io.enq.bits.btbMispredicts     := f3_btb_mispredicts.asUInt
     f4_btb_corrections.io.enq.bits.pc                 := f3_fetch_bundle.pc
     f4_btb_corrections.io.enq.bits.gHist              := f3_fetch_bundle.gHist

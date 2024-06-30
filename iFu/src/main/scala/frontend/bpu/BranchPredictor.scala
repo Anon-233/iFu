@@ -141,9 +141,6 @@ class BranchPredictor extends Module
 
 
   for (i <- 0 until nBanks) {
-    bankedPredictors(i).io.update.bits.isMispredictUpdate := io.update.bits.isMispredictUpdate
-    bankedPredictors(i).io.update.bits.isRepairUpdate     := io.update.bits.isRepairUpdate
-
     bankedPredictors(i).io.update.bits.meta             := io.update.bits.meta(i)
     bankedPredictors(i).io.update.bits.cfiIdx.bits     := io.update.bits.cfiIdx.bits
     bankedPredictors(i).io.update.bits.cfiTaken        := io.update.bits.cfiTaken
@@ -152,7 +149,6 @@ class BranchPredictor extends Module
     bankedPredictors(i).io.update.bits.cfiIsJal       := io.update.bits.cfiIsJal
     bankedPredictors(i).io.update.bits.cfiIsJalr      := io.update.bits.cfiIsJalr
     bankedPredictors(i).io.update.bits.target           := io.update.bits.target
-
   }
 
  
