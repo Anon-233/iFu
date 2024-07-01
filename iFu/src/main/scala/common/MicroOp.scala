@@ -25,7 +25,6 @@ class MicroOp extends CoreBundle {
     val isBr: Bool   = Bool()
     val isJal: Bool  = Bool()
     val isJalr: Bool = Bool()
-    val isSFB: Bool  = Bool()
     val taken: Bool  = Bool()
 
     val brMask: UInt = UInt(maxBrCount.W)
@@ -41,7 +40,6 @@ class MicroOp extends CoreBundle {
     val pdst: UInt       = UInt(pregSz.W)
     val prs1: UInt       = UInt(pregSz.W)
     val prs2: UInt       = UInt(pregSz.W)
-    val ppred: UInt      = UInt(log2Ceil(numFTQEntries).W)
     val stale_pdst: UInt = UInt(pregSz.W)
 
     val bypassable: Bool = Bool()
@@ -58,7 +56,6 @@ class MicroOp extends CoreBundle {
 
     val prs1_busy: Bool  = Bool()
     val prs2_busy: Bool  = Bool()
-    val ppred_busy: Bool = Bool()
 
     val xcpt_valid: Bool = Bool()
     val xcpt_cause: UInt = UInt(15.W)
@@ -89,9 +86,7 @@ class MicroOp extends CoreBundle {
     val debug_mispred: Bool = if (!FPGAPlatform) Bool() else null
     val debug_load_uncacheable: Bool = if (!FPGAPlatform) Bool() else null
 
-    def is_sfb_br: Bool             = isBr && isSFB
-    def is_sfb_shadow: Bool         = isSFB && !isBr
-    def allocate_brtag: Bool        = (isBr && !isSFB) || isJalr
+    def allocate_brtag: Bool        = isBr || isJalr
     def rf_wen: Bool                = dst_rtype =/= RT_X
     def fu_code_is(_fu: UInt): Bool = (fuCode & _fu) =/= 0.U
     def is_nop: Bool                = uopc === uopNOP

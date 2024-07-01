@@ -43,13 +43,6 @@ abstract class ExecutionUnit (
         val lsu_io    = if (hasMem) Flipped(new LSUExeIO) else null
     })
     io <> DontCare
-    if (writesIrf) {
-        io.iresp.bits.predicated := false.B
-        assert(io.iresp.ready)
-    }
-    if (writesMemIrf) {
-        io.mem_iresp.bits.predicated := false.B
-    }
     require (bypassable || !alwaysBypassable, "[execute] an execution unit must be bypassable if it is always bypassable")
 
     def supportedFuncUnits = {
@@ -117,7 +110,6 @@ class ALUExeUnit (
         alu.io.req.bits.kill     := io.req.bits.kill
         alu.io.req.bits.rs1Data  := io.req.bits.rs1Data
         alu.io.req.bits.rs2Data  := io.req.bits.rs2Data
-        alu.io.req.bits.predData := io.req.bits.predData
         alu.io.brUpdate          := io.brupdate
         alu.io.resp.ready        := true.B
         io.bypass                := alu.io.bypass
@@ -208,9 +200,6 @@ class ALUExeUnit (
         )
         io.iresp.bits.data := PriorityMux(iresp_fu_units.map(f =>
             (f.io.resp.valid, f.io.resp.bits.data)).toSeq
-        )
-        io.iresp.bits.predicated := PriorityMux(iresp_fu_units.map(f =>
-            (f.io.resp.valid, f.io.resp.bits.predicated)).toSeq
         )
 
         if (hasAlu) {

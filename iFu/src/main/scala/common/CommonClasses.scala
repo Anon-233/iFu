@@ -32,12 +32,10 @@ class FuncUnitReq extends CoreBundle {
     val uop = new MicroOp()
     val rs1Data = UInt(xLen.W)
     val rs2Data = UInt(xLen.W)
-    val predData = Bool()
 }
 
 class FuncUnitResp extends CoreBundle {
     val uop = new MicroOp()
-    val predicated = Bool()
     val data = UInt(xLen.W)
     val addr = UInt(xLen.W)
     val r1   = UInt(xLen.W)
@@ -52,7 +50,6 @@ class ExeUnitResp(val len: Int = 32) extends CoreBundle {
     val tlb_op     = UInt(5.W)
     val csr_r2     = UInt(xLen.W)
     val csr_r1     = UInt(xLen.W)
-    val predicated = Bool() // Was this predicated off?
 }
 
 class DCacheReq extends CoreBundle {
