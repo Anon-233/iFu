@@ -58,7 +58,7 @@ class FetchBuffer extends CoreModule {
     val atHead = (
         VecInit(tail.asBools.zipWithIndex.filter {
             case (bit,idx) => idx % coreWidth == 0    // get the bits on position which need to be check
-        }.map {case (bit,idx) => bit}).asUInt & head).orR   // chech whether the tail is equal to head
+        }.map {case (bit,idx) => bit}).asUInt & head).orR   // check whether the tail is equal to head
 
     val doEnqueue = !(atHead && mayFull || mayHitHead)  // if the first case is true, we can enqueue
 
@@ -80,7 +80,7 @@ class FetchBuffer extends CoreModule {
             inUops(i).xcpt_cause := io.enq.bits.exception.bits.xcpt_cause
 
             inUops(i).pcLowBits := pc
-            inUops(i).isSFB     := io.enq.bits.sfbs(i) || io.enq.bits.shadowed_mask(i) // is sfb_br or sfb_shadow
+            inUops(i).isSFB     := false.B
             inUops(i).ftqIdx    := io.enq.bits.ftqIdx
             inUops(i).instr     := io.enq.bits.instrs(i)
             if (!FPGAPlatform) {

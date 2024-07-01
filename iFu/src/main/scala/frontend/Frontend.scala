@@ -34,11 +34,6 @@ class FetchBundle extends CoreBundle {
 
     val pc              = UInt(vaddrBits.W) // fetch PC, possibly unaligned.
     val instrs          = Vec(fetchWidth, Bits(coreInstrBits.W))
-    val sfbs            = Vec(fetchWidth, Bool())
-    val sfb_masks       = Vec(fetchWidth, UInt((2 * fetchWidth).W))
-    val sfb_dests       = Vec(fetchWidth, UInt((log2Ceil(fetchBytes) + 1).W))
-    val shadowable_mask = Vec(fetchWidth, Bool())
-    val shadowed_mask   = Vec(fetchWidth, Bool())
 
     val cfiIdx    = Valid(UInt(log2Ceil(fetchWidth).W))
     val cfiType   = UInt(CFI_SZ.W)
@@ -123,7 +118,7 @@ class Frontend extends CoreModule {
     // s0 is not a real stage, it is hidden in s1, so below variables are wire
     val s0_valid           = WireInit(false.B)
     val s0_vpc             = WireInit(0.U(vaddrBits.W))
-    val s0_ghist           = WireInit((0.U).asTypeOf(new GlobalHistory))
+    val s0_ghist           = WireInit(0.U.asTypeOf(new GlobalHistory))
 
     if(!FPGAPlatform)dontTouch(s0_valid)
     if(!FPGAPlatform)dontTouch(s0_vpc)
@@ -338,7 +333,6 @@ class Frontend extends CoreModule {
     val f3_redirects             = Wire(Vec(fetchWidth, Bool()))
     val f3_tgts                  = Wire(Vec(fetchWidth, UInt(vaddrBits.W)))
     val f3_cfi_types             = Wire(Vec(fetchWidth, UInt(CFI_SZ.W)))
-    val f3_shadowed_mask         = Wire(Vec(fetchWidth, Bool()))
     val f3_fetch_bundle          = Wire(new FetchBundle)
     val f3_mask                  = Wire(Vec(fetchWidth, Bool()))
     val f3_br_mask               = Wire(Vec(fetchWidth, Bool()))
@@ -374,43 +368,10 @@ class Frontend extends CoreModule {
                 (f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits =/= brsigs.target)
             )
 
-            // 1 bit more to prevent overflow
-            val offset_from_aligned_pc = (
-                (i << 2).U((log2Ceil(lineBytes) + 1).W) + brsigs.sfbOffset.bits
-            )
-            val lower_mask = Wire(UInt((2 * fetchWidth).W)) // sfb_br's position
-            val upper_mask = Wire(UInt((2 * fetchWidth).W)) // sfb_br_tgt's position
-            lower_mask := UIntToOH(i.U)
-            upper_mask := UIntToOH(
-                offset_from_aligned_pc(log2Ceil(fetchWidth * 2 + 1) + 1, 2)
-            ) << Mux(f3_is_last_bank_in_block, bankWidth.U, 0.U)
-
-            /**
-             * 判断是否是sfb指令，如果是Cacheline的最后一个bank，那么最多只能取3个bank（跨Cacheline）
-             * 正常情况，可以取4个bank
-             */
-            f3_fetch_bundle.sfbs(i) := ( 
-                f3_mask(i) && brsigs.sfbOffset.valid &&
-                (offset_from_aligned_pc <= Mux(f3_is_last_bank_in_block, (fetchBytes + bankBytes).U, (2 * fetchBytes).U))
-            )
-            // sfb_masks -> br 和 tgt 之间不包括br和tgt的指令
-            // 0 -> 不在范围内 1 -> 在范围内
-            f3_fetch_bundle.sfb_masks(i) := (~MaskLower(lower_mask)).asUInt & (~MaskUpper(upper_mask)).asUInt
-            /**
-             * 没有发生异常
-             * bank有效
-             * 是shadowable的或者该位置指令无效
-             */
-            f3_fetch_bundle.shadowable_mask(i) := (
-                !f3_fetch_bundle.exception.valid &&
-                f3_bank_mask(b) && (brsigs.shadowable || !f3_mask(i))   // TODO: do we need f3_mask(i) here?
-            )
-            f3_fetch_bundle.sfb_dests(i) := offset_from_aligned_pc
-
             /**
                 s3阶段重定向的条件
                 1. 是jal/jalr指令
-                2. 是条件分支指令并被预测跳转(sfb不被预测)
+                2. 是条件分支指令并被预测跳转
              */
             f3_redirects(i) := f3_mask(i) && (
                 brsigs.cfiType === CFI_JAL || brsigs.cfiType === CFI_JALR ||
@@ -430,7 +391,6 @@ class Frontend extends CoreModule {
     f3_fetch_bundle.pc            := f3_fetchResp.pc
     f3_fetch_bundle.ftqIdx        := 0.U
     f3_fetch_bundle.exception     := f3_fetchResp.exception
-    f3_fetch_bundle.shadowed_mask := f3_shadowed_mask
     f3_fetch_bundle.cfiIdx.valid  := f3_redirects.reduce(_||_)
     f3_fetch_bundle.cfiIdx.bits   := PriorityEncoder(f3_redirects)
     f3_fetch_bundle.cfiType       := f3_cfi_types(f3_fetch_bundle.cfiIdx.bits)
@@ -511,51 +471,16 @@ class Frontend extends CoreModule {
     f4_btb_corrections.io.enq.bits.gHist              := f3_fetch_bundle.gHist
     f4_btb_corrections.io.enq.bits.meta               := f3_fetch_bundle.bpdMeta
 
-    // 下面将要处理sfbs
-    val f4_shadowable_masks = VecInit((0 until fetchWidth).map{ i =>
-        f4.io.deq.bits.shadowable_mask.asUInt |
-        (~f4.io.deq.bits.sfb_masks(i)).asUInt(fetchWidth - 1, 0)    // the instructions which not in sfb shadow
-    })
-    val f3_shadowable_masks = VecInit((0 until fetchWidth).map{ i =>
-        Mux(f4.io.enq.valid, f4.io.enq.bits.shadowable_mask.asUInt, 0.U) |
-        (~f4.io.deq.bits.sfb_masks(i)).asUInt(2 * fetchWidth - 1, fetchWidth)
-    })
-    val f4_sfbs = VecInit((0 until fetchWidth) map {i =>  // 该指令能否被视为sfb br
-        ((~f4_shadowable_masks(i)).asUInt === 0.U) && ((~f3_shadowable_masks(i)).asUInt === 0.U) &&
-        f4.io.deq.bits.sfbs(i) &&
-        !(f4.io.deq.bits.cfiIdx.valid && f4.io.deq.bits.cfiIdx.bits === i.U)
-    })
-    val f4_sfb_valid    = f4.io.deq.valid && f4_sfbs.reduce(_||_)
-    val f4_sfb_idx      = PriorityEncoder(f4_sfbs)
-    val f4_sfb_mask     = f4.io.deq.bits.sfb_masks(f4_sfb_idx)
-    // 如果f4阶段有sfb指令，要等待下一次fetch
-    val f4_delay = (
-        f4.io.deq.bits.sfbs.reduce(_||_) &&
-        !f4.io.deq.bits.cfiIdx.valid &&
-        !f4.io.enq.valid &&
-        !f4.io.deq.bits.exception.valid
-    )
-    when (f4_sfb_valid) {
-        f3_shadowed_mask := f4_sfb_mask(2 * fetchWidth - 1,fetchWidth).asBools
-    } .otherwise {
-        f3_shadowed_mask := VecInit(0.U(fetchWidth.W).asBools)
-    }
-
     f4_ready        := f4.io.enq.ready
     f4.io.enq.valid := f3_ifu_resp.io.deq.valid && !f3_clear
     f4.io.enq.bits  := f3_fetch_bundle
-    f4.io.deq.ready := fetch_buffer.io.enq.ready && ftq.io.enq.ready && !f4_delay
+    f4.io.deq.ready := fetch_buffer.io.enq.ready && ftq.io.enq.ready
 
-    fetch_buffer.io.enq.valid             := f4.io.deq.valid && ftq.io.enq.ready && !f4_delay
+    fetch_buffer.io.enq.valid             := f4.io.deq.valid && ftq.io.enq.ready
     fetch_buffer.io.enq.bits              := f4.io.deq.bits
     fetch_buffer.io.enq.bits.ftqIdx       := ftq.io.enqIdx
-    fetch_buffer.io.enq.bits.sfbs         := Mux(f4_sfb_valid, UIntToOH(f4_sfb_idx), 0.U(fetchWidth.W)).asBools
-    fetch_buffer.io.enq.bits.shadowed_mask := (
-        Mux(f4_sfb_valid, f4_sfb_mask(fetchWidth - 1,0), 0.U(fetchWidth.W)) |
-        f4.io.deq.bits.shadowed_mask.asUInt
-    ).asBools
 
-    ftq.io.enq.valid := f4.io.deq.valid && fetch_buffer.io.enq.ready && !f4_delay
+    ftq.io.enq.valid := f4.io.deq.valid && fetch_buffer.io.enq.ready
     ftq.io.enq.bits  := f4.io.deq.bits
 
     // bpd update infomation select
@@ -604,5 +529,4 @@ class Frontend extends CoreModule {
         s0_ghist     := io.core.redirect_ghist
     }
 // --------------------------------------------------------
-
 }
