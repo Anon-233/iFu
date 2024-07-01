@@ -188,6 +188,7 @@ class ALUUnit(
     if (!FPGAPlatform) io.resp.bits.uop.debug_mispred := rMispred(numStages - 1)
 
     val rData = Reg(Vec(numStages, UInt(xLen.W)))
+    rData(0) := Mux(io.req.bits.uop.is_sfb_br, pcSel === PC_BRJMP, aluOut)
     io.resp.bits.data := rData(numStages - 1)
 
     require (numStages >= 1)
