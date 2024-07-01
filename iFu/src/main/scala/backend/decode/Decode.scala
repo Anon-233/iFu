@@ -263,7 +263,7 @@ class DecodeUnit extends CoreModule {
     val xcpt_valid = WireInit(false.B)
     val xcpt_cause = WireInit(0.U(15.W))
 
-    when (io.interrupt && !io.enq.uop.isSFB) {    //TODO: isSFB是否应该删掉
+    when (io.interrupt) {
         xcpt_valid := true.B
         xcpt_cause := INT
     } .elsewhen (io.enq.uop.xcpt_valid) {
@@ -281,7 +281,7 @@ class DecodeUnit extends CoreModule {
         xcpt_valid := true.B
         xcpt_cause := INE
     }
-    /*uop.mem_cmd         := cs.mem_cmd*/
+
     uop.mem_size := inst(23, 22)
     uop.mem_signed := !inst(25)
     uop.tlb_op := inst(4, 0)
@@ -314,7 +314,6 @@ class DecodeUnit extends CoreModule {
     uop.xcpt_cause := xcpt_cause
     //-------------------------------------------------------------
 
-
     when(cs.uopc === uopJAL) {
         uop.ldst := 1.U
     }
@@ -346,25 +345,11 @@ class DecodeUnit extends CoreModule {
     uop.lrs1_rtype := cs.rs1_type
     uop.lrs2_rtype := cs.rs2_type
 
-    when (uop.is_sfb_shadow && cs.rs2_type === RT_X) {
-        uop.lrs2_rtype := RT_FIX
-        uop.lrs2 := inst(4, 0)
-        uop.ldst_is_rs1 := false.B
-    } .elsewhen (uop.is_sfb_shadow) {
-        uop.lrs1 := inst(4, 0)
-        uop.ldst_is_rs1 := true.B
-    } .otherwise {
-        uop.ldst_is_rs1 := false.B
-    }
-
-    /* when (!uop.is_sfb_shadow && cs.uopc === uopORI && inst(21,10) === 0.U) {
+    /* when (cs.uopc === uopORI && inst(21,10) === 0.U) {
         uop.uopc := uopMOV
     }*/
     when(cs.uopc === uopADDIW && inst(21,0) === 0.U){
         uop.uopc := uopNOP
-    }
-    when(uop.is_sfb_br){
-        uop.fuCode := FU_JMP
     }
 
     io.deq.uop  := uop

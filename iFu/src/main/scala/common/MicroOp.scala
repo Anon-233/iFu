@@ -31,7 +31,6 @@ class MicroOp extends CoreBundle {
     val brMask: UInt = UInt(maxBrCount.W)
     val brTag: UInt  = UInt(brTagSz.W)
 
-    val ldst_is_rs1: Bool = Bool()
     val ldst: UInt        = UInt(lregSz.W)
     val lrs1: UInt        = UInt(lregSz.W)
     val lrs2: UInt        = UInt(lregSz.W)
