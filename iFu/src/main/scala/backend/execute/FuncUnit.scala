@@ -193,7 +193,7 @@ class ALUUnit(
     val rPred = Reg(Vec(numStages, Bool()))
     val aluOut = Mux(
         io.req.bits.uop.is_sfb_shadow && io.req.bits.predData,
-        io.req.bits.rs2Data
+        io.req.bits.rs2Data,
         alu.io.out
     )
     rData(0) := Mux(io.req.bits.uop.is_sfb_br, pcSel === PC_BRJMP, aluOut)
