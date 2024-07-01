@@ -129,5 +129,4 @@ trait HasCoreParameters {
         IssueParams(issueWidth = 2, numIssueSlots =  6, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
         IssueParams(issueWidth = 4, numIssueSlots = 10, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4)
     )
-    val enableSFBOpt: Boolean = true
 }

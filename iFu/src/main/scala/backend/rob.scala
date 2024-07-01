@@ -127,7 +127,6 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         val robBsy        = Reg(Vec(numRobRows, Bool()))
         val robUop        = Reg(Vec(numRobRows,new MicroOp))
         val robException  = Reg(Vec(numRobRows, Bool()))
-        val robPredicated = Reg(Vec(numRobRows, Bool()))
 
         val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
         val rob_debug_ldst  = Mem(numRobRows,UInt(lregSz.W))
@@ -150,7 +149,6 @@ class Rob(val numWritePorts: Int) extends CoreModule {
                                         io.enq_uops(w).xcpt_cause === BRK)
             robException(robTail)  := io.enq_uops(w).xcpt_valid
             robUop(robTail)        := io.enq_uops(w)
-            robPredicated(robTail) := false.B
         } .elsewhen (io.enq_valids.reduce(_|_) && !robVal(robTail)) {
             if (!FPGAPlatform) robUop(robTail).debug_inst := BUBBLE
         }
@@ -163,7 +161,6 @@ class Rob(val numWritePorts: Int) extends CoreModule {
             val rowIdx = GetRowIdx(wbUop.robIdx)
             when (wbResp.valid && MatchBank(GetBankIdx(wbUop.robIdx))) {
                 robBsy(rowIdx)        := false.B
-                robPredicated(rowIdx) := wbResp.bits.predicated
                 if (!FPGAPlatform) {
                     robUop(rowIdx).debug_mispred := wbUop.debug_mispred
                 }
@@ -191,7 +188,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
         isXcpt2Commit(w) := (robUop(robHead).xcpt_cause === SYS) || (robUop(robHead).xcpt_cause === BRK)
 
         io.commit.valids(w)      := willCommit(w)
-        io.commit.arch_valids(w) := willCommit(w) && !robPredicated(comIdx)
+        io.commit.arch_valids(w) := willCommit(w)
         io.commit.uops(w)        := robUop(comIdx)
         if (!FPGAPlatform) io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
 

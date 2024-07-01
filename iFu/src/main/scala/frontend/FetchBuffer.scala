@@ -80,7 +80,6 @@ class FetchBuffer extends CoreModule {
             inUops(i).xcpt_cause := io.enq.bits.exception.bits.xcpt_cause
 
             inUops(i).pcLowBits := pc
-            inUops(i).isSFB     := false.B
             inUops(i).ftqIdx    := io.enq.bits.ftqIdx
             inUops(i).instr     := io.enq.bits.instrs(i)
             if (!FPGAPlatform) {

@@ -63,7 +63,6 @@ abstract class PipelinedFuncUnit (
         }
 
         io.resp.valid := rValids(numStages - 1) && !IsKilledByBranch(io.brUpdate, rUops(numStages - 1)) && !io.req.bits.kill
-        io.resp.bits.predicated := false.B  // default
         io.resp.bits.uop := rUops(numStages - 1)
         io.resp.bits.uop.brMask := GetNewBrMask(io.brUpdate, rUops(numStages - 1))
         io.resp.bits.r1 := rR1(numStages - 1)
@@ -77,7 +76,6 @@ abstract class PipelinedFuncUnit (
         require (numStages == 0)
 
         io.resp.valid := io.req.valid && !IsKilledByBranch(io.brUpdate, io.req.bits.uop) && !io.req.bits.kill
-        io.resp.bits.predicated := false.B  // default
         io.resp.bits.uop := io.req.bits.uop
         io.resp.bits.uop.brMask := GetNewBrMask(io.brUpdate, io.req.bits.uop)
         io.resp.bits.r1 := io.req.bits.rs1Data
@@ -142,7 +140,7 @@ class ALUUnit(
 
     val isTaken = io.req.valid && !killed &&
                  (uop.isBr || uop.isJalr || uop.isJal) && (pcSel =/= PC_PLUS4)
-    val isBr = io.req.valid && !killed && uop.isBr && !uop.isSFB
+    val isBr = io.req.valid && !killed && uop.isBr
     val isJalr = io.req.valid && !killed && uop.isJalr
 
     val mispredict = WireInit(false.B)
@@ -190,25 +188,15 @@ class ALUUnit(
     if (!FPGAPlatform) io.resp.bits.uop.debug_mispred := rMispred(numStages - 1)
 
     val rData = Reg(Vec(numStages, UInt(xLen.W)))
-    val rPred = Reg(Vec(numStages, Bool()))
-    val aluOut = Mux(
-        io.req.bits.uop.is_sfb_shadow && io.req.bits.predData,
-        io.req.bits.rs2Data,
-        alu.io.out
-    )
-    rData(0) := Mux(io.req.bits.uop.is_sfb_br, pcSel === PC_BRJMP, aluOut)
-    rPred(0) := io.req.bits.uop.is_sfb_shadow && io.req.bits.predData
+    rData(0) := alu.io.out
     for (i <- 1 until numStages) {
         rData(i) := rData(i - 1)
-        rPred(i) := rPred(i - 1)
     }
-
     io.resp.bits.data := rData(numStages - 1)
-    io.resp.bits.predicated := rPred(numStages - 1)
 
     require (numStages >= 1)
     io.bypass(0).valid := io.req.valid
-    io.bypass(0).bits.data := Mux(io.req.bits.uop.is_sfb_br, pcSel === PC_BRJMP, aluOut)
+    io.bypass(0).bits.data := alu.io.out
     for (i <- 1 until numStages) {
         io.bypass(i).valid := rValids(i - 1)
         io.bypass(i).bits.data := rData(i - 1)
