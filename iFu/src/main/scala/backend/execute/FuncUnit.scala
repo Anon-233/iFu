@@ -189,6 +189,9 @@ class ALUUnit(
 
     val rData = Reg(Vec(numStages, UInt(xLen.W)))
     rData(0) := alu.io.out
+    for (i <- 1 until numStages) {
+        rData(i) := rData(i - 1)
+    }
     io.resp.bits.data := rData(numStages - 1)
 
     require (numStages >= 1)
