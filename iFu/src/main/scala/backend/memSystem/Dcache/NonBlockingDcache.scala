@@ -77,7 +77,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val replay :: wb :: refill ::  replace_find :: lsu :: mmio_req :: mmio_resp  :: prefetch  :: fence_read :: fence_clear :: cacop :: nil :: Nil = Enum(12)
 
     val mmiou = Module(new MMIOUnit) 
-    mmiou.io.mmioReq := 0.U.asTypeOf(Valid(new DCacheReq))
+    mmiou.io.mmioReq.valid := false.B
+    mmiou.io.mmioReq.bits := 0.U.asTypeOf(new DCacheReq)
+    
     io.smaw(0) <> mmiou.io.smaw
     io.smar(0) <> mmiou.io.smar
 
@@ -164,7 +166,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     ).reduce(_||_)
 
     // 流水线里面有mmioresp的时候，下一个fire的请求不要进来
-    lsuMMIOValid := io.lsu.req.fire && lsuhasMMIO && mmiouReady
+    lsuMMIOValid := io.lsu.req.fire && lsuhasMMIO /* && mmiouReady */
     lsuNormalValid := io.lsu.req.fire && !lsuhasMMIO
 
     // val lsuhasStore = io.lsu.req.bits.map( req =>
@@ -208,15 +210,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     io.lsu.req.ready := !(wbValid   ||
                           refillValid ||
                           fenceClearValid  || 
-
                           mshrReplayValid ||
                           replace_findValid ||
-                        // 这个信号用于判断s2storeFailed的时候不去接当周期lsu的store请求
-                          (/* lsuhasStore && */ s2StoreFailed) || 
-                        // 如果lsu是mmo  
-                          (/* io.lsu.req.valid &&  */lsuhasMMIO && !mmiouReady)
-                        // 在一条mmio从进来到做完返回之前的全程，不要接下一个store请求(即使是普通的store)，防止提交顺序不同对不上difftest
-                        //   (lsuhasStore && doingMMIO)
+                        // 这个信号用于判断s2storeFailed的时候不去接当周期lsu的请求
+                          (/* lsuhasStore && */ s2StoreFailed) /* ||  */
+                        // 如果lsu是mmio ， 不需要堵在口上，送进去，看不行就replay就好  
+                         /*  (io.lsu.req.valid && lsuhasMMIO && !mmiouReady) */
                         )
 
   
@@ -712,10 +711,21 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             io.lsu.resp(0).bits.uop := mmio_req.uop
         }.otherwise{
             // mmiou必须空闲
-            assert(mmiou.io.ready , "mmiou must be idle")
+            // assert(mmiou.io.ready , "mmiou must be idle")
             mmiou.io.mmioReq.valid := s2valid(0) || s2valid(1)
             // 存入请求本身
             mmiou.io.mmioReq.bits := mmio_req
+            when(!mmiou.io.mmioReq.fire){
+                // 当前不接受，说明busy，这种情况一定是store，发nack，然后拉高storeFailed
+                val debug_isnotStore = isStore(mmio_req)
+                dontTouch(debug_isnotStore)
+                // 0号发nack
+                sendResp(0) := false.B
+                sendNack(0) := s2valid(0) || s2valid(1)
+                sendResp(1) := false.B
+                sendNack(1) := false.B
+                s2StoreFailed := true.B
+            }
         }
     }.elsewhen(s2state === mmio_resp){
         
@@ -791,7 +801,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     }
     
 
-    mmiouReady := mmiou.io.ready &&
+    mmiouReady := mmiou.io.mmioReq.ready &&
                  (s1state =/= mmio_req) && 
                  (s2state =/= mmio_req)
     
@@ -799,7 +809,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                  (s1state =/= fence_read && s1state =/= fence_clear && s1state =/= replace_find && s1state =/= wb && s1state =/= refill) &&
                  (s2state =/= fence_read && s2state =/= fence_clear && s2state =/= replace_find && s2state =/= wb && s2state =/= refill)
 
-    doingMMIO := s1state === mmio_req || s2state === mmio_req || !mmiou.io.ready
+    doingMMIO := s1state === mmio_req || s2state === mmio_req || !mmiou.io.mmioReq.ready
 
     // TODO enable continuous hit store forwarding(DONE)
     // TODO simplify the IO channel of DCacheData and DCacheMeta(DONE)

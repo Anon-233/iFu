@@ -13,9 +13,7 @@ import iFu.common.Consts._
 
 class MMIOUnit extends Module with HasDcacheParameters {
     val io = IO(new CoreBundle{
-        val ready = Output(Bool())
-
-        val mmioReq  = Input(Valid(new DCacheReq))
+        val mmioReq  = Flipped(Decoupled(new DCacheReq))
         // mmioResp is a replay request
         val mmioResp = Decoupled(new DCacheReq)
 
@@ -30,7 +28,7 @@ class MMIOUnit extends Module with HasDcacheParameters {
     val mmioReq = RegInit(0.U.asTypeOf(new DCacheReq))
     if (!FPGAPlatform) dontTouch(mmioReq)
 
-    io.ready := state === s_ready
+    io.mmioReq.ready := state === s_ready
 
     io.mmioResp.valid := state === s_resp
     io.mmioResp.bits  := mmioReq
@@ -61,7 +59,7 @@ class MMIOUnit extends Module with HasDcacheParameters {
     io.smaw.req.wlast        := state === s_wb
 
     when (state === s_ready) {
-        when (io.mmioReq.valid) {
+        when (io.mmioReq.fire) {
             state := Mux(isStore(io.mmioReq.bits), s_wb, s_fetch)
             mmioReq := io.mmioReq.bits
         }
