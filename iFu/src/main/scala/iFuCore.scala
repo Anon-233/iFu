@@ -56,8 +56,6 @@ class iFuCore extends CoreModule {
     val numRenameWakeupPorts = numIssueWakeupPorts
 
     val rename_stage = Module(new RenameStage(coreWidth, numPRegs, numRenameWakeupPorts))
-    val pred_rename_stage = Module(new PredRenameStage(coreWidth, numFTQEntries, 1))
-    val rename_stages = Seq(rename_stage, pred_rename_stage)
 
     val mem_iss_unit = Module(new IssueUnitAgeOrdered(memIssueParam, numIssueWakeupPorts))
     val int_iss_unit = Module(new IssueUnitAgeOrdered(intIssueParam, numIssueWakeupPorts))
@@ -109,7 +107,6 @@ class iFuCore extends CoreModule {
 
     val int_iss_wakeups = Wire(Vec(numIssueWakeupPorts, Valid(new ExeUnitResp)))
     val int_ren_wakeups = Wire(Vec(numRenameWakeupPorts, Valid(new ExeUnitResp)))
-    val pred_wakeup = Wire(Valid(new ExeUnitResp(1)))
 
 /*-----------------------------*/
 
@@ -254,7 +251,7 @@ class iFuCore extends CoreModule {
         ifu.io.core.redirect_flush := true.B
         ifu.io.core.redirect_pc := mispredict_target
         ifu.io.core.redirect_ftq_idx := brUpdate.b2.uop.ftqIdx
-        
+
         val use_same_ghist = (
             brUpdate.b2.cfiType === CFI_BR &&
             !brUpdate.b2.taken &&
@@ -403,30 +400,20 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
 
     // Inputs
-    for (rename <- rename_stages) {
-        rename.io.kill       := ifu.io.core.redirect_flush
-        rename.io.brupdate   := brUpdate
-        rename.io.dec_fire   := dec_fire
-        rename.io.dec_uops   := dec_uops
-        rename.io.dis_fire   := dis_fire
-        rename.io.dis_ready  := dis_ready
-        rename.io.com_valids := rob.io.commit.valids
-        rename.io.com_uops   := rob.io.commit.uops
-        rename.io.rbk_valids := rob.io.commit.rbk_valids
-        rename.io.rollback   := rob.io.commit.rollback
-    }
+    rename_stage.io.kill       := ifu.io.core.redirect_flush
+    rename_stage.io.brupdate   := brUpdate
+    rename_stage.io.dec_fire   := dec_fire
+    rename_stage.io.dec_uops   := dec_uops
+    rename_stage.io.dis_fire   := dis_fire
+    rename_stage.io.dis_ready  := dis_ready
+    rename_stage.io.com_valids := rob.io.commit.valids
+    rename_stage.io.com_uops   := rob.io.commit.uops
+    rename_stage.io.rbk_valids := rob.io.commit.rbk_valids
+    rename_stage.io.rollback   := rob.io.commit.rollback
 
     dis_valids := rename_stage.io.ren2_mask
     dis_uops   := rename_stage.io.ren2_uops
     ren_stalls := rename_stage.io.ren_stalls
-
-    for (w <- 0 until coreWidth) {
-        val i_uop = rename_stage.io.ren2_uops(w)
-        val p_uop = if (enableSFBOpt) pred_rename_stage.io.ren2_uops(w) else NullMicroOp
-        dis_uops(w).ppred := p_uop.ppred
-        dis_uops(w).pdst := Mux(dis_uops(w).dst_rtype === RT_FIX, i_uop.pdst, p_uop.pdst)
-        dis_uops(w).ppred_busy := p_uop.ppred_busy && dis_uops(w).is_sfb_shadow
-    }
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
@@ -574,13 +561,6 @@ class iFuCore extends CoreModule {
     require(iss_wu_idx == numIssueWakeupPorts)
     require(ren_wu_idx == numRenameWakeupPorts)
 
-    pred_wakeup := DontCare
-    pred_wakeup.valid := (
-        iss_valids(jmp_unit_idx) && iss_uops(jmp_unit_idx).is_sfb_br &&
-        !(lsu.io.core.ld_miss && (iss_uops(jmp_unit_idx).iw_p1_poisoned || iss_uops(jmp_unit_idx).iw_p2_poisoned))
-    )
-    pred_wakeup.bits.uop := iss_uops(jmp_unit_idx)
-
     // Perform load-hit speculative wakeup through a special port (performs a poison wake-up).
     issue_units map { iu =>
         iu.io.specLdWakeupPorts := lsu.io.core.spec_ld_wakeup
@@ -591,21 +571,11 @@ class iFuCore extends CoreModule {
         iu.io.predWakeupPorts.valid := false.B
         iu.io.predWakeupPorts.bits  := DontCare
     }
-    if (enableSFBOpt) {
-        int_iss_unit.io.predWakeupPorts.valid := pred_wakeup.valid
-        int_iss_unit.io.predWakeupPorts.bits  := pred_wakeup.bits.uop.pdst
-    }
 
     // ----------------------------------------------------------------
     
     for ((renport, intport) <- rename_stage.io.wakeups zip int_ren_wakeups) {
         renport <> intport
-    }
-
-    if (enableSFBOpt) {
-        pred_rename_stage.io.wakeups(0) := pred_wakeup
-    } else {
-        pred_rename_stage.io.wakeups := DontCare
     }
 
     // If we issue loads back-to-back endlessly (probably because we are executing some tight loop)
