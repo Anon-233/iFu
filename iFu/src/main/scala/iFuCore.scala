@@ -69,21 +69,12 @@ class iFuCore extends CoreModule {
         xLen,
         Seq.fill(memWidth) { true } ++ exe_units.bypassable_write_port_mask
     ))
-    val pregfile = Module(new RegisterFileSynthesizable(
-        numFTQEntries,
-        exe_units.numReaders,
-        1,
-        1,
-        Seq(true)
-    ))
-    pregfile.io <> DontCare
     val iregister_read = Module(new RegisterRead(
         issue_units.map(_.issueWidth).sum,
         exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits).toSeq,
         numReadPorts,
         exe_units.withFilter(_.readsIrf).map(x => 2).toSeq,
         exe_units.numTotalBypassPorts,
-        jmp_unit.numStages,
         xLen
     ))
 
@@ -141,7 +132,6 @@ class iFuCore extends CoreModule {
     val iss_valids    = Wire(Vec(exe_units.numReaders, Bool()))
     val iss_uops      = Wire(Vec(exe_units.numReaders, new MicroOp()))
     val bypasses      = Wire(Vec(exe_units.numTotalBypassPorts, Valid(new ExeUnitResp)))
-    val pred_bypasses = Wire(Vec(jmp_unit.numStages, Valid(new ExeUnitResp(1))))
     require(jmp_unit.bypassable)
 
     // --------------------------------------
@@ -566,12 +556,6 @@ class iFuCore extends CoreModule {
         iu.io.specLdWakeupPorts := lsu.io.core.spec_ld_wakeup
     }
 
-    // Connect the predicate wakeup port
-    issue_units map { iu =>
-        iu.io.predWakeupPorts.valid := false.B
-        iu.io.predWakeupPorts.bits  := DontCare
-    }
-
     // ----------------------------------------------------------------
     
     for ((renport, intport) <- rename_stage.io.wakeups zip int_ren_wakeups) {
@@ -640,10 +624,6 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
 
     iregister_read.io.rf_read_ports <> iregfile.io.read_ports
-    iregister_read.io.prf_read_ports := DontCare
-    if (enableSFBOpt) {
-        iregister_read.io.prf_read_ports <> pregfile.io.read_ports
-    }
 
     for (w <- 0 until exe_units.numReaders) {
         iregister_read.io.iss_valids(w) :=iss_valids(w) &&
@@ -660,7 +640,6 @@ class iFuCore extends CoreModule {
     iregister_read.io.kill := RegNext(rob.io.flush.valid)
 
     iregister_read.io.bypass := bypasses
-    iregister_read.io.pred_bypass := pred_bypasses
 
     //-------------------------------------------------------------
     //--------------------------CSR--------------------------------
@@ -713,10 +692,6 @@ class iFuCore extends CoreModule {
         }
     }
     require(bypass_idx == exe_units.numTotalBypassPorts)
-
-    for (i <- 0 until jmp_unit.numStages) {
-        pred_bypasses(i) := jmp_unit.io.bypass(i)
-    }
 
     for (w <- 0 until exe_units.length) {
         exe_units(w).io.req.bits.kill := RegNext(rob.io.flush.valid)
@@ -779,12 +754,6 @@ class iFuCore extends CoreModule {
         }
     }
     require(w_cnt == iregfile.io.write_ports.length)
-
-    if (enableSFBOpt) {
-        pregfile.io.write_ports(0).valid     := jmp_unit.io.iresp.valid && jmp_unit.io.iresp.bits.uop.is_sfb_br
-        pregfile.io.write_ports(0).bits.addr := jmp_unit.io.iresp.bits.uop.pdst
-        pregfile.io.write_ports(0).bits.data := jmp_unit.io.iresp.bits.data
-    }
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------

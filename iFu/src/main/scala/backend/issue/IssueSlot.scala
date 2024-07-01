@@ -22,7 +22,6 @@ class IssueSlotIO(val numWakeupPorts: Int) extends CoreBundle {
     val ldSpecMiss = Input(Bool())
 
     val wakeupPorts = Vec(numWakeupPorts, Flipped(Valid(new IssueWakeup(pregSz))))
-    val predWakeupPorts = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
     val specLdWakeupPorts = Vec(memWidth, Flipped(Valid(UInt(pregSz.W))))
 
     val inUop  = Flipped(Valid(new MicroOp))
@@ -60,12 +59,10 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     val p2          = RegInit(false.B)
     val p1_poisoned = RegInit(false.B)
     val p2_poisoned = RegInit(false.B)
-    val ppred       = RegInit(false.B)
 
     next_uop.iwState        := next_state
     next_uop.prs1_busy      := !p1
     next_uop.prs2_busy      := !p2
-    next_uop.ppred_busy     := !ppred
     next_uop.iw_p1_poisoned := p1_poisoned
     next_uop.iw_p2_poisoned := p2_poisoned
 
@@ -94,7 +91,6 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     when (io.inUop.valid) {
         p1    := !io.inUop.bits.prs1_busy
         p2    := !io.inUop.bits.prs2_busy
-        ppred := !io.inUop.bits.ppred_busy
     }
     p1_poisoned := false.B
     p2_poisoned := false.B
@@ -115,7 +111,6 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     val prs2_matches = io.wakeupPorts.map {
         w => w.bits.pdst === in_uop.prs2
     }
-    val ppred_match = io.predWakeupPorts.bits === in_uop.ppred
     val prs1_specmatchs = io.specLdWakeupPorts.map {
         w => w.bits === in_uop.prs1 && in_uop.lrs1_rtype === RT_FIX
     }
@@ -128,7 +123,6 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     val prs2_wakeups = (io.wakeupPorts zip prs2_matches).map {
         case (w, m) => w.valid && m
     }
-    val ppred_wakeup = io.predWakeupPorts.valid && ppred_match
     val prs1_specwakeups = (io.specLdWakeupPorts zip prs1_specmatchs).map {
         case (w, m) => w.valid && m
     }
@@ -143,12 +137,11 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     when (prs2_normalwakeup || prs2_specwakeup) { p2 := true.B }
     when (prs1_specwakeup) { p1_poisoned := true.B }
     when (prs2_specwakeup) { p2_poisoned := true.B }
-    when (ppred_wakeup) { ppred := true.B }
 
     when (state === s_valid_1) {
-        io.request := p1 && p2 && ppred && !io.kill
+        io.request := p1 && p2 && !io.kill
     } .elsewhen (state === s_valid_2) {
-        io.request := (p1 || p2) && ppred && !io.kill
+        io.request := (p1 || p2) && !io.kill
     } .otherwise {
         io.request := false.B
     }
@@ -157,17 +150,17 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     io.uop.iw_p1_poisoned := p1_poisoned
     io.uop.iw_p2_poisoned := p2_poisoned
     when (state === s_valid_2) {
-        when (p1 && p2 && ppred) {
+        when (p1 && p2) {
             ;
-        } .elsewhen (p1 && ppred) {
+        } .elsewhen (p1) {
             io.uop.lrs2_rtype := RT_X
-        } .elsewhen (p2 && ppred) {
+        } .elsewhen (p2) {
             io.uop.uopc := uopSTD
             io.uop.lrs1_rtype := RT_X
         }
     }
 
-    val may_vacate = io.grant && ((state === s_valid_1) || (state === s_valid_2) && p1 && p2 && ppred)
+    val may_vacate = io.grant && ((state === s_valid_1) || (state === s_valid_2) && p1 && p2)
     val squash_grant = io.ldSpecMiss && (p1_poisoned || p2_poisoned)
     io.willBeValid := isValid(state) && !(may_vacate && !squash_grant)
 }

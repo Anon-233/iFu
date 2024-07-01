@@ -31,8 +31,6 @@ class IssueUnitIO (
 
     // normal wakeup
     val wakeupPorts = Vec(numWakeupPorts, Flipped(Valid(new IssueWakeup(pregSz))))
-    // SFB wakeup
-    val predWakeupPorts = Flipped(Valid(UInt(log2Ceil(ftqSz).W)))
     // speculative load wakeup
     val specLdWakeupPorts = Vec(memWidth, Flipped(Valid(UInt(pregSz.W))))
     val ldMiss = Input(Bool())  // load miss happened
@@ -69,11 +67,6 @@ abstract class AbsIssueUnit (
         ) {
             disUops(w).iwState := s_valid_2
         }
-
-        if (iqType == IQT_MEM.litValue) {
-            assert(!(io.disUops(w).valid && io.disUops(w).bits.ppred_busy))
-            disUops(w).ppred_busy := false.B
-        }
     }
 
     val slots = (0 until numIssueSlots).map {
@@ -83,7 +76,6 @@ abstract class AbsIssueUnit (
 
     for (w <- 0 until numIssueSlots) {
         issueSlots(w).wakeupPorts       := io.wakeupPorts
-        issueSlots(w).predWakeupPorts   := io.predWakeupPorts
         issueSlots(w).specLdWakeupPorts := io.specLdWakeupPorts
         issueSlots(w).ldSpecMiss        := io.ldMiss
         issueSlots(w).brUpdate          := io.brUpdate
