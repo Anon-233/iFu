@@ -9,7 +9,6 @@
 #### IO 接口
 - `disUop` [input] 从dispatch阶段发送过来的`uop`。
 - `wakeupPorts` [input] 从外界传入的`wakeup`端口。
-- `predWakeupPorts` [input] 用于激活`sfb shadow`指令的端口。
 - `specLdWakeupPorts` [input] load指令推测唤醒端口。
 - `ldMiss` [input] load指令发生miss，不能及时进行数据前递。该信号未指定具体发生miss的指令，此处我们简答处理，视为所有load指令均发生miss。
 - `fuTypes` [input] 下一阶段（执行阶段）能接收哪些类型的指令，因为不同的功能单元能执行的功能不完全相同。
@@ -39,7 +38,6 @@
 - `clear` [input] 清空该槽位。该槽位指令被移出，且当前周期没有指令移入。
 - `ldSpecMiss` [input] load指令发生miss。直接来自`ldMiss`。
 - `wakeupPorts` [input] wakeup端口。
-- `predWakeupPorts` [input] sfb shadow wakeup端口。
 - `specLdWakeupPorts` [input] load指令推测唤醒端口。
 - `inUop` [input] 当前周期输入的`uop`。
 - `outUop` [output] 从当前槽位输出的`uop`。用于构成压缩队列。
@@ -53,7 +51,6 @@
 - `p2` 指令的第二个操作数是否就绪。
 - `p1_poisoned` 第一个操作数就绪的来源是load指令的推测唤醒。
 - `p2_poisoned` 第二个操作数就绪的来源是load指令的推测唤醒。
-- `ppred` 用于sfb shadow指令的唤醒，表示sfb branch指令已经执行完毕。
 
 #### 内部逻辑
 1. [组合逻辑] 会依据当前的`state`和`slot_uop`以及传入的信息计算出`next_state`和`next_uop`。
@@ -95,3 +92,4 @@
 
 ## 最后修改日期
 - 2024/04/17
+- 2023/07/01
