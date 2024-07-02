@@ -155,7 +155,7 @@ class SMA_Arbiter(num_r_reqs: Int, num_w_reqs: Int) extends CoreModule {
             val adapter = Module(new SMAW_Adapter)
             adapter.io.original := w.req
             adapter.io.awready  := io.axi3.aw.fire && (choosing_aw === i.U)
-            adapter.io.wlast    := io.axi3.w.bits.last && io.axi3.w.ready
+            adapter.io.wlast    := io.axi3.w.bits.last && io.axi3.w.ready && (io.axi3.w.bits.id === i.U)
             adapter.io.adapted
         }
     }))

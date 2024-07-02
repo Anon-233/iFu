@@ -32,7 +32,7 @@ class TLBEntry extends CoreBundle {
             (meta.g || meta.asid === asid) &&
             Mux(meta.ps === 12.U,
                 meta.vppn === vppn,
-                meta.vppn(18, 10) === vppn(18, 10)
+                meta.vppn(18, 9) === vppn(18, 9)
             )
     }
 }
@@ -161,7 +161,7 @@ class TLBDataManager extends CoreModule {
             } .elsewhen (instr.op === 5.U) {
                 val ppn_match = Mux(entry.meta.ps === 12.U,
                     entry.meta.vppn === instr.rk(vaddrBits - 1, 13),
-                    entry.meta.vppn(18, 10) === instr.rk(vaddrBits - 1, 23)
+                    entry.meta.vppn(18, 9) === instr.rk(vaddrBits - 1, 22)
                 )
                 when (
                     !entry.meta.g && entry.meta.asid === instr.rj_0_9 &&
@@ -172,7 +172,7 @@ class TLBDataManager extends CoreModule {
             } .elsewhen (instr.op === 6.U) {
                 val ppn_match = Mux(entry.meta.ps === 12.U,
                     entry.meta.vppn === instr.rk(vaddrBits - 1, 13),
-                    entry.meta.vppn(18, 10) === instr.rk(vaddrBits - 1, 23)
+                    entry.meta.vppn(18, 9) === instr.rk(vaddrBits - 1, 22)
                 )
                 when (
                     (entry.meta.g || entry.meta.asid === instr.rj_0_9) &&
