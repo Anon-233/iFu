@@ -794,10 +794,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     if(!FPGAPlatform){
         val difftest = Module(new DifftestStoreEvent)
         //{4'b0, llbit && sc_w, st_w, st_h, st_b}
-        val sc_w =  isRealStoreState && sendResp(0) && s2valid(0) && s2req(0).uop.is_sc
-        val st_w =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 2.U
-        val st_h =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 1.U
-        val st_b =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 0.U
+        val sc_w =  isRealStoreState && io.lsu.resp(0).valid && s2valid(0) && s2req(0).uop.is_sc
+        val st_w =  isRealStoreState && io.lsu.resp(0).valid && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 2.U
+        val st_h =  isRealStoreState && io.lsu.resp(0).valid && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 1.U
+        val st_b =  isRealStoreState && io.lsu.resp(0).valid && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 0.U
         // disable now
         difftest.io.valid := /* 0.U  & */ VecInit(Cat((0.U(4.W)), io.lsu.llbit && sc_w, st_w, st_h, st_b)).asUInt
         difftest.io.clock := clock
