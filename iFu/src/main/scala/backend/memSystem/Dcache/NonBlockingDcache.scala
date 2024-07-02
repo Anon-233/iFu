@@ -211,9 +211,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                           refillValid ||
                           fenceClearValid  || 
                           mshrReplayValid ||
-                          replace_findValid ||
+                          replace_findValid /* || */
                         // 这个信号用于判断s2storeFailed的时候不去接当周期lsu的请求
-                          (/* lsuhasStore && */ s2StoreFailed) /* ||  */
+                        // 不是在这里拒掉 ，而是在s0valid的时候看一下再kill掉，这样改善时序
+                         /*  (lsuhasStore && s2StoreFailed) ||  */
                         // 如果lsu是mmio ， 不需要堵在口上，送进去，看不行就replay就好  
                          /*  (io.lsu.req.valid && lsuhasMMIO && !mmiouReady) */
                         )
@@ -233,7 +234,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     for(w<- 0 until memWidth){
         when(w.U === 0.U){
-            s0valid(w) := Mux(lsuMMIOValid || lsuNormalValid, io.lsu.req.bits(w).valid,
+            s0valid(w) := Mux(lsuMMIOValid || lsuNormalValid, io.lsu.req.bits(w).valid && !(s2StoreFailed && isStore(io.lsu.req.bits(w).bits)),
                 wbValid || refillValid || fenceClearValid || mshrReplayValid || replace_findValid || fenceReadValid || prefetchValid)
         }.otherwise{
             // 能用到这个else的只有lsu的请求,包括lsuMMIOValid/lsuNormalValid
@@ -470,12 +471,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         }
     }
 
-    mmiou.io.mmioResp.ready := s1state === nil
+
     // ================================ s2 ==================================
     
-    val s2state = RegNext(Mux(mmiou.io.mmioResp.fire, mmio_resp,              s1state))
-    val s2req   = RegNext(Mux(mmiou.io.mmioResp.fire, VecInit(Seq.fill(memWidth)(mmiou.io.mmioResp.bits)),
-                                                        s1req))
+    val s2state = RegNext(s1state)
+    val s2req   = RegNext(s1req)
 
     // when(s2state === lsu || s2state === replay || s2state === mmio_req){
     for (w <- 0 until memWidth){ 
@@ -492,8 +492,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                             !(s1state === replay && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)))  &&
                             !(s1state === lsu && (!isStore(s1req(w)) && io.lsu.exception)) &&
                             !(s1state === replay && (!isStore(s1req(w)) && io.lsu.exception))
-                            ) ||
-                            mmiou.io.mmioResp.fire // mmio_resp成功fire，说明s1一定nil，此时mmiou要把s2valid拉高
+                            )
                             ) && 
                         (
                             // s2周期没有被kill才行，s2周期被kill的只可能分支kill,s2storeFailed本身不会对自己kill
@@ -716,15 +715,15 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             // 存入请求本身
             mmiou.io.mmioReq.bits := mmio_req
             when(!mmiou.io.mmioReq.fire){
+                assert(!(mmiou.io.mmioReq.valid && !isStore(mmio_req)),
+                    "a mmio load request is sent but there is another store in mmio unit")
                 // 当前不接受，说明busy，这种情况一定是store，发nack，然后拉高storeFailed
-                val debug_isnotStore = isStore(mmio_req)
-                dontTouch(debug_isnotStore)
                 // 0号发nack
                 sendResp(0) := false.B
                 sendNack(0) := s2valid(0) || s2valid(1)
                 sendResp(1) := false.B
                 sendNack(1) := false.B
-                s2StoreFailed := true.B
+                s2StoreFailed := s2valid(0) || s2valid(1)
             }
         }
     }.elsewhen(s2state === mmio_resp){
@@ -780,6 +779,15 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         io.lsu.resp(w).valid := sendResp(w)
     }
 
+    // mmiou 挑一个没有人用resp的周期发resp
+    mmiou.io.mmioResp.ready := !sendResp(0)
+
+    when(mmiou.io.mmioResp.fire){
+        // 0号发resp
+        io.lsu.resp(0).valid := true.B
+        io.lsu.resp(0).bits := mmiou.io.mmioResp.bits
+    }
+
     // difftest
     val isRealStoreState = (s2state === lsu || s2state === replay || s2state === mmio_resp)
 
@@ -791,7 +799,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         val st_h =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 1.U
         val st_b =  isRealStoreState && sendResp(0) && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 0.U
         // disable now
-        difftest.io.valid := 0.U  & VecInit(Cat((0.U(4.W)), io.lsu.llbit && sc_w, st_w, st_h, st_b)).asUInt
+        difftest.io.valid := /* 0.U  & */ VecInit(Cat((0.U(4.W)), io.lsu.llbit && sc_w, st_w, st_h, st_b)).asUInt
         difftest.io.clock := clock
         difftest.io.coreid := 0.U // only support 1 core now
         difftest.io.index := 0.U
