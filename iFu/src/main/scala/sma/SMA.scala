@@ -155,7 +155,7 @@ class SMA_Arbiter(num_r_reqs: Int, num_w_reqs: Int) extends CoreModule {
             val adapter = Module(new SMAW_Adapter)
             adapter.io.original := w.req
             adapter.io.awready  := io.axi3.aw.fire && (choosing_aw === i.U)
-            adapter.io.wlast    := io.axi3.w.bits.last && io.axi3.w.ready
+            adapter.io.wlast    := io.axi3.w.bits.last && io.axi3.w.ready && (choosing_aw === i.U)
             adapter.io.adapted
         }
     }))
@@ -178,7 +178,7 @@ class SMA_Arbiter(num_r_reqs: Int, num_w_reqs: Int) extends CoreModule {
     val chosen_w   = RegInit(0.U.asTypeOf(Valid(UInt(log2Ceil(num_w_reqs).W))))
     val choosing_w = Mux(chosen_w.valid, chosen_w.bits,
                                          PriorityEncoder(in_w_reqs.map(_.wvalid)))
-    chosen_w.valid := in_w_reqs(choosing_w).wvalid && !io.axi3.w.fire
+    chosen_w.valid := in_w_reqs(choosing_w).wvalid && !(io.axi3.w.fire && io.axi3.w.bits.last)
     chosen_w.bits  := choosing_w
 
     // translate smaw to axi3
