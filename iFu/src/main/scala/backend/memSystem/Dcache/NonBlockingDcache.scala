@@ -785,27 +785,29 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     when(mmiou.io.mmioResp.fire){
         // 0号发resp
         io.lsu.resp(0).valid := true.B
-        io.lsu.resp(0).bits := mmiou.io.mmioResp.bits
+        io.lsu.resp(0).bits.data := mmiou.io.mmioResp.bits.data
+        io.lsu.resp(0).bits.uop := mmiou.io.mmioResp.bits.uop
     }
 
     // difftest
-    val isRealStoreState = (s2state === lsu || s2state === replay || s2state === mmio_resp)
+    val isRealStoreState = (s2state === lsu || s2state === replay || mmiou.io.mmioResp.fire)
 
     if(!FPGAPlatform){
         val difftest = Module(new DifftestStoreEvent)
         //{4'b0, llbit && sc_w, st_w, st_h, st_b}
-        val sc_w =  isRealStoreState && io.lsu.resp(0).valid && s2valid(0) && s2req(0).uop.is_sc
-        val st_w =  isRealStoreState && io.lsu.resp(0).valid && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 2.U
-        val st_h =  isRealStoreState && io.lsu.resp(0).valid && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 1.U
-        val st_b =  isRealStoreState && io.lsu.resp(0).valid && s2valid(0) && isStore(s2req(0)) && s2req(0).uop.mem_size === 0.U
+        val sc_w =  isRealStoreState && io.lsu.resp(0).valid && io.lsu.resp(0).bits.uop.is_sc
+        val st_w =  isRealStoreState && io.lsu.resp(0).valid && io.lsu.resp(0).bits.uop.use_stq &&  io.lsu.resp(0).bits.uop.mem_size === 2.U
+        val st_h =  isRealStoreState && io.lsu.resp(0).valid && io.lsu.resp(0).bits.uop.use_stq &&  io.lsu.resp(0).bits.uop.mem_size === 1.U
+        val st_b =  isRealStoreState && io.lsu.resp(0).valid && io.lsu.resp(0).bits.uop.use_stq &&  io.lsu.resp(0).bits.uop.mem_size === 0.U
         // disable now
         difftest.io.valid := /* 0.U  & */ VecInit(Cat((0.U(4.W)), io.lsu.llbit && sc_w, st_w, st_h, st_b)).asUInt
         difftest.io.clock := clock
         difftest.io.coreid := 0.U // only support 1 core now
         difftest.io.index := 0.U
-        difftest.io.storePAddr := s2req(0).addr
+        difftest.io.storePAddr := Mux(mmiou.io.mmioResp.fire, mmiou.io.mmioResp.bits.addr , s2req(0).addr)
         difftest.io.storeVAddr := 0.U
-        difftest.io.storeData := WordWrite(s2req(0), 0.U(32.W))
+        difftest.io.storeData := Mux(mmiou.io.mmioResp.fire,WordWrite(mmiou.io.mmioResp.bits, 0.U(32.W))
+                                                                                        ,WordWrite(s2req(0), 0.U(32.W)))
     }
     
 
