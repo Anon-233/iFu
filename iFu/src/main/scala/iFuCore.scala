@@ -311,7 +311,9 @@ class iFuCore extends CoreModule {
     jmp_unit.io.getFtqPc.entry   := ifu.io.core.getFtqPc(0).entry
     jmp_unit.io.getFtqPc.nextVal := ifu.io.core.getFtqPc(0).nextVal
     jmp_unit.io.getFtqPc.nextpc  := ifu.io.core.getFtqPc(0).nextpc
-    rob.io.xcpt_fetch_pc := ifu.io.core.getFtqPc(0).pc
+
+    val reg_xcpt_fetch_pc = RegEnable(ifu.io.core.getFtqPc(0).pc, 0.U, RegNext(dis_ready))
+    rob.io.xcpt_fetch_pc := Mux(RegNext(xcpt_pc_req.ready), ifu.io.core.getFtqPc(0).pc, reg_xcpt_fetch_pc)
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
