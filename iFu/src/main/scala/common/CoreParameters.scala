@@ -20,13 +20,13 @@ class ICacheParameters {
     val offsetBits : Int  = log2Ceil(lineBytes)
     val untagBits: Int    = indexBits + offsetBits
     val tagBits: Int      = 32 - untagBits
-    val bankBytes: Int    = 4 * 4
+    val bankBytes: Int    = 2 * 4
     val banksPerLine: Int = lineBytes / bankBytes
     require(isPow2(banksPerLine))
 }
 
 class FrontendParameters{
-    val fetchWidth: Int                = 8
+    val fetchWidth: Int                = 4
     val fetchBytes: Int                = fetchWidth * 4
     // val numFTQEntries: Int             = 40
     val numFTQEntries: Int              = 16

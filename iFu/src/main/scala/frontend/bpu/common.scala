@@ -6,7 +6,7 @@ import chisel3.util._
 trait HasBPUParameters {
     val globalHistoryLength: Int = 8
     val vaddrBits = 32
-    val fetchWidth = 8
+    val fetchWidth = 4
     val nBanks = 2
     val bankWidth = fetchWidth / nBanks
     val fetchBytes = fetchWidth * 4
