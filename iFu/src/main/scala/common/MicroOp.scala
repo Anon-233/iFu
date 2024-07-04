@@ -68,7 +68,6 @@ class MicroOp extends CoreBundle {
     val use_ldq: Bool = Bool()
     val use_stq: Bool = Bool()
 
-    // val mem_cmd: UInt = UInt(/*TODO*/)
     val mem_size: UInt   = UInt(2.W)
     val mem_signed: Bool = Bool()
 
@@ -98,7 +97,6 @@ class CtrlSignals extends CoreBundle {
     val op2_sel: UInt     = UInt(OP2_X.getWidth.W)
     val imm_sel: UInt     = UInt(immX.getWidth.W)
     val op_fcn: UInt      = UInt(AluFuncCode().SZ_ALU_FN.W)
-    val fcn_dw: Bool      = Bool()
     val csr_cmd: UInt     = UInt(CSR_SZ.W)
     val is_load: Bool     = Bool()
     val is_sta: Bool      = Bool()
