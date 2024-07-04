@@ -52,28 +52,28 @@ class DcacheMeta extends Module with HasDcacheParameters{
         resetIdx := resetIdx + 1.U
     }
 
-    val sethasDirtys = Wire(Vec(nSets, Bool()))
+    // to rename
+    val sethasValids = Wire(Vec(nSets, Bool()))
     for (i <- 0 until nSets) {
-        sethasDirtys(i) := (valids(i) & dirtys(i)).orR
+        sethasValids(i) := (valids(i)).orR
     }
     
     // preserve dirty position
-    val dirtyIdx = Wire(UInt(nIdxBits.W))
-    dirtyIdx := PriorityEncoder(sethasDirtys)
-    val dirtyPos = Wire(UInt(log2Ceil(nWays).W))
-    dirtyPos := PriorityEncoder(valids(dirtyIdx) & dirtys(dirtyIdx))
+    val dirtyIdx = RegInit(0.U(nIdxBits.W))
+    val dirtyPos = RegInit(0.U(log2Ceil(nWays).W))
     //传递有脏位的信息
-    io.hasDirty := sethasDirtys.asUInt.orR
-
-    
-    val flushIdx = RegInit(0.U(nIdxBits.W))
-    val flushPos = RegInit(0.U(log2Ceil(nWays).W))
-    // TODO (maybe not nessary) use flushIdx and flushPos 
+    io.hasDirty := sethasValids.asUInt.orR
 
     // read
     val rvalid  = io.read.map( _.req.valid)
     val rreq    = io.read.map( _.req.bits)
     val ridx    = rreq.map( req => Mux(req.isFence, dirtyIdx, req.idx))
+
+    // if has fence_read , inc dirtyIdx and dirtyPos
+    when (rreq.map(_.isFence).reduce(_ || _)) {
+        dirtyPos := WrapInc(dirtyPos, nWays)
+        dirtyIdx := Mux(dirtyPos === (nWays - 1).U, WrapInc(dirtyIdx, nSets), dirtyIdx)
+    }
 
     val rtags    = Wire(Vec(memWidth, Vec(nWays, UInt(nTagBits.W))))
     val rmetaSet = Wire(Vec(memWidth, Vec(nWays, new MetaLine)))
@@ -137,6 +137,13 @@ class DcacheMeta extends Module with HasDcacheParameters{
         when(wreq.setfixed.valid){
             // fixeds(widx)(wpos) := wreq.setfixed.bits
             fixeds(widx) := (fixeds(widx) & ~wmask) | (VecInit(Seq.fill(nWays)(wreq.setfixed.bits)).asUInt & wmask)
+        }
+
+        when(wreq.isFence){
+            // set all valid bits to false
+            for(i <- 0 until nWays){
+                valids := 0.U.asTypeOf(VecInit(Seq.fill(nSets)(0.U(nWays.W))))
+            }
         }
     }
     
