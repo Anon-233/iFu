@@ -10,8 +10,6 @@ trait HasBPUParameters {
     val nBanks = 2
     val bankWidth = fetchWidth / nBanks
     val fetchBytes = fetchWidth * 4
-
-    val EnableBPD = true
 }
 
 trait HasTageParameters extends HasBPUParameters {

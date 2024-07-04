@@ -10,32 +10,29 @@ class BPUParameters {
     val numRasEntries: Int       = 16
 }
 
-class ICacheParameters {
-    val nBanks: Int       = 2
+class ICacheParameters(fetchWidth: Int) {
     val nSets: Int        = 64
-    // val nSets : Int       = 128
     val nWays: Int        = 8
     val lineBytes:Int     = 64
     val indexBits: Int    = log2Ceil(nSets)
     val offsetBits : Int  = log2Ceil(lineBytes)
     val untagBits: Int    = indexBits + offsetBits
     val tagBits: Int      = 32 - untagBits
-    val bankBytes: Int    = 2 * 4
-    val banksPerLine: Int = lineBytes / bankBytes
-    require(isPow2(banksPerLine))
+    val fetchBytes        = fetchWidth * 4
+    val fetchesPerLine    = lineBytes / fetchBytes
+    require(isPow2(fetchesPerLine))
 }
 
 class FrontendParameters{
+    val instrBytes: Int                = 4
     val fetchWidth: Int                = 4
-    val fetchBytes: Int                = fetchWidth * 4
+    val fetchBytes: Int                = fetchWidth * instrBytes
     // val numFTQEntries: Int             = 40
-    val numFTQEntries: Int              = 16
+    val numFTQEntries: Int             = 16
     // val numFetchBufferEntries: Int     = 32
-    val numFetchBufferEntries: Int      = 16
-    val iCacheParams: ICacheParameters = new ICacheParameters
+    val numFetchBufferEntries: Int     = 16
+    val iCacheParams: ICacheParameters = new ICacheParameters(fetchWidth)
     val bpdParams: BPUParameters       = new BPUParameters
-    val bankWidth: Int                 = fetchWidth / iCacheParams.nBanks
-    val instrBytes:Int                 = 4
 }
 
 class ROBParameters {

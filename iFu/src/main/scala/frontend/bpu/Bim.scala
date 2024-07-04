@@ -14,17 +14,17 @@ class BIMIO extends Bundle with HasBimParameters {
     val s0valid  = Input(Bool())
     val s0pc     = Input(UInt(vaddrBits.W))
 
-    val s2taken  = Output(Vec(bankWidth, Bool()))
+    val s2taken  = Output(Vec(fetchWidth, Bool()))
 
-    val s3meta   = Output(Vec(bankWidth, new BIMPredictMeta))
+    val s3meta   = Output(Vec(fetchWidth, new BIMPredictMeta))
 
-    val s1update = Input(Valid(new BankedUpdateInfo))
+    val s1update = Input(Valid(new BranchPredictionUpdate))
 }
 
 class BimPredictor extends Module with HasBimParameters {
     val io = IO(new BIMIO)
 
-    val bim_ram = SyncReadMem(nSets, Vec(bankWidth, UInt(2.W)))
+    val bim_ram = SyncReadMem(nSets, Vec(fetchWidth, UInt(2.W)))
 
 // ---------------------------------------------
 //      Reset Logic
@@ -49,7 +49,7 @@ class BimPredictor extends Module with HasBimParameters {
 
     // val s2_valid = RegNext(RegNext(io.s0valid))
 
-    for (w <- 0 until bankWidth) {
+    for (w <- 0 until fetchWidth) {
         // val resp_valid = !reset_en && s2_valid
         // io.s2taken(w) := resp_valid && s2_bim(w)(1)
         io.s2taken(w) := s2_bim(w)(1)
@@ -58,8 +58,8 @@ class BimPredictor extends Module with HasBimParameters {
 
 // ---------------------------------------------
 //      Prepare Meta for Update
-    val s2_meta = Wire(Vec(bankWidth, new BIMPredictMeta))
-    for (w <- 0 until bankWidth) {
+    val s2_meta = Wire(Vec(fetchWidth, new BIMPredictMeta))
+    for (w <- 0 until fetchWidth) {
         s2_meta(w).bim := s2_bim(w)
     }
     io.s3meta := RegNext(s2_meta)
@@ -71,11 +71,11 @@ class BimPredictor extends Module with HasBimParameters {
     val s1_update_idx  = fetchIdx(io.s1update.bits.pc)
     val s1_update_meta = VecInit(s1_update.bits.meta.map(_.bimMeta))
 
-    val s1_update_mask = Wire(Vec(bankWidth,Bool()))
-    val s1_update_data = Wire(Vec(bankWidth, UInt(2.W)))
+    val s1_update_mask = Wire(Vec(fetchWidth,Bool()))
+    val s1_update_data = Wire(Vec(fetchWidth, UInt(2.W)))
 
     // TODO: why we need this?
-    val wr_bypass_regs    = Reg(Vec(nWrBypassEntries, Vec(bankWidth, UInt(2.W))))
+    val wr_bypass_regs    = Reg(Vec(nWrBypassEntries, Vec(fetchWidth, UInt(2.W))))
     val wr_bypass_idxs    = Reg(Vec(nWrBypassEntries, UInt(log2Ceil(nSets).W)))
     val wr_bypass_enq_idx = RegInit(0.U(log2Ceil(nWrBypassEntries).W))
 
@@ -86,7 +86,7 @@ class BimPredictor extends Module with HasBimParameters {
     val wr_bypass_hit     = wr_bypass_hits.reduce(_||_)
     val wr_bypass_hit_idx = PriorityEncoder(wr_bypass_hits)
 
-    for (w <- 0 until bankWidth) {
+    for (w <- 0 until fetchWidth) {
         s1_update_mask(w) := false.B
         s1_update_data(w) := Mux(wr_bypass_hit, wr_bypass_regs(wr_bypass_hit_idx)(w), s1_update_meta(w).asUInt)
 
@@ -118,8 +118,8 @@ class BimPredictor extends Module with HasBimParameters {
 
     bim_ram.write(
         Mux(reset_en, reset_idx, s1_update_idx),
-        Mux(reset_en, VecInit(Seq.fill(bankWidth){ 2.U(2.W) }), s1_update_data),
-        Mux(reset_en, (~(0.U(bankWidth.W))), s1_update_mask.asUInt).asBools
+        Mux(reset_en, VecInit(Seq.fill(fetchWidth){ 2.U(2.W) }), s1_update_data),
+        Mux(reset_en, (~(0.U(fetchWidth.W))), s1_update_mask.asUInt).asBools
     )
 
     when (s1_update_mask.reduce(_||_) && s1_update.valid && s1_update.bits.isCommitUpdate) {

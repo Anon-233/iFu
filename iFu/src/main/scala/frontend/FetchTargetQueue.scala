@@ -23,8 +23,6 @@ class FTQBundle extends CoreBundle {
 
     val rasTop          = UInt(vaddrBits.W)
     val rasIdx          = UInt(log2Ceil(numRasEntries).W)
-
-    val startBank       = UInt(1.W)
 }
 
 class GetPCFromFtqIO extends CoreBundle {
@@ -47,9 +45,8 @@ class GetPCFromFtqIO extends CoreBundle {
 class FetchTargetQueue extends CoreModule {
     val numFTQEntries      = frontendParams.numFTQEntries
     val numRasEntries      = frontendParams.bpdParams.numRasEntries
-    val nBanks             = frontendParams.iCacheParams.nBanks
-    val bankBytes          = frontendParams.iCacheParams.bankBytes
     val fetchWidth         = frontendParams.fetchWidth
+    val fetchBytes         = frontendParams.fetchBytes
     val idxSz              = log2Ceil(numFTQEntries)
 
     val io = IO(new Bundle {
@@ -88,9 +85,9 @@ class FetchTargetQueue extends CoreModule {
     ) // why need at least 2 empty entries?
 
     val pcs   = Reg(Vec(numFTQEntries, UInt(vaddrBits.W)))
-    val meta  = SyncReadMem(numFTQEntries, Vec(nBanks, Vec(bankWidth,new PredictionMeta)))
+    val meta  = SyncReadMem(numFTQEntries, Vec(fetchWidth ,new PredictionMeta))
     val ram   = Reg(Vec(numFTQEntries, new FTQBundle))
-    val gHist = Seq.fill(nBanks) { SyncReadMem(numFTQEntries, new GlobalHistory) }
+    val gHist = Seq.fill(2) { SyncReadMem(numFTQEntries, new GlobalHistory) }
 
     val previousgHist = RegInit((0.U).asTypeOf(new GlobalHistory))
     val previousEntry = RegInit((0.U).asTypeOf(new FTQBundle))
@@ -110,7 +107,6 @@ class FetchTargetQueue extends CoreModule {
         newEntry.rasTop          := io.enq.bits.rasTop
         newEntry.rasIdx          := io.enq.bits.gHist.rasIdx
         newEntry.brMask          := io.enq.bits.brMask & io.enq.bits.mask
-        newEntry.startBank       := bank(io.enq.bits.pc)
 
         // 全局历史，如果currentSawBranchNotTaken为true，那么就用这个历史，否则用根据上一个表项更新的历史
         val newgHist = Mux(io.enq.bits.gHist.currentSawBranchNotTaken,
@@ -210,10 +206,7 @@ class FetchTargetQueue extends CoreModule {
     val new_entry = WireInit(old_entry)     // prepare a new entry for commit update
     when (io.redirect.valid) {  // redirect happens
         when (io.brUpdate.b2.mispredict) {  // redirect is caused by a misprediction
-            val new_cfi_idx = (
-                io.brUpdate.b2.uop.pcLowBits ^
-                Mux(old_entry.startBank === 1.U, (1.U << log2Ceil(bankBytes)).asUInt, 0.U)
-            )(log2Ceil(fetchWidth) - 1 + log2Ceil(instrBytes), log2Ceil(instrBytes))
+            val new_cfi_idx = io.brUpdate.b2.uop.pcLowBits(log2Ceil(fetchWidth) - 1 + log2Ceil(instrBytes), log2Ceil(instrBytes))
             new_entry.cfiIdx.valid    := true.B
             new_entry.cfiIdx.bits     := new_cfi_idx
             new_entry.cfiTaken        := io.brUpdate.b2.taken
@@ -240,7 +233,6 @@ class FetchTargetQueue extends CoreModule {
         val nextIsEnq = (nextIdx === bpu_ptr) && io.enq.fire
         val nextpc = Mux(nextIsEnq, io.enq.bits.pc, pcs(nextIdx))
         val getEntry = ram(idx)
-        val nextEntry = ram(nextIdx)
         io.getFtqpc(i).entry       := RegNext(getEntry)
         if (i == 1) {
             io.getFtqpc(i).gHist   := gHist(1).read(idx, true.B)

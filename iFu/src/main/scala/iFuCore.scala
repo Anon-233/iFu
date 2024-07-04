@@ -2,20 +2,15 @@ package iFu
 
 import chisel3._
 import chisel3.util._
-
 import iFu.frontend._
-import iFu.frontend.FrontendUtils.bankAlign
-
+import iFu.frontend.FrontendUtils.fetchAlign
 import iFu.backend._
 import iFu.tlb._
-
 import iFu.sma._
 import iFu.axi3._
-
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
-
 import iFu.difftest._
 
 class iFuCore extends CoreModule {
@@ -27,7 +22,6 @@ class iFuCore extends CoreModule {
 
     val fetchWidth      = frontendParams.fetchWidth
     val decodeWidth     = coreWidth
-    val bankBytes       = frontendParams.iCacheParams.bankBytes
     val memIssueParam   = issueParams.filter(_.iqType == IQT_MEM.litValue)(0)
     val intIssueParam   = issueParams.filter(_.iqType == IQT_INT.litValue)(0)
     val numFTQEntries   = frontendParams.numFTQEntries
@@ -149,9 +143,9 @@ class iFuCore extends CoreModule {
         b := a.io.brinfo
         b.valid := a.io.brinfo.valid && !rob.io.flush.valid
     }
-    b1.resolveMask := brinfos.map(x => x.valid << x.uop.brTag).reduce(_|_)
+    b1.resolveMask := brinfos.map(x => (x.valid << x.uop.brTag).asUInt).reduce(_|_)
     b1.mispredictMask := brinfos.map(x =>
-        (x.valid && x.mispredict) << x.uop.brTag
+        ((x.valid && x.mispredict) << x.uop.brTag).asUInt
     ).reduce(_|_)
 
     var mispredict_val = false.B
@@ -242,15 +236,12 @@ class iFuCore extends CoreModule {
         ifu.io.core.redirect_pc := mispredict_target
         ifu.io.core.redirect_ftq_idx := brUpdate.b2.uop.ftqIdx
 
-        val use_same_ghist = (
+        val use_same_ghist =
             brUpdate.b2.cfiType === CFI_BR &&
             !brUpdate.b2.taken &&
-            bankAlign(block_pc) === bankAlign(npc)
-        )
+            fetchAlign(block_pc) === fetchAlign(npc)
         val ftq_entry = ifu.io.core.getFtqPc(1).entry
-        val cfi_idx = (brUpdate.b2.uop.pcLowBits ^
-            Mux(ftq_entry.startBank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)
-        )(log2Ceil(fetchWidth) + 1, 2)
+        val cfi_idx = brUpdate.b2.uop.pcLowBits(log2Ceil(fetchWidth) + 1, 2)
         val ftq_ghist = ifu.io.core.getFtqPc(1).gHist
         val next_ghist = ftq_ghist.update(
             ftq_entry.brMask.asUInt,
@@ -606,9 +597,9 @@ class iFuCore extends CoreModule {
     }
     require(iss_idx == exe_units.numReaders)
 
-    issue_units.map(_.io.brUpdate := brUpdate)
-    issue_units.map(_.io.flushPipeline := RegNext(rob.io.flush.valid))
-    issue_units.map(_.io.ldMiss := lsu.io.core.ld_miss)
+    issue_units.foreach(_.io.brUpdate := brUpdate)
+    issue_units.foreach(_.io.flushPipeline := RegNext(rob.io.flush.valid))
+    issue_units.foreach(_.io.ldMiss := lsu.io.core.ld_miss)
 
     // Wakeup (Issue & Writeback)
     for (iu <- issue_units) {
@@ -633,7 +624,7 @@ class iFuCore extends CoreModule {
     }
 
     iregister_read.io.iss_uops := iss_uops
-    iregister_read.io.iss_uops map { u =>
+    iregister_read.io.iss_uops foreach { u =>
         u.iw_p1_poisoned := false.B
         u.iw_p2_poisoned := false.B
     }

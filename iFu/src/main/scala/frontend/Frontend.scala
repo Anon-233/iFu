@@ -30,7 +30,6 @@ class FetchBundle extends CoreBundle {
     val fetchWidth         = frontendParams.fetchWidth
     val fetchBytes         = frontendParams.fetchBytes
     val numFTQEntries      = frontendParams.numFTQEntries
-    val nBanks             = frontendParams.iCacheParams.nBanks
 
     val pc              = UInt(vaddrBits.W) // fetch PC, possibly unaligned.
     val instrs          = Vec(fetchWidth, Bits(coreInstrBits.W))
@@ -45,7 +44,7 @@ class FetchBundle extends CoreBundle {
     val brMask    = UInt(fetchWidth.W)
     val gHist     = new GlobalHistory
     val exception = Valid(new ITLBException)
-    val bpdMeta   = Vec(nBanks, Vec(bankWidth, new PredictionMeta))
+    val bpdMeta   = Vec(fetchWidth, new PredictionMeta)
 }
 
 class FrontendTLBDataIO extends CoreBundle {
@@ -92,11 +91,8 @@ class Frontend extends CoreModule {
 // Parameters and constants
     val fetchWidth    = frontendParams.fetchWidth
     val numRasEntries = frontendParams.bpdParams.numRasEntries
-    val bankWidth     = frontendParams.bankWidth
-    val nBanks        = frontendParams.iCacheParams.nBanks
     val lineBytes     = frontendParams.iCacheParams.lineBytes
     val fetchBytes    = frontendParams.fetchBytes
-    val bankBytes     = frontendParams.iCacheParams.bankBytes
     val instrBytes    = frontendParams.instrBytes
 // --------------------------------------------------------
     val io = IO(new FrontendIO)
@@ -326,10 +322,8 @@ class Frontend extends CoreModule {
     f3_bpd_resp.io.deq.ready := f4_ready
 
     val f3_fetchResp             = f3_ifu_resp.io.deq.bits
-    val f3_bank_mask             = bankMask(f3_fetchResp.pc)
     val f3_instrs                = f3_fetchResp.instrs
-    val f3_aligned_pc            = bankAlign(f3_fetchResp.pc)
-    val f3_is_last_bank_in_block = isLastBankInBlock(f3_aligned_pc)
+    val f3_aligned_pc            = fetchAlign(f3_fetchResp.pc)
     val f3_redirects             = Wire(Vec(fetchWidth, Bool()))
     val f3_tgts                  = Wire(Vec(fetchWidth, UInt(vaddrBits.W)))
     val f3_cfi_types             = Wire(Vec(fetchWidth, UInt(CFI_SZ.W)))
@@ -341,49 +335,43 @@ class Frontend extends CoreModule {
     val f3_btb_mispredicts       = Wire(Vec(fetchWidth, Bool()))
 
     var redirect_found = false.B
-    for (b <- 0 until nBanks) {
-        val bank_instrs = f3_instrs(
-            (b + 1) * bankWidth * coreInstrBits - 1, b * bankWidth * coreInstrBits
+    for (i <- 0 until fetchWidth) {
+        val pc    = f3_aligned_pc + (i << log2Ceil(coreInstrBytes)).U
+        val instr = f3_instrs(i * coreInstrBits + coreInstrBits - 1, i * coreInstrBits)
+
+        val pre_decoder = Module(new PreDecode)
+        pre_decoder.io.pc    := pc
+        pre_decoder.io.instr := instr
+        val brsigs = pre_decoder.io.out
+
+        f3_fetch_bundle.instrs(i) := instr
+        f3_mask(i) := f3_ifu_resp.io.deq.valid && f3_fetchResp.mask(i) && !redirect_found
+        f3_tgts(i) := Mux(
+            brsigs.cfiType === CFI_JALR,
+            f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits, // maybe wrong
+            brsigs.target   // surelly right
         )
-        for (w <- 0 until bankWidth) {
-            val i     = b * bankWidth + w
-            val pc    = f3_aligned_pc + (i << log2Ceil(coreInstrBytes)).U
-            val instr = bank_instrs(w * coreInstrBits + coreInstrBits - 1, w * coreInstrBits)
+        f3_btb_mispredicts(i) := (
+            brsigs.cfiType === CFI_JAL &&   // predecode can only correct JAL
+            f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.valid &&
+            (f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits =/= brsigs.target)
+        )
 
-            val pre_decoder = Module(new PreDecode)
-            pre_decoder.io.pc    := pc
-            pre_decoder.io.instr := instr
-            val brsigs = pre_decoder.io.out
+        /**
+            s3阶段重定向的条件
+            1. 是jal/jalr指令
+            2. 是条件分支指令并被预测跳转
+         */
+        f3_redirects(i) := f3_mask(i) && (
+            brsigs.cfiType === CFI_JAL || brsigs.cfiType === CFI_JALR ||
+            (brsigs.cfiType === CFI_BR && f3_bpd_resp.io.deq.bits.predInfos(i).taken)
+        )
+        f3_br_mask(i)   := f3_mask(i) && brsigs.cfiType === CFI_BR
+        f3_cfi_types(i) := brsigs.cfiType
+        f3_call_mask(i) := brsigs.isCall
+        f3_ret_mask(i)  := brsigs.isRet
 
-            f3_fetch_bundle.instrs(i) := instr
-            f3_mask(i) := f3_ifu_resp.io.deq.valid && f3_fetchResp.mask(i) && !redirect_found
-            f3_tgts(i) := Mux(
-                brsigs.cfiType === CFI_JALR,
-                f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits, // maybe wrong
-                brsigs.target   // surelly right
-            )
-            f3_btb_mispredicts(i) := (
-                brsigs.cfiType === CFI_JAL &&   // predecode can only correct JAL
-                f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.valid &&
-                (f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits =/= brsigs.target)
-            )
-
-            /**
-                s3阶段重定向的条件
-                1. 是jal/jalr指令
-                2. 是条件分支指令并被预测跳转
-             */
-            f3_redirects(i) := f3_mask(i) && (
-                brsigs.cfiType === CFI_JAL || brsigs.cfiType === CFI_JALR ||
-                (brsigs.cfiType === CFI_BR && f3_bpd_resp.io.deq.bits.predInfos(i).taken)
-            )
-            f3_br_mask(i)   := f3_mask(i) && brsigs.cfiType === CFI_BR
-            f3_cfi_types(i) := brsigs.cfiType
-            f3_call_mask(i) := brsigs.isCall
-            f3_ret_mask(i)  := brsigs.isRet
-
-            redirect_found = redirect_found || f3_redirects(i)
-        }
+        redirect_found = redirect_found || f3_redirects(i)
     }
 
     f3_fetch_bundle.mask          := f3_mask.asUInt

@@ -23,7 +23,7 @@ class PredState extends Bundle {
     def update(taken: Bool) = {
         val next = Cat(
             taken ^ state(0),
-            ((~taken) & (~state(1)) & state(0)) | (taken & (state(1) | state(0)))
+            ((~taken).asUInt & (~state(1)) & state(0)) | (taken & (state(1) | state(0)))
         )
         this.state := next
     }
@@ -46,35 +46,35 @@ class UBTBIO extends Bundle with HasUbtbParameters {
     val s1valid  = Input(Bool())
     val s1pc     = Input(UInt(vaddrBits.W))
 
-    val s1targs  = Output(Vec(bankWidth, Valid(UInt(vaddrBits.W))))
-    val s1taken  = Output(Vec(bankWidth, Bool()))
-    val s1br     = Output(Vec(bankWidth, Bool()))
-    val s1jal    = Output(Vec(bankWidth, Bool()))
+    val s1targs  = Output(Vec(fetchWidth, Valid(UInt(vaddrBits.W))))
+    val s1taken  = Output(Vec(fetchWidth, Bool()))
+    val s1br     = Output(Vec(fetchWidth, Bool()))
+    val s1jal    = Output(Vec(fetchWidth, Bool()))
 
-    val s3meta   = Output(Vec(bankWidth, new UBTBPredictMeta))
+    val s3meta   = Output(Vec(fetchWidth, new UBTBPredictMeta))
 
-    val s1update = Input(Valid(new BankedUpdateInfo))
+    val s1update = Input(Valid(new BranchPredictionUpdate))
 }
 
-class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
+class FaUBtbPredictior extends Module with HasUbtbParameters {
     val io = IO(new UBTBIO)
 
-    val valid = RegInit(VecInit(Seq.fill(nWays * bankWidth)(false.B)))
-    val meta  = Reg(Vec(nWays, Vec(bankWidth, new UBTBMeta)))
-    val btb   = Reg(Vec(nWays, Vec(bankWidth, new UBTBEntry)))
+    val valid = RegInit(VecInit(Seq.fill(nWays * fetchWidth)(false.B)))
+    val meta  = Reg(Vec(nWays, Vec(fetchWidth, new UBTBMeta)))
+    val btb   = Reg(Vec(nWays, Vec(fetchWidth, new UBTBEntry)))
 
 // ---------------------------------------------
 //      Predict Logic
     val s1_tag = fetchIdx(io.s1pc)
-    val s1_hit_OHs = VecInit((0 until bankWidth) map { i =>
+    val s1_hit_OHs = VecInit((0 until fetchWidth) map { i =>
         VecInit((0 until nWays) map { w =>
-            (meta(w)(i).tag === s1_tag) && valid(Cat(w.U(log2Ceil(nWays).W), i.U(log2Ceil(bankWidth).W)))
+            (meta(w)(i).tag === s1_tag) && valid(Cat(w.U(log2Ceil(nWays).W), i.U(log2Ceil(fetchWidth).W)))
         })
     })
     val s1_hits = s1_hit_OHs.map(_.asUInt.orR)
     val s1_hit_ways = s1_hit_OHs.map(oh => OHToUInt(oh))
 
-    for (w <- 0 until bankWidth) {
+    for (w <- 0 until fetchWidth) {
         val resp_valid = io.s1valid && s1_hits(w)
         val entry_meta = meta(s1_hit_ways(w))(w)
 
@@ -96,8 +96,8 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
     val repl_way_update_en = io.s1valid && !s1_hits.reduce(_||_)
     val repl_way = LFSR(nWays, repl_way_update_en)(log2Ceil(nWays) - 1, 0)
 
-    val s1_meta = Wire(Vec(bankWidth, new UBTBPredictMeta)) // 这个是返回给外面的信息 和meta不是同一个类型
-    for (w <- 0 until bankWidth) {
+    val s1_meta = Wire(Vec(fetchWidth, new UBTBPredictMeta)) // 这个是返回给外面的信息 和meta不是同一个类型
+    for (w <- 0 until fetchWidth) {
         s1_meta(w).hit := s1_hits(w)
         s1_meta(w).write_way := Mux(
             s1_hits(w),
@@ -128,7 +128,7 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
         s1_update.bits.cfiTaken && s1_update.bits.cfiIdx.valid
     )
     
-    // for (w <- 0 until bankWidth) {
+    // for (w <- 0 until fetchWidth) {
     //     when (wen) {
     //         btb(s1_update_way(w))(s1_update_cfi_idx).offset := new_offset
     //     } 
@@ -140,8 +140,8 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
     }
 
     // update predictor state\
-    val wastaken = WireInit(VecInit(Seq.fill(bankWidth)(false.B)))
-    for (w <- 0 until bankWidth) {
+    val wastaken = WireInit(VecInit(Seq.fill(fetchWidth)(false.B)))
+    for (w <- 0 until fetchWidth) {
         val branch_taken = (
             s1_update.valid && s1_update.bits.isCommitUpdate && (
                 s1_update.bits.brMask(w) ||
@@ -158,7 +158,7 @@ class FaUBtbPredictior(ubtb_id: Int)  extends Module with HasUbtbParameters {
                                 (s1_update.bits.cfiTaken || s1_update.bits.cfiIsJal))
             val s1_update_tag = fetchIdx(s1_update.bits.pc)
 
-            valid(Cat(s1_update_way, w.U(log2Ceil(bankWidth).W))) := true.B
+            valid(Cat(s1_update_way, w.U(log2Ceil(fetchWidth).W))) := true.B
             meta(s1_update_way)(w).is_br := s1_update.bits.brMask(w)
             meta(s1_update_way)(w).tag   := s1_update_tag
 

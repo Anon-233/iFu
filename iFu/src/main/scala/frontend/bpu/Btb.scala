@@ -28,24 +28,24 @@ class BTBIO extends Bundle with HasBtbParameters {
     val s0valid = Input(Bool())
     val s0pc    = Input(UInt(vaddrBits.W))
 
-    val s2br    = Output(Vec(bankWidth, Bool()))
-    val s2jal   = Output(Vec(bankWidth, Bool()))
-    val s2taken = Output(Vec(bankWidth, Bool()))
-    val s2targs = Output(Vec(bankWidth, Valid(UInt(vaddrBits.W))))
+    val s2br    = Output(Vec(fetchWidth, Bool()))
+    val s2jal   = Output(Vec(fetchWidth, Bool()))
+    val s2taken = Output(Vec(fetchWidth, Bool()))
+    val s2targs = Output(Vec(fetchWidth, Valid(UInt(vaddrBits.W))))
 
-    val s3meta  = Output(Vec(bankWidth, new BTBPredictMeta))
+    val s3meta  = Output(Vec(fetchWidth, new BTBPredictMeta))
 
-    val s1update = Input(Valid(new BankedUpdateInfo))
+    val s1update = Input(Valid(new BranchPredictionUpdate))
 }
 
 class BTBPredictor extends Module with HasBtbParameters{
     val io = IO(new BTBIO)
 
     val meta = Seq.fill(nWays) {
-        SyncReadMem(nSets, Vec(bankWidth, UInt(BTBMetaSz.W)))
+        SyncReadMem(nSets, Vec(fetchWidth, UInt(BTBMetaSz.W)))
     }
     val btb  = Seq.fill(nWays) {
-        SyncReadMem(nSets, Vec(bankWidth, UInt(BTBEntrySz.W)))
+        SyncReadMem(nSets, Vec(fetchWidth, UInt(BTBEntrySz.W)))
     }
     val ebtb = SyncReadMem(extendedNSets, UInt(vaddrBits.W))
 
@@ -80,7 +80,7 @@ class BTBPredictor extends Module with HasBtbParameters{
     val s1_ebtb = ebtb.read(s0_tag_idx.asUInt, s0_valid)
 
     val s1_tag = s1_tag_idx >> log2Ceil(nSets)
-    val s1_hit_OHs = VecInit((0 until bankWidth) map { i =>
+    val s1_hit_OHs = VecInit((0 until fetchWidth) map { i =>
         VecInit((0 until nWays) map { w =>
             s1_meta(w)(i).tag === s1_tag.asUInt
         })
@@ -88,7 +88,7 @@ class BTBPredictor extends Module with HasBtbParameters{
     val s1_hits = s1_hit_OHs.map(_.asUInt.orR)
     val s1_hit_ways = s1_hit_OHs.map(oh => PriorityEncoder(oh))
 
-    for (w <- 0 until bankWidth) {
+    for (w <- 0 until fetchWidth) {
         // s1 stage
         val resp_valid = !reset_en && s1_valid && s1_hits(w)
         val entry_meta = s1_meta(s1_hit_ways(w))(w)
@@ -112,8 +112,8 @@ class BTBPredictor extends Module with HasBtbParameters{
     val repl_way_update_en = s1_valid && !s1_hits.reduce(_||_)
     val repl_way = LFSR(nWays, repl_way_update_en)(log2Ceil(nWays) - 1, 0)
 
-    val s1_update_info = Wire(Vec(bankWidth, new BTBPredictMeta))
-    for (w <- 0 until bankWidth) {
+    val s1_update_info = Wire(Vec(fetchWidth, new BTBPredictMeta))
+    for (w <- 0 until fetchWidth) {
         s1_update_info(w).hit := s1_hits(w)
         s1_update_info(w).writeWay := Mux(
             s1_hits(w),
@@ -133,18 +133,15 @@ class BTBPredictor extends Module with HasBtbParameters{
     val s1_update_way     = s1_update_ways(s1_update_cfi_idx)
     val s1_update_idx     = fetchIdx(s1_update.bits.pc)
 
-    val max_offset = Cat(0.B, ~(0.U((offsetSz - 1).W))).asSInt
-    val min_offset = Cat(1.B,  (0.U((offsetSz - 1).W))).asSInt
-    val new_offset = (
-        (s1_update.bits.target.asSInt) -
-        (s1_update.bits.pc + (s1_update.bits.cfiIdx.bits << 2)).asSInt
-    )
-    val need_extend = (
-        new_offset > max_offset || new_offset < min_offset
-    )
+    val max_offset = Cat(0.B, ~0.U((offsetSz - 1).W)).asSInt
+    val min_offset = Cat(1.B,  0.U((offsetSz - 1).W)).asSInt
+    val new_offset = s1_update.bits.target.asSInt -
+    (s1_update.bits.pc + (s1_update.bits.cfiIdx.bits << 2)).asSInt
 
-    val s1_update_wmeta = Wire(Vec(bankWidth, new BTBMeta))
-    for (w <- 0 until bankWidth) {
+    val need_extend = new_offset > max_offset || new_offset < min_offset
+
+    val s1_update_wmeta = Wire(Vec(fetchWidth, new BTBMeta))
+    for (w <- 0 until fetchWidth) {
         s1_update_wmeta(w).tag   := Mux(
             s1_update.bits.btbMispredicts(w),
             0.U,
@@ -159,12 +156,12 @@ class BTBPredictor extends Module with HasBtbParameters{
 
     val s1_update_wbtb_mask = (
         UIntToOH(s1_update_cfi_idx) &
-        Fill(bankWidth, s1_update.bits.cfiIdx.valid && s1_update.bits.cfiTaken && s1_update.bits.isCommitUpdate)
+        Fill(fetchWidth, s1_update.bits.cfiIdx.valid && s1_update.bits.cfiTaken && s1_update.bits.isCommitUpdate)
     )
     val s1_update_wmeta_mask = (
         (s1_update_wbtb_mask | s1_update.bits.brMask) &
-        ( Fill(bankWidth, s1_update.valid && s1_update.bits.isCommitUpdate) |  
-         (Fill(bankWidth, s1_update.valid) & s1_update.bits.btbMispredicts)
+        ( Fill(fetchWidth, s1_update.valid && s1_update.bits.isCommitUpdate) |  
+         (Fill(fetchWidth, s1_update.valid) & s1_update.bits.btbMispredicts)
         )
     )
 
@@ -173,22 +170,22 @@ class BTBPredictor extends Module with HasBtbParameters{
             meta(w).write(
                 Mux(reset_en, reset_idx, s1_update_idx),
                 Mux(reset_en,
-                    VecInit(Seq.fill(bankWidth) { 0.U(BTBMetaSz.W) }),
+                    VecInit(Seq.fill(fetchWidth) { 0.U(BTBMetaSz.W) }),
                     VecInit(s1_update_wmeta.map(_.asUInt))
                 ),
                 Mux(reset_en,
-                    ~(0.U(bankWidth.W)),
+                    ~(0.U(fetchWidth.W)),
                     (s1_update_wmeta_mask).asUInt
                 ).asBools
             )
             btb(w).write(
                 Mux(reset_en, reset_idx, s1_update_idx),
                 Mux(reset_en, 
-                    VecInit(Seq.fill(bankWidth) { 0.U(BTBEntrySz.W) }),
-                    VecInit(Seq.fill(bankWidth) { s1_update_wbtb.asUInt })
+                    VecInit(Seq.fill(fetchWidth) { 0.U(BTBEntrySz.W) }),
+                    VecInit(Seq.fill(fetchWidth) { s1_update_wbtb.asUInt })
                 ),
                 Mux(reset_en,
-                    ~(0.U(bankWidth.W)),
+                    ~(0.U(fetchWidth.W)),
                     s1_update_wbtb_mask.asUInt
                 ).asBools
             )

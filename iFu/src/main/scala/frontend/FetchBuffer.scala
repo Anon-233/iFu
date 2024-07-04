@@ -19,8 +19,7 @@ class FetchBuffer extends CoreModule {
     })
     //------------------------------------
     val numFetchBufferEntries = frontendParams.numFetchBufferEntries
-    val nBanks = frontendParams.iCacheParams.nBanks
-    val bankWidth = frontendParams.bankWidth
+    val fetchWidth = frontendParams.fetchWidth
     //------------------------------------
 
     val numEnt = numFetchBufferEntries
@@ -67,27 +66,24 @@ class FetchBuffer extends CoreModule {
     val inMask = Wire(Vec(frontendParams.fetchWidth, Bool())) // which uops are valid
     val inUops = Wire(Vec(frontendParams.fetchWidth, new MicroOp()))
 
-    for(b <- 0 until nBanks){
-        for (w <- 0 until bankWidth){
-            val i = (b * bankWidth) + w     // the index of the uop
+    for (i <- 0 until fetchWidth){
 
-            val pc = (bankAlign(io.enq.bits.pc) + (i << 2).U) | io.enq.bits.pc(1, 0) 
+        val pc = (fetchAlign(io.enq.bits.pc) + (i << 2).U) | io.enq.bits.pc(1, 0)
 
-            inUops(i) := DontCare   // set the value afterward
-            inMask(i) := io.enq.valid && io.enq.bits.mask(i)
+        inUops(i) := DontCare   // set the value afterward
+        inMask(i) := io.enq.valid && io.enq.bits.mask(i)
 
-            inUops(i).xcpt_valid := io.enq.bits.exception.valid
-            inUops(i).xcpt_cause := io.enq.bits.exception.bits.xcpt_cause
+        inUops(i).xcpt_valid := io.enq.bits.exception.valid
+        inUops(i).xcpt_cause := io.enq.bits.exception.bits.xcpt_cause
 
-            inUops(i).pcLowBits := pc
-            inUops(i).ftqIdx    := io.enq.bits.ftqIdx
-            inUops(i).instr     := io.enq.bits.instrs(i)
-            if (!FPGAPlatform) {
-                inUops(i).debug_inst := io.enq.bits.instrs(i)
-                inUops(i).debug_pc := pc
-            }
-            inUops(i).taken := io.enq.bits.cfiIdx.bits.asUInt === i.U && io.enq.bits.cfiIdx.valid
+        inUops(i).pcLowBits := pc
+        inUops(i).ftqIdx    := io.enq.bits.ftqIdx
+        inUops(i).instr     := io.enq.bits.instrs(i)
+        if (!FPGAPlatform) {
+            inUops(i).debug_inst := io.enq.bits.instrs(i)
+            inUops(i).debug_pc := pc
         }
+        inUops(i).taken := io.enq.bits.cfiIdx.bits.asUInt === i.U && io.enq.bits.cfiIdx.valid
     }
 
     // the index of the uop which will be enqueued

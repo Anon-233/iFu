@@ -121,8 +121,7 @@ class ALUUnit(
     val rs2 = io.req.bits.rs2Data
     val brEq = rs1 === rs2
     val brLtu = rs1.asUInt < rs2.asUInt
-    val brLt = (~(rs1(xLen - 1) ^ rs2(xLen - 1)) & brLtu |
-                rs1(xLen - 1) & ~rs2(xLen - 1)).asBool
+    val brLt = (!(rs1(xLen - 1) ^ rs2(xLen - 1)) & brLtu | rs1(xLen - 1) & ~rs2(xLen - 1)).asBool
 
     val pcSel = MuxLookup(uop.ctrl.br_type, PC_PLUS4)(
         Seq(
@@ -163,14 +162,13 @@ class ALUUnit(
     brInfo.cfiType := Mux(isJalr, CFI_JALR, Mux(isBr, CFI_BR, CFI_X))
     brInfo.taken := isTaken
     brInfo.pcSel := pcSel
-    val bankBytes = frontendParams.iCacheParams.bankBytes
     val fetchWidth= frontendParams.fetchWidth
     if (isJmpUnit) {
         val jalrTargetBase = io.req.bits.rs1Data.asSInt
         val jalrTarget = (jalrTargetBase + imm).asUInt
         brInfo.jalrTarget := jalrTarget
 
-        val cfiIdx = ((uop.pcLowBits ^ Mux(io.getFtqPC.entry.startBank === 1.U, 1.U << log2Ceil(bankBytes), 0.U)))(log2Ceil(fetchWidth) + log2Ceil(coreInstrBytes) - 1 , log2Ceil(coreInstrBytes))
+        val cfiIdx = uop.pcLowBits(log2Ceil(fetchWidth) + log2Ceil(coreInstrBytes) - 1 , log2Ceil(coreInstrBytes))
 
         when (pcSel === PC_JALR) {
             mispredict := !io.getFtqPC.nextVal || (io.getFtqPC.nextpc =/= jalrTarget) ||

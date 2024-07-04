@@ -1,14 +1,12 @@
 package iFu.frontend
 
 import chisel3._
+import chisel3.util.ImplicitConversions.intToUInt
 import chisel3.util._
 import chisel3.util.random.LFSR
-
 import iFu.axi3._
 import iFu.sma._
-
 import iFu.frontend.FrontendUtils._
-
 import iFu.common._
 
 class ICacheReq extends CoreBundle {
@@ -34,16 +32,13 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     })
 /*---------------------------------------------------------------------*/
 //========== ----i$ params--- ==========
-    val banksPerLine = iParams.banksPerLine
+    val fetchesPerLine = iParams.fetchesPerLine
     val lineBytes = iParams.lineBytes
-    val refillCycles = iParams.lineBytes * 8 / io.smar.resp.rdata.getWidth
+    val smaBytes = io.smar.resp.rdata.getWidth / 8
+    val refillCycles = iParams.lineBytes / smaBytes
     require(
-        iParams.lineBytes % io.smar.resp.rdata.getWidth == 0,
+        iParams.lineBytes % smaBytes == 0,
         "LineBytes must be divisible by data width."
-    )
-    require(
-        refillCycles >= nBanks,
-        "Refill cycles must be greater than or equal to the number of banks."
     )
     require(
         isPow2(refillCycles),
@@ -51,16 +46,12 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     )
 
     val packetBits = frontendParams.fetchBytes * 8
-    val refillToOneBank = refillCycles == iParams.banksPerLine
-    require(fetchBytes / nBanks == bankBytes)
 //========== ----i$ params--- ==========
 /*---------------------------------------------------------------------*/
 //========== ----i$ funcs---- ==========
-    def b0Row(addr: UInt) =
-        addr(iParams.untagBits - 1, log2Ceil(iParams.bankBytes * 2)) + bank(addr)
-    def b1Row(addr: UInt) =
-        addr(iParams.untagBits - 1, log2Ceil(iParams.bankBytes * 2))
-//========== ----i$ funcs---- ==========
+    def getSet(addr: UInt) = addr(iParams.untagBits - 1, iParams.untagBits - iParams.indexBits)
+
+    //========== ----i$ funcs---- ==========
 /*---------------------------------------------------------------------*/
 //========== ----i$ body----- ==========
     val s2_miss = Wire(Bool())
@@ -72,21 +63,13 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         iParams.nSets,
         Vec(iParams.nWays, UInt(iParams.tagBits.W))
     )
-    val dataArrays =
+    val dataArray =
         (0 until iParams.nWays).map{
             x => SyncReadMem(
-                iParams.nSets * banksPerLine/nBanks,
-                UInt((packetBits / nBanks).W)
-            )
-        } ++
-        (0 until iParams.nWays).map{
-            x => SyncReadMem(
-                iParams.nSets * banksPerLine/nBanks,
-                UInt((packetBits / nBanks).W)
+                iParams.nSets * fetchesPerLine,
+                UInt(packetBits.W)
             )
         }
-    val dataArrayB0 = dataArrays.take(iParams.nWays)
-    val dataArrayB1 = dataArrays.drop(iParams.nWays)
 //========== ----i$ body----- ==========
 /*---------------------------------------------------------------------*/
 //========== ----S0 Stage---- ==========
@@ -98,19 +81,18 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 /*---------------------------------------------------------------------*/
 //========== S0 - S1 Register ==========
     val tagReadData = tagArray.read(
-        s0_vaddr(iParams.untagBits - 1, iParams.offsetBits),
+        getSet(s0_vaddr),
         s0_tagReadEn
     )
 
     val s1_valid = RegNext(s0_valid)
-    val s1_bankid = RegNext(bank(s0_vaddr))
 //========== S0 - S1 Register ==========
 /*---------------------------------------------------------------------*/
 //========== ----S1 Stage---- ==========
     val s1_tagHit = Wire(Vec(iParams.nWays, Bool()))
 
     for (i <- 0 until iParams.nWays) {
-        val s1_idx = io.s1_paddr(iParams.untagBits - 1, iParams.offsetBits)
+        val s1_idx = getSet(io.s1_paddr)
         val s1_tag = io.s1_paddr(iParams.tagBits + iParams.untagBits -1, iParams.untagBits)
         val s1_validBit = validArray(Cat(i.U(log2Ceil(iParams.nWays).W), s1_idx))
         val tag = tagReadData(i)
@@ -125,21 +107,13 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val s2_valid = RegNext(s1_valid && !io.s1_kill)
     val s2_tagHit = RegNext(s1_tagHit)
     val s2_hit = RegNext(s1_hit)
-    val s2_bankid = RegNext(s1_bankid)
     val s2_dataOut = RegNext(s1_dataOut)
 //========== S1 - S2 Register ==========
 /*---------------------------------------------------------------------*/
 //========== ----S2 Stage---- ==========
     s2_miss := s2_valid && !s2_hit && (iCacheState === s_Normal)
 
-    val s2_wayMux = Mux1H(s2_tagHit, s2_dataOut)
-    val sz = s2_wayMux.getWidth
-    val s2_bank0Data = s2_wayMux(sz / 2 - 1, 0)
-    val s2_bank1Data = s2_wayMux(sz - 1, sz / 2)
-    val s2_data = Mux(s2_bankid.asBool,
-        Cat(s2_bank0Data, s2_bank1Data),
-        Cat(s2_bank1Data, s2_bank0Data)
-    )
+    val s2_data = Mux1H(s2_tagHit, s2_dataOut)
 //========== ----S2 Stage---- ==========
 /*---------------------------------------------------------------------*/
 //========== --inv i$ logic-- ==========
@@ -159,19 +133,21 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         s1_valid && !(s2_miss || iCacheState === s_Fetch)
     )
     val refillTag = refillPaddr(iParams.tagBits + iParams.untagBits - 1, iParams.untagBits)
-    val refillIdx = refillPaddr(iParams.untagBits-1, iParams.offsetBits)
+    val refillIdx = getSet(refillPaddr)
 
-    var refillOneBankEn: Bool = null
-    var refillOneBankData: UInt = null
-    var refillLastBank: Bool = null
-    if (refillToOneBank) {
-        refillOneBankEn = io.smar.req.arvalid && io.smar.resp.rvalid
-        refillOneBankData = io.smar.resp.rdata
-        refillLastBank = io.smar.resp.rvalid && io.smar.resp.rlast
+    var refillEn: Bool = null
+    var refillData: UInt = null
+    var refillLast: Bool = null
+    val needBuffer = smaBytes != fetchBytes
+    if (!needBuffer) {
+        refillEn = io.smar.req.arvalid && io.smar.resp.rvalid
+        refillData = io.smar.resp.rdata
+        refillLast = io.smar.resp.rvalid && io.smar.resp.rlast
     } else {
-        val refillBufCnt = RegInit(0.U(log2Ceil(refillCycles / banksPerLine).W))
+        val refillBufWidth = fetchBytes / smaBytes
+        val refillBufCnt = RegInit(0.U(log2Ceil(refillBufWidth).W))
         val refillBuf = RegInit(
-            VecInit(Seq.fill(refillCycles / banksPerLine)(0.U((lineBytes * 8 / refillCycles).W)))
+            VecInit(Seq.fill(refillBufWidth)(0.U((smaBytes * 8).W)))
         )
         val refillBufWriteEn = io.smar.req.arvalid && io.smar.resp.rvalid
         when (refillBufWriteEn) {
@@ -179,49 +155,38 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
             refillBuf(refillBufCnt) := io.smar.resp.rdata
         }
 
-        refillOneBankEn = RegNext(refillBufWriteEn) && refillBufCnt === 0.U
-        refillOneBankData = refillBuf.asUInt
-        refillLastBank = RegNext(io.smar.resp.rvalid && io.smar.resp.rlast)
+        refillEn = RegNext(refillBufWriteEn) && refillBufCnt === 0.U
+        refillData = refillBuf.asUInt
+        refillLast = RegNext(io.smar.resp.rvalid && io.smar.resp.rlast)
     }
 
-    val refillCnt = RegInit(0.U(log2Ceil(iParams.banksPerLine).W))
-    when (refillOneBankEn) {
+    val refillCnt = RegInit(0.U(log2Ceil(fetchesPerLine).W))
+    when (refillEn) {
         refillCnt := refillCnt + 1.U
     }
 
     for (i <- 0 until iParams.nWays) {
-        val dataArray0Idx = Mux(
-            refillOneBankEn,
-            ((refillIdx << log2Ceil(iParams.banksPerLine / 2)) | (refillCnt >> 1.U)),
-            b0Row(s0_vaddr)
-        )
-        val dataArray1Idx = Mux(
-            refillOneBankEn,
-            ((refillIdx << log2Ceil(iParams.banksPerLine / 2)) | (refillCnt >> 1.U)),
-            b1Row(s0_vaddr)
+        val dataArrayIdx = Mux(
+            refillEn,
+            Cat(refillIdx, refillCnt),
+            Cat(getSet(s0_vaddr), s0_vaddr(iParams.offsetBits - 1, log2Ceil(fetchBytes)))
         )
         // read data
-        s1_dataOut(i) := Cat(
-            dataArrayB1(i).read(dataArray1Idx, s0_valid),
-            dataArrayB0(i).read(dataArray0Idx, s0_valid)
-        )
+        s1_dataOut(i) := dataArray(i).read(dataArrayIdx, s0_valid)
         // write data
-        val writeEn = (refillOneBankEn && !invalidated) && replWay === i.U
-        when (writeEn && refillCnt(0) === 0.U) {
-            dataArrayB0(i).write(dataArray0Idx, refillOneBankData)
-        }
-        when (writeEn && refillCnt(0) === 1.U) {
-            dataArrayB1(i).write(dataArray1Idx, refillOneBankData)
+        val writeEn = (refillEn && !invalidated) && replWay === i.U
+        when (writeEn) {
+            dataArray(i).write(dataArrayIdx, refillData)
         }
     }
-    when(refillLastBank){
+    when(refillLast){
         tagArray.write(
             refillIdx,
             VecInit(Seq.fill(iParams.nWays)(refillTag)),
             Seq.tabulate(iParams.nWays)(replWay === _.U)
         )
         validArray := validArray.bitSet(
-            Cat(replWay, refillIdx), refillLastBank && !invalidated
+            Cat(replWay, refillIdx), refillLast && !invalidated
         )
     }
 
@@ -232,7 +197,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     when (iCacheState === s_Normal) {
         iCacheState := Mux(s2_miss && !io.s2_kill, s_Fetch, s_Normal)
     } .elsewhen (iCacheState === s_Fetch) {
-        iCacheState := Mux(refillLastBank, s_Normal, s_Fetch)
+        iCacheState := Mux(refillLast, s_Normal, s_Fetch)
     } .otherwise {
         iCacheState := iCacheState
     }
@@ -248,6 +213,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     io.smar.req.araddr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
     io.smar.req.arburst := AXI3Parameters.BURST_INCR
     io.smar.req.arlen := AXI3Parameters.MLEN16
+    require(refillCycles == 16)
     require(iParams.lineBytes == 64)
 //========== ------ IO ------ ==========
 }
