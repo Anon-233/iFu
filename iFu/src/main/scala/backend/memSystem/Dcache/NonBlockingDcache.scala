@@ -461,14 +461,14 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // mmio_resp:s1不干活，等着后面s2交还给lsu
         // mmio_req:s1不干活，等着后面发请求给axi
     }.elsewhen(s1state === fence_read){
-        when(!meta.io.fetchDirty.resp.bits.hasDirty) {
-            //没有Dirty就不做了
-        }.otherwise{
-            // 把fenceMeatRead的结果拉给wfu
+
+        when(meta.io.fetchDirty.resp.bits.rmeta.dirty && meta.io.fetchDirty.resp.bits.rmeta.valid){
+        // 如果有效的脏行，才把fetchDirty的结果拉给wfu
             wfu.io.req_valid := s1valid(0)
             wfu.io.req_wb_only := true.B
             wfu.io.meta_resp := meta.io.fetchDirty.resp.bits
         }
+
     }
 
 
@@ -509,8 +509,17 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // 对于lsu的store请求，要现在mshr里面找，如果有store，就当作miss处理
         s2hit(w) := RegNext(s1hit(w)) && !(s2state === lsu && (isStore(s2req(w)) && mshrs.io.hasStore))
     }
-    // 其他状态的pos (对于mshr分配到的pos，在s1才拿到自己分到的pos，这里要及时更新)
+
+
+    //用于对于没有dirty的fence的指示信号，直接清除掉对应行
+    val s2fence_read_not_dirtyline = RegNext(!meta.io.fetchDirty.resp.bits.rmeta.dirty || !meta.io.fetchDirty.resp.bits.rmeta.valid)
+    val s2fence_read_idx = RegNext(meta.io.fetchDirty.resp.bits.idx)
+    val s2fence_read_pos = RegNext(meta.io.fetchDirty.resp.bits.pos)
+
+
+    // 其他状态的pos (对于mshr分配到的pos,或者fetchDirty的行，在s1才拿到自己分到的pos，这里要及时更新)
     val s2pos = RegNext(Mux(s1state === replace_find, meta.io.missReplace.resp.bits.pos, s1pos))
+
     // lsu请求下hit的pos
     val s2hitpos = RegNext(s1hitpos)
     // lsu阶段，如果发生了miss，将由missArbiter来决定写入mshr行为
@@ -530,6 +539,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s2activateAddr = RegNext(s1activateAddr)
 
 
+
     var sendResp = WireInit(0.U.asTypeOf(Vec(memWidth,Bool())))
     var sendNack = WireInit(0.U.asTypeOf(Vec(memWidth,Bool())))
 
@@ -537,11 +547,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     when(s2state === lsu){
         // 生成初处理过的send，nack信号，用于返回给lsu，同时生成StoreFailed,用来清空后面可能有的store
         missArbiter.io.mshrReq <> mshrs.io.req
-        
+
         s2StoreFailed := missArbiter.io.storeFailed
         sendNack := missArbiter.io.sendNack
         sendResp := missArbiter.io.sendResp
-        
+
 
         // 以上将所有中途kill或者miss的请求都处理完了，接下来处理hit且活着的请求
         for(w <- 0 until memWidth){
@@ -558,7 +568,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
                     meta.io.lsuWrite.req.bits.setdirty.valid := true.B
                     meta.io.lsuWrite.req.bits.setdirty.bits := true.B
-                    
+
                     //data 执行写操作
                     val rdata = data.io.lsuRead(w).resp.bits.data
                     val wdata = WordWrite(s2req(w) , rdata)
@@ -590,7 +600,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         // 只要s2valid(0)就是hit
         when(isStore(s2req(0))) {
             // store
-            
+
             // meta拉高dirty位
             meta.io.replayWrite.req.valid := s2valid(0)
             meta.io.replayWrite.req.bits.idx := getIdx(s2req(0).addr)
@@ -625,7 +635,30 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         meta.io.lineFreeze.req.bits.setreadOnly.valid := true.B
         meta.io.lineFreeze.req.bits.setreadOnly.bits := true.B
     }.elsewhen(s2state ===fence_read){
-        // 激活wfu在1阶段就做完了,这里可能之后做fenceWrite的清除对应meta行
+        // 对于脏的行，激活wfu在1阶段就做完了,但是对于那些没有脏的，或者无效的行，此处需要由fence_read动用lineClear
+        when(s2fence_read_not_dirtyline){
+            meta.io.lineClear.req.valid := s2valid(0)
+            meta.io.lineClear.req.bits.isFence := true.B
+
+            meta.io.lineClear.req.bits.idx := s2fence_read_idx
+            meta.io.lineClear.req.bits.pos := s2fence_read_pos
+
+            meta.io.lineClear.req.bits.setdirty.valid := true.B
+            meta.io.lineClear.req.bits.setdirty.bits := false.B
+
+            // 彻底清除这一行
+            meta.io.lineClear.req.bits.setvalid.valid := true.B
+            meta.io.lineClear.req.bits.setvalid.bits := false.B
+
+            meta.io.lineClear.req.bits.setreadOnly.valid := true.B
+            meta.io.lineClear.req.bits.setreadOnly.bits := false.B
+
+            meta.io.lineClear.req.bits.setfixed.valid := true.B
+            meta.io.lineClear.req.bits.setfixed.bits := false.B
+
+            meta.io.lineClear.req.bits.setTag.valid := true.B
+            meta.io.lineClear.req.bits.setTag.bits := 0.U
+        }
     }.elsewhen(s2state === wb){
         // 将读到的data给wfu
         wfu.io.wfu_read_resp.valid :=  data.io.wfuRead.resp.valid
@@ -740,7 +773,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         sendResp(1) := false.B
         sendNack(1) := false.B
     }.elsewhen(s2state === fence_clear){
-        // 清除对应的meta行的dirty位
+        // 清除对应的meta行的dirty位,以及valid 位
         meta.io.lineClear.req.valid := s2valid(0)
         meta.io.lineClear.req.bits.isFence := true.B
 
@@ -751,16 +784,16 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         meta.io.lineClear.req.bits.setdirty.bits := false.B
 
         // 彻底清除这一行
-        meta.io.lineClear.req.bits.setvalid.valid := false.B
+        meta.io.lineClear.req.bits.setvalid.valid := true.B
         meta.io.lineClear.req.bits.setvalid.bits := false.B
 
-        meta.io.lineClear.req.bits.setreadOnly.valid := false.B
+        meta.io.lineClear.req.bits.setreadOnly.valid := true.B
         meta.io.lineClear.req.bits.setreadOnly.bits := false.B
 
-        meta.io.lineClear.req.bits.setfixed.valid := false.B
+        meta.io.lineClear.req.bits.setfixed.valid := true.B
         meta.io.lineClear.req.bits.setfixed.bits := false.B
 
-        meta.io.lineClear.req.bits.setTag.valid := false.B
+        meta.io.lineClear.req.bits.setTag.valid := true.B
         meta.io.lineClear.req.bits.setTag.bits := 0.U
 
     }.elsewhen(s2state === prefetch){
