@@ -65,14 +65,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // fence_read : 清空所有的dirty行
 
     io.lsu.req.ready := false.B
-    for(w <- 0 until memWidth){
-        io.lsu.resp(w) := 0.U.asTypeOf(new Valid(new DCacheResp))
-    }
-
-    for (w <- 0 until memWidth) {
-        io.lsu.nack(w) := 0.U.asTypeOf(new Valid(new DCacheReq))
-    }
-
 
     val replay :: wb :: refill ::  replace_find :: lsu :: mmio_req :: mmio_resp  :: prefetch  :: fence_read :: fence_clear :: cacop :: nil :: Nil = Enum(12)
 
@@ -540,8 +532,15 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
 
 
-    var sendResp = WireInit(0.U.asTypeOf(Vec(memWidth,Bool())))
-    var sendNack = WireInit(0.U.asTypeOf(Vec(memWidth,Bool())))
+    val sendResp = WireInit(0.U.asTypeOf(Vec(memWidth,Bool())))
+    val sendNack = WireInit(0.U.asTypeOf(Vec(memWidth,Bool())))
+
+    // 先将返回值的bits填充一下默认值
+    for(w <- 0 until memWidth){
+        io.lsu.nack(w).bits := s2req(w)
+        io.lsu.resp(w).bits.uop := s2req(w).uop
+        io.lsu.resp(w).bits.data := DontCare
+    }
 
     // 下面是s2执行的内容
     when(s2state === lsu){
@@ -581,13 +580,13 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                     data.io.lsuWrite.req.bits.data := wdata
 
                     io.lsu.resp(w).bits.data := Mux(isSC(s2req(w)), io.lsu.llbit.asUInt , 0.U)
-                    io.lsu.resp(w).bits.uop := s2req(w).uop
+                    // io.lsu.resp(w).bits.uop := s2req(w).uop
 
                 }.otherwise{
                     // load，现在的meta,data自带转发功能不用特别判断什么
 
                     io.lsu.resp(w).bits.data := data.io.lsuRead(w).resp.bits.data
-                    io.lsu.resp(w).bits.uop := s2req(w).uop
+                    // io.lsu.resp(w).bits.uop := s2req(w).uop
                 }
             }
         }
@@ -619,11 +618,11 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             data.io.replayWrite.req.bits.data := replay_wdata
 
             io.lsu.resp(0).bits.data := Mux(isSC(s2req(0)), io.lsu.llbit.asUInt , 0.U)
-            io.lsu.resp(0).bits.uop := s2req(0).uop
+            // io.lsu.resp(0).bits.uop := s2req(0).uop
         }.otherwise {
             // 准备resp
             io.lsu.resp(0).bits.data := data.io.replayRead.resp.bits.data
-            io.lsu.resp(0).bits.uop := s2req(0).uop
+            // io.lsu.resp(0).bits.uop := s2req(0).uop
         }
 
     }.elsewhen(s2state === replace_find){
@@ -762,11 +761,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     }.elsewhen(s2state === mmio_resp){
         
         // 装载newDataLine的0号数据作为可能的读操作的resp的data
-        for(w <- 0 until memWidth){
-            // DcacheReq类,req的uop还是那个请求的uop，但是如果是一个ld指令，那么这里的data（原store的写入数据）将作为读取到的data的载体
-            io.lsu.resp(0).bits.data := Mux(isSC(s2req(0)), io.lsu.llbit.asUInt , s2req(0).data)
-            io.lsu.resp(0).bits.uop  := s2req(0).uop
-        }
+        // DcacheReq类,req的uop还是那个请求的uop，但是如果是一个ld指令，那么这里的data（原store的写入数据）将作为读取到的data的载体
+        io.lsu.resp(0).bits.data := Mux(isSC(s2req(0)), io.lsu.llbit.asUInt , s2req(0).data)
+        
         // 选择0号做回复
         sendResp(0) := s2valid(0)
         sendNack(0) := false.B
@@ -803,9 +800,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     }
 
 
-    // 最后整理resp和nack
-    io.lsu.nack(0).bits := s2req(0)
-    io.lsu.nack(1).bits := s2req(1)
+
     // 按情况返回resp或nack(replay不用看kill，lsukiil自然为假)
     for(w <- 0 until memWidth){
         io.lsu.nack(w).valid := sendNack(w)
@@ -833,7 +828,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         val st_h =  isRealStoreState && io.lsu.resp(0).valid && io.lsu.resp(0).bits.uop.use_stq &&  io.lsu.resp(0).bits.uop.mem_size === 1.U
         val st_b =  isRealStoreState && io.lsu.resp(0).valid && io.lsu.resp(0).bits.uop.use_stq &&  io.lsu.resp(0).bits.uop.mem_size === 0.U
         // disable now
-        difftest.io.valid := 0.U & VecInit(Cat((0.U(4.W)), io.lsu.llbit && sc_w, st_w, st_h, st_b)).asUInt
+        difftest.io.valid := VecInit(Cat((0.U(4.W)), io.lsu.llbit && sc_w, st_w, st_h, st_b)).asUInt
         difftest.io.clock := clock
         difftest.io.coreid := 0.U // only support 1 core now
         difftest.io.index := 0.U
