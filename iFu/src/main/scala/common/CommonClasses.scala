@@ -74,6 +74,7 @@ class LSUDMemIO extends CoreBundle {
     val req         = new DecoupledIO(Vec(memWidth,Valid(new DCacheReq)))
     val s1_kill     = Output(Vec(memWidth, Bool()))
     //val s1_paddr = Output(Vec(memWidth, UInt(paddrBits.W)))
+    val s2_hit      = Input(Vec(memWidth, Bool()))
     val resp        = Flipped(Vec(memWidth, new Valid(new DCacheResp)))
 
     val nack        = Flipped(Vec(memWidth, new Valid(new DCacheReq)))
