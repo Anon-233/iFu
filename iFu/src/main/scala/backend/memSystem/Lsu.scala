@@ -100,6 +100,9 @@ class LDQEntry extends CoreBundle with HasUop {
     val numLdqEntries = lsuParameters.numLDQEntries
     val stqAddrSz     = lsuParameters.stqAddrSz
     val ldqAddrSz     = lsuParameters.ldqAddrSz
+
+    require(isPow2(numLdqEntries), "numLdqEntries must be a power of 2")
+    require(isPow2(numStqEntries), "numStqEntries must be a power of 2")
     /** ************************************ */
 
     val addr             = Valid(UInt(xLen.W))
@@ -773,37 +776,53 @@ class Lsu extends CoreModule {
     mem_forward_stq_idx := forwarding_idx
 // -----------------------------------------------------------------------
 // s2 stage: exception detection
-    // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
-    val temp_bits = (VecInit(VecInit.tabulate(numLdqEntries)(i =>
-        failed_loads(i) && i.U >= ldq_head) ++ failed_loads)).asUInt
-    val l_idx = PriorityEncoder(temp_bits)
-
     // one exception port, but multiple causes!
-    // - 1) the incoming store-address finds a faulting load(mini-exception)
-    // - 2) the incoming load or store address is excepting. It must be older and thus takes precedent.
-    val r_xcpt_valid = RegInit(false.B)
-    val r_xcpt       = Reg(new Exception)
+    // - 1 the incoming store-address finds a faulting load(mini-exception)
+    // - 2 the incoming load or store address is excepting. It must be older and thus takes precedent.
 
-    val ld_xcpt_valid = failed_loads.reduce(_|_)
-    val ld_xcpt_uop   = ldq(Mux(l_idx >= numLdqEntries.U, l_idx - numLdqEntries.U, l_idx)(ldqAddrSz-1,0)).bits.uop
+    // detect which loads get marked as failures, but broadcast to the ROB the oldest failing load
+    val temp_bits = (VecInit(
+        VecInit.tabulate(numLdqEntries)(
+            i => failed_loads(i) && i.U >= ldq_head
+        ) ++
+        failed_loads
+    )).asUInt
 
+    // s3 stage
+    val ld_xcpt_valid = RegNext(failed_loads.reduce(_|_))
+    val l_idx         = RegNext(PriorityEncoder(temp_bits)(ldqAddrSz - 1, 0))
+    val ld_xcpt_uop   = ldq(l_idx).bits.uop
+
+    /* val r_xcpt_valid = RegInit(false.B) */
+    /* val r_xcpt       = Reg(new Exception) */
+
+    // s3 stage: choose the oldest exception
     val use_tlb_xcpt =
         !ld_xcpt_valid ||
         (s1_tlb_xcpt_valid && IsOlder(s1_tlb_xcpt_uop.robIdx, ld_xcpt_uop.robIdx, io.core.rob_head_idx))
 
     val xcpt_uop = Mux(use_tlb_xcpt, s1_tlb_xcpt_uop, ld_xcpt_uop)
 
-    r_xcpt_valid := (ld_xcpt_valid || s1_tlb_xcpt_valid) &&
+    /* r_xcpt_valid := (ld_xcpt_valid || s1_tlb_xcpt_valid) &&
                     !io.core.exception                   &&
-                    !IsKilledByBranch(io.core.brupdate, xcpt_uop)
-    r_xcpt.uop        := xcpt_uop
-    r_xcpt.uop.brMask := GetNewBrMask(io.core.brupdate, xcpt_uop)
-    r_xcpt.cause      := Mux(use_tlb_xcpt, s1_tlb_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
-    r_xcpt.badvaddr   := s1_tlb_xcpt_vaddr
+                    !IsKilledByBranch(io.core.brupdate, xcpt_uop) */
+    /* r_xcpt.uop        := xcpt_uop */
+    /* r_xcpt.uop.brMask := GetNewBrMask(io.core.brupdate, xcpt_uop) */
+    /* r_xcpt.cause      := Mux(use_tlb_xcpt, s1_tlb_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING) */
+    /* r_xcpt.badvaddr   := s1_tlb_xcpt_vaddr */
 
     // s3 stage: throw the exception
-    io.core.lsu_xcpt.valid := r_xcpt_valid && !io.core.exception && !IsKilledByBranch(io.core.brupdate, r_xcpt.uop)
-    io.core.lsu_xcpt.bits  := r_xcpt
+    /* io.core.lsu_xcpt.valid := r_xcpt_valid && !io.core.exception && !IsKilledByBranch(io.core.brupdate, r_xcpt.uop) */
+    io.core.lsu_xcpt.valid           := (
+        (ld_xcpt_valid || s1_tlb_xcpt_valid)          &&
+        !io.core.exception                            &&
+        !IsKilledByBranch(io.core.brupdate, xcpt_uop)
+    )
+    /* io.core.lsu_xcpt.bits  := r_xcpt */
+    io.core.lsu_xcpt.bits.uop        := xcpt_uop
+    io.core.lsu_xcpt.bits.uop.brMask := GetNewBrMask(io.core.brupdate, xcpt_uop)
+    io.core.lsu_xcpt.bits.cause      := Mux(use_tlb_xcpt, s1_tlb_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
+    io.core.lsu_xcpt.bits.badvaddr   := s1_tlb_xcpt_vaddr
 // -----------------------------------------------------------------------
 // s2 stage: speculative wakeup
     for (w <- 0 until memWidth) {
