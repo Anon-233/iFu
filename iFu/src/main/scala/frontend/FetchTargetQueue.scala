@@ -175,7 +175,7 @@ class FetchTargetQueue extends CoreModule {
         io.bpdUpdate.bits.cfiTaken        := bpdEntry.cfiTaken
         io.bpdUpdate.bits.target          := bpdTarget
         io.bpdUpdate.bits.cfiIsBr         := bpdEntry.brMask(cfiIdx)
-        io.bpdUpdate.bits.cfiIsJal        := bpdEntry.cfiType === CFI_JAL || bpdEntry.cfiType === CFI_JALR
+        io.bpdUpdate.bits.cfiIsJal        := bpdEntry.cfiType === CFI_BL || bpdEntry.cfiType === CFI_JIRL
         io.bpdUpdate.bits.gHist           := bpdgHist
         io.bpdUpdate.bits.meta            := bpdMeta
     }

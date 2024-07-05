@@ -123,8 +123,8 @@ object XDecode extends DecodeTable  {
         AND       -> List(Y, uopAND      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, N, N, N, N,  N, N, /*M_X  ,*/  Y, N, N, N, N),
         XOR       -> List(Y, uopXOR      , IQT_INT, FU_ALU, RT_FIX, RT_FIX, RT_FIX, N, N, N, N,  N, N, /*M_X  ,*/  Y, N, N, N, N),
         JIRL      -> List(Y, uopJIRL     , IQT_INT, FU_JMP, RT_FIX, RT_FIX, RT_X  , N, N, N, N,  N, N, /*M_X  ,*/  N, N, N, N, N),
-        B         -> List(Y, uopJAL      , IQT_INT, FU_JMP, RT_X  , RT_X  , RT_X  , N, N, N, N,  N, N, /*M_X  ,*/  N, N, N, N, N),
-        BL        -> List(Y, uopJAL      , IQT_INT, FU_JMP, RT_FIX, RT_X  , RT_X  , N, N, N, N,  N, N, /*M_X  ,*/  N, N, N, N, N),
+        B         -> List(Y, uopBL      , IQT_INT, FU_JMP, RT_X  , RT_X  , RT_X  , N, N, N, N,  N, N, /*M_X  ,*/  N, N, N, N, N),
+        BL        -> List(Y, uopBL      , IQT_INT, FU_JMP, RT_FIX, RT_X  , RT_X  , N, N, N, N,  N, N, /*M_X  ,*/  N, N, N, N, N),
         BEQ       -> List(Y, uopBEQ      , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, N, N, N, N,  N, N, /*M_X  ,*/  N, Y, N, N, N),
         BNE       -> List(Y, uopBNE      , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, N, N, N, N,  N, N, /*M_X  ,*/  N, Y, N, N, N),
         BGE       -> List(Y, uopBGE      , IQT_INT, FU_ALU, RT_X  , RT_FIX, RT_FIX, N, N, N, N,  N, N, /*M_X  ,*/  N, Y, N, N, N),
@@ -297,7 +297,7 @@ class DecodeUnit extends CoreModule {
     uop.bypassable := cs.bypassable
     uop.immPacked := inst(25, 0)
     uop.isBr := cs.is_br
-    uop.isJal := cs.uopc === uopJAL
+    uop.isJal := cs.uopc === uopBL
     uop.isJalr := cs.uopc === uopJIRL
     uop.uopc := cs.uopc
     uop.iqType := cs.iq_type
@@ -314,7 +314,7 @@ class DecodeUnit extends CoreModule {
     uop.xcpt_cause := xcpt_cause
     //-------------------------------------------------------------
 
-    when(cs.uopc === uopJAL) {
+    when(cs.uopc === uopBL) {
         uop.ldst := 1.U
     }
     when(cs.uopc === uopRDTIMELW && inst(4,0) === 0.U){

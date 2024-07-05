@@ -94,7 +94,7 @@ object JmpRRdDecode extends RRdDecodeConstants {
                 //                        |     |  |  |       alu fcn      |         |        |       |      |
                 //                        |     |  |  |       |            |         |        |       |      |
             BitPat(uopJIRL)     -> List(BR_JR , Y, N, N, aluFn.FN_ADD  , OP1_PC , OP2_NEXT, immS16, REN_1, CSR_N),
-            BitPat(uopJAL)      -> List(BR_J  , Y, N, N, aluFn.FN_ADD  , OP1_PC , OP2_NEXT, immS26, REN_1, CSR_N),
+            BitPat(uopBL)      -> List(BR_J  , Y, N, N, aluFn.FN_ADD  , OP1_PC , OP2_NEXT, immS26, REN_1, CSR_N),
             BitPat(uopPCADDU12I)-> List(BR_N  , Y, N, N, aluFn.FN_ADD  , OP1_PC , OP2_IMM , immU20, REN_1, CSR_N),
             BitPat(uopPCADDI)   -> List(BR_N  , Y, N, N, aluFn.FN_ADD  , OP1_PC , OP2_IMM , immS20, REN_1, CSR_N)
         )

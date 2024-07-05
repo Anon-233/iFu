@@ -133,7 +133,7 @@ class ALUUnit(
             BR_LT  -> Mux( brLt , PC_BRJMP, PC_PLUS4),
             BR_LTU -> Mux( brLtu, PC_BRJMP, PC_PLUS4),
             BR_J   -> PC_BRJMP,
-            BR_JR  -> PC_JALR
+            BR_JR  -> PC_JIRL
         )
     )
 
@@ -145,7 +145,7 @@ class ALUUnit(
     val mispredict = WireInit(false.B)
     when (isBr || isJalr) {
         if (!isJmpUnit) {
-            assert(pcSel =/= PC_JALR)
+            assert(pcSel =/= PC_JIRL)
         }
         when (pcSel === PC_PLUS4) {
             mispredict := uop.taken
@@ -159,7 +159,7 @@ class ALUUnit(
     brInfo.valid := isBr || isJalr
     brInfo.mispredict := mispredict
     brInfo.uop := uop
-    brInfo.cfiType := Mux(isJalr, CFI_JALR, Mux(isBr, CFI_BR, CFI_X))
+    brInfo.cfiType := Mux(isJalr, CFI_JIRL, Mux(isBr, CFI_BR, CFI_X))
     brInfo.taken := isTaken
     brInfo.pcSel := pcSel
     val fetchWidth= frontendParams.fetchWidth
@@ -170,7 +170,7 @@ class ALUUnit(
 
         val cfiIdx = uop.pcLowBits(log2Ceil(fetchWidth) + log2Ceil(coreInstrBytes) - 1 , log2Ceil(coreInstrBytes))
 
-        when (pcSel === PC_JALR) {
+        when (pcSel === PC_JIRL) {
             mispredict := !io.getFtqPC.nextVal || (io.getFtqPC.nextpc =/= jalrTarget) ||
                         !io.getFtqPC.entry.cfiIdx.valid || (io.getFtqPC.entry.cfiIdx.bits =/= cfiIdx)
         }

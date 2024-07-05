@@ -69,7 +69,7 @@ class PreDecode extends CoreModule with PreDecodeTable {
         ).asSInt + io.pc.asSInt).asSInt & (-4).S).asUInt
 
     io.out.cfiType := Mux(isBr,   CFI_BR,
-                      Mux(isJal,  CFI_JAL,
-                      Mux(isJalr, CFI_JALR,
+                      Mux(isJal,  CFI_BL,
+                      Mux(isJalr, CFI_JIRL,
                                   CFI_X)))
 }

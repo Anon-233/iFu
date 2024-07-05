@@ -347,12 +347,12 @@ class Frontend extends CoreModule {
         f3_fetch_bundle.instrs(i) := instr
         f3_mask(i) := f3_ifu_resp.io.deq.valid && f3_fetchResp.mask(i) && !redirect_found
         f3_tgts(i) := Mux(
-            brsigs.cfiType === CFI_JALR,
+            brsigs.cfiType === CFI_JIRL,
             f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits, // maybe wrong
             brsigs.target   // surelly right
         )
         f3_btb_mispredicts(i) := (
-            brsigs.cfiType === CFI_JAL &&   // predecode can only correct JAL
+            brsigs.cfiType === CFI_BL &&   // predecode can only correct JAL
             f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.valid &&
             (f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits =/= brsigs.target)
         )
@@ -363,7 +363,7 @@ class Frontend extends CoreModule {
             2. 是条件分支指令并被预测跳转
          */
         f3_redirects(i) := f3_mask(i) && (
-            brsigs.cfiType === CFI_JAL || brsigs.cfiType === CFI_JALR ||
+            brsigs.cfiType === CFI_BL || brsigs.cfiType === CFI_JIRL ||
             (brsigs.cfiType === CFI_BR && f3_bpd_resp.io.deq.bits.predInfos(i).taken)
         )
         f3_br_mask(i)   := f3_mask(i) && brsigs.cfiType === CFI_BR

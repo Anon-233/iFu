@@ -61,8 +61,8 @@ object Consts {
     val CFI_SZ   = 2
     val CFI_X    = 0.U(CFI_SZ.W) // Not a CFI instruction
     val CFI_BR   = 1.U(CFI_SZ.W) // Branch
-    val CFI_JAL  = 2.U(CFI_SZ.W) // JAL
-    val CFI_JALR = 3.U(CFI_SZ.W) // JALR
+    val CFI_BL   = 2.U(CFI_SZ.W) // BL
+    val CFI_JIRL = 3.U(CFI_SZ.W) // JIRL
 
     val IQT_SZ  = 2
     val IQT_X   = BitPat.dontCare(IQT_SZ)
@@ -108,7 +108,7 @@ object Consts {
 
     val PC_PLUS4 = 0.U(2.W)
     val PC_BRJMP = 1.U(2.W)
-    val PC_JALR  = 2.U(2.W)
+    val PC_JIRL  = 2.U(2.W)
 
     val OP1_X    = BitPat("b??")
     val OP1_RS1  = 0.U(2.W) // Register Source #1
@@ -123,10 +123,6 @@ object Consts {
 
     val REN_0 = false.B
     val REN_1 = true.B
-
-    val MEN_X = false.B
-    val MEN_0 = false.B
-    val MEN_1 = true.B
 
     val BUBBLE = 0.U(32.W)
 
@@ -168,9 +164,7 @@ object Consts {
     val uopSRAW = 32.U(UOPC_SZ.W)
 
     val uopJIRL = 33.U(UOPC_SZ.W)
-    val uopJAL = 34.U(UOPC_SZ.W)
-    // val uopBL           = 35.U(UOPC_SZ.W)
-    val uopSYSC = 35.U(UOPC_SZ.W)
+    val uopBL = 34.U(UOPC_SZ.W)
     val uopBEQ = 36.U(UOPC_SZ.W)
     val uopBNE = 37.U(UOPC_SZ.W)
     val uopBLT = 38.U(UOPC_SZ.W)
@@ -209,7 +203,6 @@ object Consts {
     val uopRDTIMELW = 63.U(UOPC_SZ.W)
 
     val uopMOV = 64.U(UOPC_SZ.W)
-    val uopBREA = 65.U(UOPC_SZ.W)
     def NullMicroOp: MicroOp = {
         val uop = Wire(new MicroOp)
         uop := DontCare

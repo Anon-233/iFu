@@ -225,7 +225,7 @@ class iFuCore extends CoreModule {
         val npc = uop_maybe_pc + coreInstrBytes.U
         val jal_br_target = (uop_maybe_pc.asSInt + brUpdate.b2.targetOffset).asUInt
 
-        val bj_addr = Mux(brUpdate.b2.cfiType === CFI_JALR,
+        val bj_addr = Mux(brUpdate.b2.cfiType === CFI_JIRL,
             brUpdate.b2.jalrTarget, jal_br_target
         )
 
