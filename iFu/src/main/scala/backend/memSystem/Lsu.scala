@@ -959,7 +959,8 @@ class Lsu extends CoreModule {
             )
             ||
             (   // case 2: from dcache response
-                RegNext(fired_load_incoming(w)) && dcache.io.lsu.s2_hit(w)
+                RegNext(fired_load_incoming(w) && !dcache.io.lsu.s1_kill(w)) &&
+                dcache.io.lsu.s2_hit(w)
             )
         )
     ).reduce(_ && _)
