@@ -159,8 +159,8 @@ class BranchPredictor extends Module with HasBPUParameters
     io.resp.f3.predInfos := RegNext(io.resp.f2.predInfos)
 
     // 对于tage，还需要全局历史，以及前面f3taken传入之前的预测值作为参考，一并传入
-    // tage.io.f1gHist := io.f1ghist
-    // tage.io.previousf3Taken := RegNext(VecInit(io.resp.f2.map(_.taken)))
+//     tage.io.f1gHist := RegNext(io.f0req.bits.gHist)
+//     tage.io.previousf3Taken := RegNext(VecInit(io.resp.f2.predInfos.map(_.taken)))
 
 
     // tage可以根据传入的初值，在内部判断命中与否，在内部自行选择好是否覆盖f3的初值

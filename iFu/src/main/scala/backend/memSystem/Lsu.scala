@@ -807,7 +807,7 @@ class Lsu extends CoreModule {
 // -----------------------------------------------------------------------
 // s2 stage: speculative wakeup
     for (w <- 0 until memWidth) {
-        io.core.spec_ld_wakeup(w).valid := fired_load_incoming(w)
+        io.core.spec_ld_wakeup(w).valid := fired_load_incoming(w) && mem_incoming_uop(w).pdst =/= 0.U
         io.core.spec_ld_wakeup(w).bits  := mem_incoming_uop(w).pdst
     }
 // -----------------------------------------------------------------------
