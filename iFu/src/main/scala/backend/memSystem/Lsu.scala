@@ -860,7 +860,8 @@ class Lsu extends CoreModule {
         io.core.exe(w).iresp.valid := false.B
     }
 
-    val dmem_resp_fired = WireInit(widthMap(w => false.B))
+    /* val dmem_resp_fired = WireInit(widthMap(w => false.B)) */
+    val ld_forward_success = WireInit(0.U.asTypeOf(Vec(memWidth, Bool())))
     for (w <- 0 until memWidth) {
         // handle nacks
         when (dcache.io.lsu.nack(w).valid) {
@@ -894,7 +895,7 @@ class Lsu extends CoreModule {
                     dcache.io.lsu.resp(w).bits.uop.mem_signed
                 )
 
-                dmem_resp_fired(w) := true.B
+                /* dmem_resp_fired(w) := true.B */
 
                 ldq(ldq_idx).bits.succeeded := io.core.exe(w).iresp.valid
             } .otherwise {
@@ -902,7 +903,7 @@ class Lsu extends CoreModule {
 
                 stq(dcache.io.lsu.resp(w).bits.uop.stqIdx).bits.succeeded := true.B
                 when (dcache.io.lsu.resp(w).bits.uop.is_sc) {
-                    dmem_resp_fired(w) := true.B
+                    /* dmem_resp_fired(w) := true.B */
                     io.core.exe(w).iresp.valid     := true.B
                     io.core.exe(w).iresp.bits.uop  := stq(dcache.io.lsu.resp(w).bits.uop.stqIdx).bits.uop
                     io.core.exe(w).iresp.bits.data := dcache.io.lsu.resp(w).bits.data
@@ -910,9 +911,10 @@ class Lsu extends CoreModule {
             }
         }
 
-        when(dmem_resp_fired(w) && wb_forward_valid(w)) {
+        /* when(dmem_resp_fired(w) && wb_forward_valid(w)) {
             // impossible
-        } .elsewhen (!dmem_resp_fired(w) && wb_forward_valid(w)) {
+        } .else */
+        when (/* !dmem_resp_fired(w) && */ wb_forward_valid(w)) {
             val f_idx       = wb_forward_ldq_idx(w)
             val forward_uop = ldq(f_idx).bits.uop
             val stq_e       = stq(wb_forward_stq_idx(w))
@@ -930,11 +932,14 @@ class Lsu extends CoreModule {
                 forward_uop.mem_signed
             )
 
-            io.core.exe(w).iresp.valid     := (forward_uop.dst_rtype === RT_FIX) && data_ready && live
+            ld_forward_success(w)          := data_ready && live
+            // io.core.exe(w).iresp.valid     := /* (forward_uop.dst_rtype === RT_FIX) && */ data_ready && live
+            io.core.exe(w).iresp.valid     := ld_forward_success(w)
             io.core.exe(w).iresp.bits.uop  := forward_uop
             io.core.exe(w).iresp.bits.data := loadgen
 
-            when (data_ready && live) {
+            // when (data_ready && live) {
+            when (ld_forward_success(w)) {
                 ldq(f_idx).bits.succeeded       := data_ready
                 ldq(f_idx).bits.forward_std_val := true.B
                 ldq(f_idx).bits.forward_stq_idx := wb_forward_stq_idx(w)
@@ -946,7 +951,17 @@ class Lsu extends CoreModule {
     io.core.ld_miss := RegNext(io.core.spec_ld_wakeup.map(_.valid).reduce(_||_))
     val spec_ld_succeed = widthMap(w =>
         !RegNext(io.core.spec_ld_wakeup(w).valid) ||
-        (io.core.exe(w).iresp.valid && io.core.exe(w).iresp.bits.uop.ldqIdx === RegNext(mem_incoming_uop(w).ldqIdx))
+        // (io.core.exe(w).iresp.valid && io.core.exe(w).iresp.bits.uop.ldqIdx === RegNext(mem_incoming_uop(w).ldqIdx))
+        (
+            (   // case 1: from forwarding
+                ld_forward_success(w) &&
+                (wb_forward_valid(w) && wb_forward_ldq_idx(w) === RegNext(mem_incoming_uop(w).ldqIdx))
+            )
+            ||
+            (   // case 2: from dcache response
+                RegNext(fired_load_incoming(w)) && dcache.io.lsu.s2_hit(w)
+            )
+        )
     ).reduce(_ && _)
     when (spec_ld_succeed) {
         io.core.ld_miss := false.B

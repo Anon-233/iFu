@@ -508,6 +508,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     for(w <- 0 until memWidth){
         // 对于lsu的store请求，要现在mshr里面找，如果有store，就当作miss处理
         s2hit(w) := RegNext(s1hit(w)) && !(s2state === lsu && (isStore(s2req(w)) && mshrs.io.hasStore))
+        io.lsu.s2_hit(w) := s2hit(w)
     }
 
 
