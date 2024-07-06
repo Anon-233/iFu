@@ -175,6 +175,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     mshrs.io.req.valid := false.B
     mshrs.io.req.bits := 0.U.asTypeOf(new DCacheReq)
 
+
+
     // lsu还在发force_order并且dcache行里面还有dirty，就进行在总线空闲时进行fence操作
     fenceReadValid :=/*  false.B && */ (io.lsu.fence_dmem && meta.io.fetchDirty.resp.bits.hasDirty) && wfuReady 
 
@@ -270,7 +272,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     //wfu拿到的新的写回信息 
     val s0newMeta = wfu.io.new_meta
-    val s0fetchReady = wfu.io.fetch_ready
+
 
     // 需要s0pos的一定是单条流水线并且处理cache的请求类型
     val s0pos = WireInit(0.U(log2Ceil(nWays).W))
@@ -284,12 +286,15 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     // replace_find 的时候传出来的去fetch的地址
     val s0fetchAddr = WireInit(0.U(vaddrBits.W)) 
 
+    // fetchReady ，s0的状态一定是refill，        
+    // 如果取好（refill最后一个字），通告mshr的地址，以及refill到的行号
+    val s0fetchReady = wfu.io.fetch_ready
     //最后一个refill进行到s2到告诉mshr去激活(将表1的waiting转成ready)
     val s0activateAddr = wfu.io.fetched_addr
+    mshrs.io.fetchReady := s0fetchReady
+    mshrs.io.fetchedBlockAddr := getBlockAddr(s0activateAddr)
+    mshrs.io.fetchedpos := s0pos
 
-    // TODO prefetch
-
-    
     // s0阶段接入mshr对meta的read请求,接入lsu(replay)对meta的read请求,接入axi对meta的write请求
     when(s0state === lsu){
 
@@ -320,12 +325,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         s0fetchAddr := s0req(0).addr
 
     }.elsewhen(s0state === refill){
-        // 如果取好，通告地址，以及refill到的行号
-        when(s0fetchReady){
-            mshrs.io.fetchReady := s0fetchReady
-            mshrs.io.fetchedBlockAddr := getBlockAddr(s0activateAddr)
-            mshrs.io.fetchedpos := s0pos
-        }
 
         // refill的时候,判断addr的地址是不是那一行的第一个字,如果是,先告诉meta这一行将被invalid
         when(s0req(0).addr(nOffsetBits -1, 2) === 0.U){
