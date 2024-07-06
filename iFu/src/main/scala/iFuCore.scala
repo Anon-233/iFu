@@ -440,8 +440,11 @@ class iFuCore extends CoreModule {
         || ifu.io.core.redirect_flush)
     }
 
-    lsu.io.core.fence_dmem := (dis_valids zip dis_uops zip wait_for_empty_pipeline).map {
+    /* lsu.io.core.fence_dmem := (dis_valids zip dis_uops zip wait_for_empty_pipeline).map {
         case ((v, u), w) => v && u.is_ibar && w
+    }.reduce(_||_) */
+    lsu.io.core.fence_dmem := (dis_valids zip dis_uops).map {
+        case (v, u) => v && u.is_ibar  // flush dcache when we dispatch an ibar
     }.reduce(_||_)
 
     val dis_stalls = dis_hazards.scanLeft(false.B)((s, h) => s || h).takeRight(coreWidth)
