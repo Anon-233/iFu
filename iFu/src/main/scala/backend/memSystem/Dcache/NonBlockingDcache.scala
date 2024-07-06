@@ -825,7 +825,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         val st_h =  isRealStoreState && io.lsu.resp(0).valid && io.lsu.resp(0).bits.uop.use_stq &&  io.lsu.resp(0).bits.uop.mem_size === 1.U
         val st_b =  isRealStoreState && io.lsu.resp(0).valid && io.lsu.resp(0).bits.uop.use_stq &&  io.lsu.resp(0).bits.uop.mem_size === 0.U
         // disable now
-        difftest.io.valid := VecInit(Cat((0.U(4.W)), io.lsu.llbit && sc_w, st_w, st_h, st_b)).asUInt
+        difftest.io.valid := 0.U & VecInit(Cat((0.U(4.W)), io.lsu.llbit && sc_w, st_w, st_h, st_b)).asUInt
         difftest.io.clock := clock
         difftest.io.coreid := 0.U // only support 1 core now
         difftest.io.index := 0.U
