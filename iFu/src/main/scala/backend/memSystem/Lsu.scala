@@ -789,8 +789,8 @@ class Lsu extends CoreModule {
     )).asUInt
 
     // s3 stage
-    val ld_xcpt_valid = RegNext(failed_loads.reduce(_|_))
     val l_idx         = RegNext(PriorityEncoder(temp_bits)(ldqAddrSz - 1, 0))
+    val ld_xcpt_valid = RegNext(failed_loads.reduce(_|_)) && ldq(l_idx).valid
     val ld_xcpt_uop   = ldq(l_idx).bits.uop
 
     /* val r_xcpt_valid = RegInit(false.B) */
