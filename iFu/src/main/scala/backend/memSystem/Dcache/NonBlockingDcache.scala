@@ -13,7 +13,7 @@ import iFu.lsu.utils._
 
 import iFu.difftest._
 
-trait HasDcacheParameters extends HasCoreParameters{
+trait HasDcacheParameters extends HasCoreParameters {
     val nTagBits       = dcacheParameters.nTagBits
     val nIdxBits       = dcacheParameters.nIdxBits
     val nOffsetBits    = dcacheParameters.nOffsetBits
@@ -43,313 +43,226 @@ trait HasDcacheParameters extends HasCoreParameters{
     def isSC(req: DCacheReq): Bool = dcacheParameters.isSC(req)
 }
 
-class DCacheBundle  extends CoreBundle with HasDcacheParameters{
-    // val error = new DCacheErrors
-    val lsu = Flipped(new LSUDMemIO)
+class DCacheBundle extends CoreBundle with HasDcacheParameters {
+    val lsu  = Flipped(new LSUDMemIO)
     val smar = Vec(2, new SMAR)
     val smaw = Vec(2, new SMAW)
 }
 
-
-class NonBlockingDcache extends Module with HasDcacheParameters{
+class NonBlockingDcache extends Module with HasDcacheParameters {
     val io = IO(new DCacheBundle)
 
-    // 解释:
-    // replay : mshr的replay请求
-    // refill : wfu的重填数据请求
-    // lsu : lsu的请求
-    // prefetch : prefetch的请求
-    // replace_find : mshr的fetch请求(期间会读取meta,送给WFU)
-    // nil : 什么都不做
-    // fence_read : 清空所有的dirty行
-
-    io.lsu.req.ready := false.B
-
+    // replay      : 来自 mshr 重发的此前 miss 的访存请求
+    // wb          : wfu 发起的读 dcache 请求，用于写回到内存
+    // refill      : wfu 发起的写 dcache 请求，用于填充 dcache
+    // replace_find: mshr 发起的读 dcache 请求，用于获取待替换的行的信息
+    // lsu         : 来自 lsu 的访存请求
+    // mmio_req    : 来自 lsu 的 mmio 访存请求
+    // prefetch    : 来自 lsu 的预取请求
+    // fence_read  : 清空 dcache 时，获取 dcache 行的信息，可能会触发写回
+    // fence_clear : wfu 完成了一个只写回的请求，需要清空对应的 meta 行
+    // cacop       : 未实现
+    // nil         : 空操作
     val (replay   :: wb        :: refill     :: replace_find :: lsu   ::
          mmio_req :: prefetch  :: fence_read :: fence_clear  :: cacop :: nil :: Nil) = Enum(11)
 
-    val mmiou = Module(new MMIOUnit) 
+// -----------------------------------------------------------------------------------
+// module defination
+    val mmiou = Module(new MMIOUnit)
     mmiou.io.mmioReq.valid := false.B
-    mmiou.io.mmioReq.bits := 0.U.asTypeOf(new DCacheReq)
-    
+    mmiou.io.mmioReq.bits  := DontCare
+
     io.smaw(0) <> mmiou.io.smaw
     io.smar(0) <> mmiou.io.smar
 
-    // 替换单元
     val wfu = Module(new WriteFetchUnit)
-    wfu.io.req_valid := false.B
-    wfu.io.req_addr := 0.U
-    wfu.io.meta_resp := 0.U.asTypeOf(new DcacheMetaResp)
-    wfu.io.req_wb_only := false.B
-    wfu.io.wfu_read_resp := 0.U.asTypeOf(Valid(new DCacheResp))
+    wfu.io.req_valid           := false.B
+    wfu.io.meta_resp           := DontCare
+    wfu.io.req_wb_only         := false.B
+    wfu.io.wfu_read_resp.valid := false.B
+    wfu.io.wfu_write_req.bits  := DontCare
+
     io.smaw(1) <> wfu.io.smaw
     io.smar(1) <> wfu.io.smar
 
-    val wbValid = wfu.io.wfu_read_req.valid
-    val refillValid = wfu.io.wfu_write_req.valid
-
-    val mmiouReady = WireInit(false.B)
-    val wfuReady = WireInit(false.B)
-
-    // 存储meta信息
     val meta = Module(new DcacheMetaLogic)
 
-    // 端口设置
-    meta.io.lsuRead(0).req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
-    meta.io.lsuRead(1).req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
+    meta.io.lsuRead(0).req.valid   := false.B
+    meta.io.lsuRead(1).req.valid   := false.B
+    meta.io.replayRead.req.valid   := false.B
+    meta.io.missReplace.req.valid  := false.B
+    meta.io.refillLogout.req.valid := false.B
+    meta.io.fetchDirty.req.valid   := false.B
 
-    meta.io.lsuWrite.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
-    
-    meta.io.missReplace.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
+    meta.io.lsuRead(0).req.bits    := DontCare
+    meta.io.lsuRead(1).req.bits    := DontCare
+    meta.io.replayRead.req.bits    := DontCare
+    meta.io.missReplace.req.bits   := DontCare
+    meta.io.refillLogout.req.bits  := DontCare
+    meta.io.fetchDirty.req.bits    := DontCare
 
-    meta.io.refillLogout.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
+    meta.io.lsuWrite.req     := 0.U.asTypeOf(Valid(new DcacheMetaReq))
+    meta.io.lineFreeze.req   := 0.U.asTypeOf(Valid(new DcacheMetaReq))
+    meta.io.wfuWrite.req     := 0.U.asTypeOf(Valid(new DcacheMetaReq))
+    meta.io.replayWrite.req  := 0.U.asTypeOf(Valid(new DcacheMetaReq))
+    meta.io.lineClear.req    := 0.U.asTypeOf(Valid(new DcacheMetaReq))
+    meta.io.cacopRead.req    := DontCare
+    meta.io.cacopWrite.req   := DontCare
 
-    meta.io.lineFreeze.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
-
-    meta.io.wfuWrite.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
-    
-    meta.io.replayRead.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
-
-    meta.io.replayWrite.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
-
-    meta.io.fetchDirty.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
-    
-    meta.io.lineClear.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
-    
-    meta.io.cacopRead.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
-
-    meta.io.cacopWrite.req := 0.U.asTypeOf(Valid(new DcacheMetaReq))
-
-    // 存储data信息
     val data = Module(new DcacheDataLogic)
-    // 端口设置
-    data.io.lsuRead(0).req := 0.U.asTypeOf(Valid(new DcacheDataReq))
-    data.io.lsuRead(1).req := 0.U.asTypeOf(Valid(new DcacheDataReq))
 
-    data.io.lsuWrite.req := 0.U.asTypeOf(Valid(new DcacheDataReq))
-    
-     data.io.wfuRead.req := 0.U.asTypeOf(Valid(new DcacheDataReq))
-    
-     data.io.wfuWrite.req := 0.U.asTypeOf(Valid(new DcacheDataReq))
-
-    data.io.replayRead.req := 0.U.asTypeOf(Valid(new DcacheDataReq))
-
+    data.io.lsuRead(0).req  := 0.U.asTypeOf(Valid(new DcacheDataReq))
+    data.io.lsuRead(1).req  := 0.U.asTypeOf(Valid(new DcacheDataReq))
+    data.io.lsuWrite.req    := 0.U.asTypeOf(Valid(new DcacheDataReq))
+    data.io.wfuRead.req     := 0.U.asTypeOf(Valid(new DcacheDataReq))
+    data.io.wfuWrite.req    := 0.U.asTypeOf(Valid(new DcacheDataReq))
+    data.io.replayRead.req  := 0.U.asTypeOf(Valid(new DcacheDataReq))
     data.io.replayWrite.req := 0.U.asTypeOf(Valid(new DcacheDataReq))
 
+    val mshrs = Module(new MSHRFile)
+    mshrs.io.brupdate  := io.lsu.brupdate
+    mshrs.io.exception := io.lsu.exception
+// -----------------------------------------------------------------------------------
 
-    val replace_findValid = Wire(Bool())
-    val mshrReplayValid =Wire(Bool())
-    val fenceReadValid = Wire(Bool())
-    val fenceClearValid = Wire(Bool())
-    val prefetchValid = Wire(Bool())
+// -----------------------------------------------------------------------------------
+// io port
+    // 只要meta没有dirty，就可以回应fence，不需要管流水线和mshr状态（如果里面有没做完的指令，lsu肯定非空，unique仍然会停留在dispatch）
+    io.lsu.ordered := !meta.io.fetchDirty.resp.bits.hasDirty
+// -----------------------------------------------------------------------------------
 
-    // val cacopValid = Wire(Bool())
+// ================================ s0 ==================================
 
-    val lsuNormalValid = Wire(Bool())
-    val lsuMMIOValid = Wire(Bool())
+    val wbValid     = wfu.io.wfu_read_req.valid
+    val refillValid = wfu.io.wfu_write_req.valid
 
-    // 判断输入的有没有mmio请求
-    val lsuhasMMIO = io.lsu.req.bits.map( req =>
+    val wfuReady          = WireInit(false.B)
+    val replace_findValid = mshrs.io.newFetchreq.valid && wfuReady
+    val mshrReplayValid   = mshrs.io.replay.valid
+    val fenceReadValid    = io.lsu.fence_dmem && meta.io.fetchDirty.resp.bits.hasDirty && wfuReady
+    val fenceClearValid   = wfu.io.line_clear_req.valid
+    val prefetchValid     = false.B
+    val lsuhasMMIO        = io.lsu.req.bits.map(req =>
         req.valid && isMMIO(req.bits)
     ).reduce(_||_)
+    val lsuNormalValid    = io.lsu.req.fire && !lsuhasMMIO
+    val lsuMMIOValid      = io.lsu.req.fire &&  lsuhasMMIO
 
-    // 流水线里面有mmioresp的时候，下一个fire的请求不要进来
-    lsuMMIOValid := io.lsu.req.fire && lsuhasMMIO /* && mmiouReady */
-    lsuNormalValid := io.lsu.req.fire && !lsuhasMMIO
+    io.lsu.req.ready := !(
+        wbValid || refillValid || fenceClearValid || mshrReplayValid || replace_findValid
+    )
 
-    // val lsuhasStore = io.lsu.req.bits.map( req =>
-    //     req.valid && isStore(req.bits)
-    // ).reduce(_||_)
+    val s0valid = Wire(Vec(memWidth, Bool()))
+    for (w <- 0 until memWidth) {
+        if (w == 0) {
+            s0valid(w) := (
+                ((lsuMMIOValid || lsuNormalValid) && io.lsu.req.bits(w).valid) ||
+                wbValid || refillValid || fenceClearValid || mshrReplayValid ||
+                replace_findValid || fenceReadValid || prefetchValid
+            )
+        } else {
+            s0valid(w) := (lsuMMIOValid || lsuNormalValid) && io.lsu.req.bits(w).valid
+        }
+    }
 
-    // 存储mshr的信息
-    val mshrs = Module(new MSHRFile)
-
-    replace_findValid := mshrs.io.newFetchreq.valid && wfuReady
-
-    mshrs.io.brupdate := io.lsu.brupdate
-    mshrs.io.exception := io.lsu.exception
-    mshrReplayValid := mshrs.io.replay.valid
-    mshrs.io.fetchedBlockAddr := 0.U
-    mshrs.io.fetchReady := false.B
-    mshrs.io.fetchedpos := 0.U
-    mshrs.io.req.valid := false.B
-    mshrs.io.req.bits := 0.U.asTypeOf(new DCacheReq)
-
-
-
-    // lsu还在发force_order并且dcache行里面还有dirty，就进行在总线空闲时进行fence操作
-    fenceReadValid :=/*  false.B && */ (io.lsu.fence_dmem && meta.io.fetchDirty.resp.bits.hasDirty) && wfuReady 
-
-    // wfu做完之后去清除掉对应的meta行
-    fenceClearValid := wfu.io.line_clear_req.valid
-
-    // 只要meta没有dirty，就可以回应fence，不需要管流水线和mshr状态（如果里面有没做完的指令，lsu肯定非空，unique仍然会停留在dispatch）
-    io.lsu.ordered := /* true.B || */ !meta.io.fetchDirty.resp.bits.hasDirty
-
-    // TODO:   cacopValid := //
-
-
-    prefetchValid := false.B
-
-    // 检查全局，如果此时流水线的s0和s1阶段状态为lsu并且有store，就将其kill掉
-    val s2StoreFailed = WireInit(false.B)
-
-    val doingMMIO = WireInit(false.B)
-    // 对于普通lsu请求,如果当周期检测到有高于lsu优先级请求的话，就将ready置零，下周期lsu发送不过来，同时再去执行非lsu请求
-    // 对于mmio的lsu请求,要看总线是否空闲,如果总线空闲,就可以发,如果总线不空闲,就不让发
-    io.lsu.req.ready := !(wbValid   ||
-                          refillValid ||
-                          fenceClearValid  || 
-                          mshrReplayValid ||
-                          replace_findValid /* || */
-                        // 这个信号用于判断s2storeFailed的时候不去接当周期lsu的请求
-                        // 不是在这里拒掉 ，而是在s0valid的时候看一下再kill掉，这样改善时序
-                         /*  (lsuhasStore && s2StoreFailed) ||  */
-                        // 如果lsu是mmio ， 不需要堵在口上，送进去，看不行就replay就好  
-                         /*  (io.lsu.req.valid && lsuhasMMIO && !mmiouReady) */
-                        )
-
-  
-    // 总线相关请求是最高优先级,包括wb和refill这两个请求,他们互斥,只有一个会发生
+    // 总线相关请求是最高优先级，包括 wb 和 refill 这两个请求，他们互斥，只有一个会发生
     // lsuMMIOValid 和 mmioRespValid 也是总线请求
     // fenceClear 和 fenceRead也都属于总线请求
     // (同一时间,以上六个最多只有一个发生)
-    
-    // 然后是mshrrepplay,和replace_find
+
+    // 然后是 mshrrepplay ，和 replace_find
     // 然后lsu的请求
     // 然而fenceRead的时候其实是清除脏位,往往配合未完成的store指令一起做完才算完事,因此要给lsu和mshr,replay让步
     // 优先级很低,可以等着,但是fenceClear是要点名清除某一行,那个周期发了必须做,之后就没这个信号了,因此fenceClear优先级要在总线最高级那里
 
-    val s0valid = Wire(Vec(memWidth, Bool()))
-
-    for(w<- 0 until memWidth){
-        when(w.U === 0.U){
-            s0valid(w) := Mux(lsuMMIOValid || lsuNormalValid, io.lsu.req.bits(w).valid && !(s2StoreFailed && isStore(io.lsu.req.bits(w).bits)),
-                wbValid || refillValid || fenceClearValid || mshrReplayValid || replace_findValid || fenceReadValid || prefetchValid)
-        }.otherwise{
-            // 能用到这个else的只有lsu的请求,包括lsuMMIOValid/lsuNormalValid
-            s0valid(w) := Mux( lsuMMIOValid || lsuNormalValid, io.lsu.req.bits(w).valid, false.B)
-        }
-    }
-
     val dontCareReq = 0.U.asTypeOf(new DCacheReq)
-
-    val s0req = WireInit(0.U.asTypeOf(Vec(memWidth , new DCacheReq)))
-
-    for(w <- 0 until memWidth){
-        when(w.U === 0.U){
-            s0req(w) := Mux(wbValid, wfu.io.wfu_read_req.bits,
-                        Mux( refillValid,   wfu.io.wfu_write_req.bits, 
-                        Mux( fenceClearValid,     wfu.io.line_clear_req.bits,        
-                        Mux( lsuMMIOValid,   io.lsu.req.bits(w).bits,
+    val s0req = Wire(Vec(memWidth, new DCacheReq))
+    for (w <- 0 until memWidth) {
+        if (w == 0) {
+            s0req(w) := Mux(wbValid          , wfu.io.wfu_read_req.bits,
+                        Mux(refillValid      , wfu.io.wfu_write_req.bits, 
+                        Mux(fenceClearValid  , wfu.io.line_clear_req.bits,        
+                        Mux(lsuMMIOValid     , io.lsu.req.bits(w).bits,
                         // 这里的mmioresp是DcacheReq作为载体,data是可能的rdata,uop是对应uop
-                        Mux( mshrReplayValid, mshrs.io.replay.bits,
-                        Mux( replace_findValid,   mshrs.io.newFetchreq.bits,
-                        Mux( lsuNormalValid,  io.lsu.req.bits(w).bits,
-                        Mux( fenceReadValid,      dontCareReq,
-                        Mux( prefetchValid ,    dontCareReq, dontCareReq)))))))))
-        }otherwise{
+                        Mux(mshrReplayValid  , mshrs.io.replay.bits,
+                        Mux(replace_findValid, mshrs.io.newFetchreq.bits,
+                        Mux(lsuNormalValid   , io.lsu.req.bits(w).bits,
+                        Mux(fenceReadValid   , dontCareReq,
+                        Mux(prefetchValid    , dontCareReq,
+                                               dontCareReq)))))))))
+        } else {
             s0req(w) := Mux(lsuMMIOValid || lsuNormalValid, io.lsu.req.bits(w).bits, dontCareReq)
         }
-        
     }
 
-
-
-    val s0state =   Mux( wbValid, wb,
-                    Mux( refillValid,   refill,
-                    Mux( fenceClearValid, fence_clear,        
-                    Mux( lsuMMIOValid,   mmio_req,
-                    Mux( mshrReplayValid, replay,
-                    Mux( replace_findValid,   replace_find,
-                    Mux( lsuNormalValid,  lsu,
-                    Mux( fenceReadValid,      fence_read,
-                    Mux( prefetchValid ,    prefetch, nil)))))))))
+    val s0state = Mux(wbValid          , wb,
+                  Mux(refillValid      , refill,
+                  Mux(fenceClearValid  , fence_clear,        
+                  Mux(lsuMMIOValid     , mmio_req,
+                  Mux(mshrReplayValid  , replay,
+                  Mux(replace_findValid, replace_find,
+                  Mux(lsuNormalValid   , lsu,
+                  Mux(fenceReadValid   , fence_read,
+                  Mux(prefetchValid    , prefetch,
+                                         nil)))))))))
 
     // 做判断接replay请求
     mshrs.io.replay.ready := s0state === replay
 
-
-    //wfu拿到的新的写回信息 
-    val s0newMeta = wfu.io.new_meta
-
-
     // 需要s0pos的一定是单条流水线并且处理cache的请求类型
-    val s0pos = WireInit(0.U(log2Ceil(nWays).W))
-    s0pos := Mux( wbValid, wfu.io.pos,
-            Mux( refillValid,   wfu.io.pos,         
-            Mux( mshrReplayValid, mshrs.io.replaypos,
-            Mux( fenceClearValid,     wfu.io.pos,
+    val s0pos = Mux(wbValid        , wfu.io.pos,
+                Mux(refillValid    , wfu.io.pos,         
+                Mux(mshrReplayValid, mshrs.io.replaypos,
+                Mux(fenceClearValid, wfu.io.pos,
                                      0.U))))
-
-
-    // replace_find 的时候传出来的去fetch的地址
-    val s0fetchAddr = WireInit(0.U(vaddrBits.W)) 
 
     // fetchReady ，s0的状态一定是refill，        
     // 如果取好（refill最后一个字），通告mshr的地址，以及refill到的行号
     val s0fetchReady = wfu.io.fetch_ready
-    //最后一个refill进行到s2到告诉mshr去激活(将表1的waiting转成ready)
-    val s0activateAddr = wfu.io.fetched_addr
-    mshrs.io.fetchReady := s0fetchReady
-    mshrs.io.fetchedBlockAddr := getBlockAddr(s0activateAddr)
-    mshrs.io.fetchedpos := s0pos
+    // 最后一个refill进行到s2到告诉mshr去激活(将表1的waiting转成ready)
+    mshrs.io.fetchReady       := s0fetchReady
+    mshrs.io.fetchedBlockAddr := getBlockAddr(wfu.io.fetched_addr)
+    mshrs.io.fetchedpos       := s0pos
 
-    // s0阶段接入mshr对meta的read请求,接入lsu(replay)对meta的read请求,接入axi对meta的write请求
-    when(s0state === lsu){
-
-        for(w <- 0 until memWidth){
-                meta.io.lsuRead(w).req.valid := s0valid(w)
-                meta.io.lsuRead(w).req.bits.idx := getIdx(s0req(w).addr)
-                //这里用到TLB之后,需要将虚拟地址转换为物理地址,采用的是VIPT,因此可能要等下周期TLB的结果
-                //s0不需要tag，s1 再传
-                meta.io.lsuRead(w).req.bits.tag := getTag(s0req(w).addr)
-
-                // 单纯通知meta是不是一个写指令，不会实际store
-                meta.io.lsuRead(w).req.bits.isStore := (isStore(s0req(w)))
+    meta.io.lsuRead zip s0req map {
+        case (m, r) => {
+            m.req.bits.tag     := getTag(r.addr)
+            m.req.bits.idx     := getIdx(r.addr)
+            m.req.bits.isStore := isStore(r)
         }
-
-    }.elsewhen(s0state === replay){
-
-        meta.io.replayRead.req.valid := s0valid(0)
-        meta.io.replayRead.req.bits.idx := getIdx(s0req(0).addr)
-        meta.io.replayRead.req.bits.tag := getTag(s0req(0).addr)
-        meta.io.replayRead.req.bits.isStore := (isStore(s0req(0)))
-
-    }.elsewhen(s0state === replace_find){
-
-        // 实际上是传入idx,返回的是对应metaSet被替换掉的那一行的信息
-        meta.io.missReplace.req.valid := s0valid(0)
-        meta.io.missReplace.req.bits.idx := getIdx(s0req(0).addr)
-        // 想fetch的地址保存在s0fetchAddr
-        s0fetchAddr := s0req(0).addr
-
-    }.elsewhen(s0state === refill){
-
-        // refill的时候,判断addr的地址是不是那一行的第一个字,如果是,先告诉meta这一行将被invalid
-        when(s0req(0).addr(nOffsetBits -1, 2) === 0.U){
-            meta.io.refillLogout.req.valid := s0valid(0)
-            meta.io.refillLogout.req.bits.idx := getIdx(s0req(0).addr)
-            meta.io.refillLogout.req.bits.pos := s0pos
-        }
-
-    }.elsewhen(s0state === wb){
-        
-    }.elsewhen(s0state === mmio_req){
-        // mmio在s0不走cache,没什么做的
-    }.elsewhen(s0state === fence_read){
-        // 要告诉meta，fenceRead一行出来
-        meta.io.fetchDirty.req.valid := true.B
-        meta.io.fetchDirty.req.bits.isFence := true.B
-    }.elsewhen(s0state === fence_clear){
-
-    }.otherwise{
-        // TODO prefetch cacop
     }
+    meta.io.replayRead.req.bits.tag     := getTag(s0req(0).addr)
+    meta.io.replayRead.req.bits.idx     := getIdx(s0req(0).addr)
+    meta.io.replayRead.req.bits.isStore := isStore(s0req(0))
+    meta.io.missReplace.req.bits.idx    := getIdx(s0req(0).addr)
+    meta.io.refillLogout.req.bits.idx   := getIdx(s0req(0).addr)
+    meta.io.refillLogout.req.bits.pos   := s0pos
 
+    when (s0state === lsu) {
+        meta.io.lsuRead zip s0valid map { case (m, v) => m.req.valid := v }
+    } .elsewhen(s0state === replay) {
+        meta.io.replayRead.req.valid := s0valid(0)
+    } .elsewhen (s0state === replace_find) {
+        meta.io.missReplace.req.valid := s0valid(0)
+    } .elsewhen (s0state === refill) {
+        // when we get the first word of a line, we should tell meta to invalidate this line
+        when (s0req(0).addr(nOffsetBits -1, 2) === 0.U) {
+            meta.io.refillLogout.req.valid := s0valid(0)
+        }
+    } .elsewhen (s0state === wb) {
+        // do nothing
+    } .elsewhen (s0state === mmio_req) {
+        // do nothing
+    } .elsewhen (s0state === fence_read) {
+        meta.io.fetchDirty.req.valid        := true.B
+        meta.io.fetchDirty.req.bits.isFence := true.B
+    } .elsewhen (s0state === fence_clear) {
+        // do nothing
+    }
 
 // ================================ s1 ==================================
 
+    // 检查全局，如果此时流水线的s0和s1阶段状态为lsu并且有store，就将其kill掉
+    val s2StoreFailed = WireInit(false.B)
 
     val s1valid = Wire(Vec(memWidth, Bool()))
     for(w <- 0 until memWidth){
@@ -367,20 +280,17 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     val s1req = RegNext(s0req)
     // 所有真正的lsu事务都需要在s1阶段进行brmask的更新(mmio_req,replay,lsu)
-    // when(s1state === lsu || s1state === replay || s1state === mmio_req){
     for (w <- 0 until memWidth){ 
         s1req(w).uop.brMask := GetNewBrMask(io.lsu.brupdate,s0req(w).uop) 
     }
-    // }
 
+    // replace_find 时，将此地址发送给 wfu 用于从内存中读取出对应的数据
+    val s1_fetch_addr = RegNext(s0req(0).addr)
+    wfu.io.req_addr := s1_fetch_addr
 
-
-    // mshr的read请求所需信息
-    val s1fetchAddr = RegNext(s0fetchAddr)
     // refill好的信息
     val s1fetchReady = RegNext(s0fetchReady)
-    val s1newMeta = RegNext(s0newMeta)
-    val s1activateAddr = RegNext(s0activateAddr)
+    val s1newMeta = RegNext(wfu.io.new_meta)
 
     // 这个是除了普通lsu请求之外需要的s1pos
     val s1pos = RegNext(s0pos)
@@ -393,12 +303,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     when(s1state === lsu){
         for(w <- 0 until memWidth){
-            // s1 发送paddr 用于判断hit
-            // 如果是lsu状态，那么在s1需要将addr转换为paddr
-
-            // s1req(w).addr := io.lsu.s1_paddr(w)
-            // meta.io.lsuRead(w).req.bits.tag := getTag(io.lsu.s1_paddr(w))
-
             when(meta.io.lsuRead(w).resp.valid){
                 //在resp之前，meta内部判断是否是store,如果是store,就要判断是否是readOnly,如果是readOnly,就回传来miss
                 when(meta.io.lsuRead(w).resp.bits.hit || (isSC(s1req(w)) && !io.lsu.llbit )) {
@@ -429,7 +333,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         when(meta.io.missReplace.resp.valid){
             // 直接把mshr的被替换的行的返回结果以及fetchAddr拉给wfu,激活wfu
             wfu.io.req_valid := s1valid(0)
-            wfu.io.req_addr := s1fetchAddr
             wfu.io.meta_resp := meta.io.missReplace.resp.bits
         }
 
@@ -516,10 +419,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     missArbiter.io.mshrReq <> mshrs.io.req
 
     // fetchAddr成功送给axi之后,就可以将告诉mshr去fetching状态转换
-    val s2fetchAddr    = RegNext(s1fetchAddr)
+    val s2fetchAddr    = RegNext(s1_fetch_addr)
     val s2fetchReady   = RegNext(s1fetchReady)
     val s2newMeta      = RegNext(s1newMeta)
-    val s2activateAddr = RegNext(s1activateAddr)
 
     val sendResp = WireInit(0.U.asTypeOf(Vec(memWidth,Bool())))
     val sendNack = WireInit(0.U.asTypeOf(Vec(memWidth,Bool())))
@@ -794,17 +696,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
         difftest.io.storeData := Mux(mmiou.io.mmioResp.fire,WordWrite(mmiou.io.mmioResp.bits, 0.U(32.W))
                                                                                         ,WordWrite(s2req(0), 0.U(32.W)))
     }
-    
 
-    mmiouReady := mmiou.io.mmioReq.ready &&
-                 (s1state =/= mmio_req) && 
-                 (s2state =/= mmio_req)
-    
     wfuReady  := wfu.io.ready && 
                  (s1state =/= fence_read && s1state =/= fence_clear && s1state =/= replace_find && s1state =/= wb && s1state =/= refill) &&
                  (s2state =/= fence_read && s2state =/= fence_clear && s2state =/= replace_find && s2state =/= wb && s2state =/= refill)
-
-    doingMMIO := s1state === mmio_req || s2state === mmio_req || !mmiou.io.mmioReq.ready
 
     // TODO enable continuous hit store forwarding(DONE)
     // TODO simplify the IO channel of DCacheData and DCacheMeta(DONE)
