@@ -719,6 +719,8 @@ class Lsu extends CoreModule {
     val ldst_addr_matches = WireInit(widthMap(w => VecInit((0 until numStqEntries).map(x => false.B))))
     // Mask of stores which we can forward from
     val ldst_forward_matches = WireInit(widthMap(w => VecInit((0 until numStqEntries).map(x => false.B))))
+    val s2_load_need_killed = WireInit(widthMap(w => VecInit((0 until numStqEntries).map(x => false.B))))
+    val s2_load_need_cancel = WireInit(widthMap(w => VecInit((0 until numStqEntries).map(x => false.B))))
     for (i <- 0 until numStqEntries) {
         val s_addr = stq(i).bits.addr.bits
         val s_uop  = stq(i).bits.uop
@@ -735,19 +737,31 @@ class Lsu extends CoreModule {
                 when (((lcam_mask(w) & write_mask) === lcam_mask(w)) && word_addr_matches(w) && can_forward_to(w)) {
                     ldst_addr_matches(w)(i)         := true.B
                     ldst_forward_matches(w)(i)      := true.B
-                    dcache.io.lsu.s1_kill(w)        := RegNext(dmem_req_fire(w))
-                    s2_set_execute(lcam_ldq_idx(w)) := false.B
+                    /* dcache.io.lsu.s1_kill(w)        := RegNext(dmem_req_fire(w)) */
+                    s2_load_need_killed(w)(i)       := RegNext(dmem_req_fire(w))
+                    /* s2_set_execute(lcam_ldq_idx(w)) := false.B */
+                    s2_load_need_cancel(w)(i)       := true.B
                 } .elsewhen (((lcam_mask(w) & write_mask) =/= 0.U) && word_addr_matches(w)) {
                     ldst_addr_matches(w)(i)         := true.B
-                    dcache.io.lsu.s1_kill(w)        := RegNext(dmem_req_fire(w))
-                    s2_set_execute(lcam_ldq_idx(w)) := false.B
+                    /* dcache.io.lsu.s1_kill(w)        := RegNext(dmem_req_fire(w)) */
+                    s2_load_need_killed(w)(i)       := RegNext(dmem_req_fire(w))
+                    /* s2_set_execute(lcam_ldq_idx(w)) := false.B */
+                    s2_load_need_cancel(w)(i)       := true.B
                 } .elsewhen(s_uop.is_sc) {
                     ldst_addr_matches(w)(i)         := true.B
-                    dcache.io.lsu.s1_kill(w)        := RegNext(dmem_req_fire(w))
-                    s2_set_execute(lcam_ldq_idx(w)) := false.B
+                    /* dcache.io.lsu.s1_kill(w)        := RegNext(dmem_req_fire(w)) */
+                    s2_load_need_killed(w)(i)       := RegNext(dmem_req_fire(w))
+                    /* s2_set_execute(lcam_ldq_idx(w)) := false.B */
+                    s2_load_need_cancel(w)(i)       := true.B
                 }
             }
         }
+    }
+    dcache.io.lsu.s1_kill zip s2_load_need_killed map {
+        case (kill, need_killed) => kill := need_killed.asUInt.orR
+    }
+    s2_load_need_cancel.zipWithIndex.map {
+        case (need_cancel, w) => s2_set_execute(lcam_ldq_idx(w)) := !need_cancel.asUInt.orR
     }
 // -----------------------------------------------------------------------
 // s2 stage: set the load as executed

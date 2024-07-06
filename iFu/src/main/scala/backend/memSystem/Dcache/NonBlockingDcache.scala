@@ -359,14 +359,13 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s1valid = Wire(Vec(memWidth, Bool()))
     for(w <- 0 until memWidth){
         s1valid(w) := RegNext(
-                        s0valid(w) &&
-                        !((s0state === lsu || s0state === mmio_req) && (isStore(s0req(w)) && s2StoreFailed)) && 
-                        !(s0state === lsu && (!isStore(s0req(w)) && IsKilledByBranch(io.lsu.brupdate, s0req(w).uop))) &&
-                        !(s0state === replay && (!isStore(s0req(w)) && IsKilledByBranch(io.lsu.brupdate, s0req(w).uop)))&&
-                        !(s0state === lsu && (!isStore(s0req(w)) && io.lsu.exception)) &&
-                        !(s0state === replay && (!isStore(s0req(w)) && io.lsu.exception))
-                        ) &&
-                        !io.lsu.s1_kill(w)
+            s0valid(w)                                                                                       &&
+            !((s0state === lsu || s0state === mmio_req) && (isStore(s0req(w)) && s2StoreFailed))             &&
+            !(s0state === lsu && (!isStore(s0req(w)) && IsKilledByBranch(io.lsu.brupdate, s0req(w).uop)))    &&
+            !(s0state === replay && (!isStore(s0req(w)) && IsKilledByBranch(io.lsu.brupdate, s0req(w).uop))) &&
+            !(s0state === lsu && (!isStore(s0req(w)) && io.lsu.exception))                                   &&
+            !(s0state === replay && (!isStore(s0req(w)) && io.lsu.exception))
+        )
     }
 
     val s1state = RegNext(s0state)
@@ -418,7 +417,6 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 }.otherwise{
                     s1hit(w) := false.B
                 }
-                
             }
         }
     }.elsewhen(s1state === replay){
@@ -478,22 +476,20 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val s2valid = WireInit(0.U.asTypeOf(Vec(memWidth , Bool())))
     for(w <- 0 until memWidth){
                         // 上个周期没被kill
-        s2valid(w) := RegNext((s1valid(w) &&
-                            !((s1state === lsu || s1state === mmio_req) && (isStore(s1req(w)) && s2StoreFailed)) && 
-                            !(s1state === lsu && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop))) &&
-                            !(s1state === replay && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)))  &&
-                            !(s1state === lsu && (!isStore(s1req(w)) && io.lsu.exception)) &&
-                            !(s1state === replay && (!isStore(s1req(w)) && io.lsu.exception))
-                            )
-                            ) && 
-                        (
-                            // s2周期没有被kill才行，s2周期被kill的只可能分支kill,s2storeFailed本身不会对自己kill
-                            !(s2state === lsu && (!isStore(s2req(w)) && IsKilledByBranch(io.lsu.brupdate, s2req(w).uop))) &&
-                            !(s2state === replay && (!isStore(s2req(w)) && IsKilledByBranch(io.lsu.brupdate, s2req(w).uop))) &&
-                            !(s2state === lsu && (!isStore(s2req(w)) && io.lsu.exception)) &&
-                            !(s2state === replay && (!isStore(s2req(w)) && io.lsu.exception))
-                        )
-
+        s2valid(w) := RegNext(
+            (s1valid(w) && !io.lsu.s1_kill(w))                                                                &&
+            !((s1state === lsu || s1state === mmio_req) && (isStore(s1req(w)) && s2StoreFailed))              &&
+            !(s1state === lsu && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)))     &&
+            !(s1state === replay && (!isStore(s1req(w)) && IsKilledByBranch(io.lsu.brupdate, s1req(w).uop)))  &&
+            !(s1state === lsu && (!isStore(s1req(w)) && io.lsu.exception)) &&
+            !(s1state === replay && (!isStore(s1req(w)) && io.lsu.exception))
+        ) && (
+            // s2周期没有被kill才行，s2周期被kill的只可能分支kill,s2storeFailed本身不会对自己kill
+            !(s2state === lsu && (!isStore(s2req(w)) && IsKilledByBranch(io.lsu.brupdate, s2req(w).uop))) &&
+            !(s2state === replay && (!isStore(s2req(w)) && IsKilledByBranch(io.lsu.brupdate, s2req(w).uop))) &&
+            !(s2state === lsu && (!isStore(s2req(w)) && io.lsu.exception)) &&
+            !(s2state === replay && (!isStore(s2req(w)) && io.lsu.exception))
+        )
     }
 
     val s2hit = WireInit(0.U.asTypeOf(Vec(memWidth , Bool())))
