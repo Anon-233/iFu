@@ -65,8 +65,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     io.lsu.req.ready := false.B
 
-    val replay   :: wb        :: refill     :: replace_find :: lsu   ::
-        mmio_req :: prefetch  :: fence_read :: fence_clear  :: cacop :: nil :: Nil = Enum(11)
+    val (replay   :: wb        :: refill     :: replace_find :: lsu   ::
+         mmio_req :: prefetch  :: fence_read :: fence_clear  :: cacop :: nil :: Nil) = Enum(11)
 
     val mmiou = Module(new MMIOUnit) 
     mmiou.io.mmioReq.valid := false.B

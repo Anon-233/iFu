@@ -102,6 +102,6 @@ object loadDataGen {
 
 object storeDataGen {
     def apply(addr: UInt, data: UInt, memSize: UInt): UInt = {
-        val res = (data << (addr << 3.U))(31, 0)
+        (data << (addr << 3.U))(31, 0).asUInt
     }
 }
