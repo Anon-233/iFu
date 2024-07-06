@@ -923,12 +923,7 @@ class Lsu extends CoreModule {
                     io.core.exe(w).iresp.bits.uop.debug_load_uncacheable := ldq(ldq_idx).bits.is_uncacheable
                 }
                 io.core.exe(w).iresp.valid := ldq(ldq_idx).bits.uop.dst_rtype === RT_FIX
-                io.core.exe(w).iresp.bits.data := loadDataGen(
-                    ldq(ldq_idx).bits.addr.bits(1,0),
-                    dcache.io.lsu.resp(w).bits.data,
-                    dcache.io.lsu.resp(w).bits.uop.mem_size,
-                    dcache.io.lsu.resp(w).bits.uop.mem_signed
-                )
+                io.core.exe(w).iresp.bits.data := dcache.io.lsu.resp(w).bits.data
 
                 /* dmem_resp_fired(w) := true.B */
 

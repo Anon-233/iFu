@@ -10,6 +10,7 @@ import  iFu.axi3._
 
 import iFu.common._
 import iFu.common.Consts._
+import iFu.lsu.utils._
 
 class MMIOUnit extends Module with HasDcacheParameters {
     val io = IO(new CoreBundle{
@@ -30,8 +31,14 @@ class MMIOUnit extends Module with HasDcacheParameters {
 
     io.mmioReq.ready := state === s_ready
 
-    io.mmioResp.valid := state === s_resp
-    io.mmioResp.bits  := mmioReq
+    io.mmioResp.valid     := state === s_resp
+    io.mmioResp.bits      := mmioReq
+    io.mmioResp.bits.data := loadDataGen(
+        mmioReq.addr(1, 0),
+        mmioReq.data,
+        mmioReq.uop.mem_size,
+        mmioReq.uop.mem_signed
+    )
 
     io.smar.req.arvalid     := state === s_fetch
     io.smaw.req.awvalid     := state === s_wb

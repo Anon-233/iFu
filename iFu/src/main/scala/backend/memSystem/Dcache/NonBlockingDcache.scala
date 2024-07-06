@@ -4,13 +4,12 @@ package iFu.backend
 import chisel3._
 import chisel3.util._
 
-import iFu.axi3._
 import iFu.sma._
 
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
-
+import iFu.lsu.utils._
 
 import iFu.difftest._
 
@@ -66,7 +65,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     io.lsu.req.ready := false.B
 
-    val replay :: wb :: refill ::  replace_find :: lsu :: mmio_req :: mmio_resp  :: prefetch  :: fence_read :: fence_clear :: cacop :: nil :: Nil = Enum(12)
+    val replay   :: wb        :: refill     :: replace_find :: lsu   ::
+        mmio_req :: prefetch  :: fence_read :: fence_clear  :: cacop :: nil :: Nil = Enum(11)
 
     val mmiou = Module(new MMIOUnit) 
     mmiou.io.mmioReq.valid := false.B
@@ -88,12 +88,8 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
     val wbValid = wfu.io.wfu_read_req.valid
     val refillValid = wfu.io.wfu_write_req.valid
 
-    
-    // 判断axi会空闲的要求是,wfu和mmiou都要ready,并且流水线中没有正在运行的replace_find,wb,refill和mmioreq,mmio_resp
-    
     val mmiouReady = WireInit(false.B)
     val wfuReady = WireInit(false.B)
-
 
     // 存储meta信息
     val meta = Module(new DcacheMetaLogic)
@@ -340,7 +336,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     }.elsewhen(s0state === wb){
         
-    }.elsewhen(s0state === mmio_resp || s0state === mmio_req){
+    }.elsewhen(s0state === mmio_req){
         // mmio在s0不走cache,没什么做的
     }.elsewhen(s0state === fence_read){
         // 要告诉meta，fenceRead一行出来
@@ -447,8 +443,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
          data.io.wfuRead.req.bits.pos := s1pos
          data.io.wfuRead.req.bits.offset := getWordOffset(s1req(0).addr)
         
-    }.elsewhen(s1state === mmio_resp || s1state === mmio_req){
-        // mmio_resp:s1不干活，等着后面s2交还给lsu
+    }.elsewhen(s1state === mmio_req){
         // mmio_req:s1不干活，等着后面发请求给axi
     }.elsewhen(s1state === fence_read){
 
@@ -511,224 +506,213 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
 
     // lsu请求下hit的pos
     val s2hitpos = RegNext(s1hitpos)
+
     // lsu阶段，如果发生了miss，将由missArbiter来决定写入mshr行为
     val missArbiter = Module(new Missarbiter)
-    missArbiter.io.req := s2req
-    missArbiter.io.miss := s2hit.map(x => ~x)
-    for(w <- 0 until memWidth){
+    missArbiter.io.req  := s2req
+    missArbiter.io.miss := s2hit.map(x => !x)
+    for (w <- 0 until memWidth) {
         missArbiter.io.alive(w) := s2valid(w) && s2state === lsu
     }
-    missArbiter.io.mshrReq.ready := false.B
-
+    missArbiter.io.mshrReq <> mshrs.io.req
 
     // fetchAddr成功送给axi之后,就可以将告诉mshr去fetching状态转换
-    val s2fetchAddr = RegNext(s1fetchAddr)
-    val s2fetchReady = RegNext(s1fetchReady)
-    val s2newMeta = RegNext(s1newMeta)
+    val s2fetchAddr    = RegNext(s1fetchAddr)
+    val s2fetchReady   = RegNext(s1fetchReady)
+    val s2newMeta      = RegNext(s1newMeta)
     val s2activateAddr = RegNext(s1activateAddr)
-
-
 
     val sendResp = WireInit(0.U.asTypeOf(Vec(memWidth,Bool())))
     val sendNack = WireInit(0.U.asTypeOf(Vec(memWidth,Bool())))
 
-    // 先将返回值的bits填充一下默认值
+    // 按情况返回resp或nack(replay不用看kill，lsukiil自然为假)
     for(w <- 0 until memWidth){
-        io.lsu.nack(w).bits := s2req(w)
-        io.lsu.resp(w).bits.uop := s2req(w).uop
+        io.lsu.nack(w).valid := sendNack(w)
+        io.lsu.resp(w).valid := sendResp(w)
+    }
+    for (w <- 0 until memWidth) {
+        io.lsu.nack(w).bits      := s2req(w)
+        io.lsu.resp(w).bits.uop  := s2req(w).uop
         io.lsu.resp(w).bits.data := DontCare
     }
 
-    // 下面是s2执行的内容
-    when(s2state === lsu){
-        // 生成初处理过的send，nack信号，用于返回给lsu，同时生成StoreFailed,用来清空后面可能有的store
-        missArbiter.io.mshrReq <> mshrs.io.req
-
-        s2StoreFailed := missArbiter.io.storeFailed
+    when (s2state === lsu) {
         sendNack := missArbiter.io.sendNack
         sendResp := missArbiter.io.sendResp
 
+        s2StoreFailed := missArbiter.io.storeFailed
 
         // 以上将所有中途kill或者miss的请求都处理完了，接下来处理hit且活着的请求
-        for(w <- 0 until memWidth){
-            when(s2hit(w)){
-                sendResp(w):= s2valid(w)
-                sendNack(w):= false.B
+        for (w <- 0 until memWidth) {
+            when (s2hit(w)) {
+                sendResp(w) := s2valid(w)
+                sendNack(w) := false.B
 
-                when(isStore(s2req(w))){
+                when (isStore(s2req(w))) {
                     // meta,data写操作
                     // meta拉高dirty位
-                    meta.io.lsuWrite.req.valid := s2valid(w)
+                    meta.io.lsuWrite.req.valid    := s2valid(w)
                     meta.io.lsuWrite.req.bits.idx := getIdx(s2req(w).addr)
                     meta.io.lsuWrite.req.bits.pos := s2hitpos(w)
 
                     meta.io.lsuWrite.req.bits.setdirty.valid := true.B
-                    meta.io.lsuWrite.req.bits.setdirty.bits := true.B
+                    meta.io.lsuWrite.req.bits.setdirty.bits  := true.B
 
-                    //data 执行写操作
+                    // 由于一次写的粒度是一个字 因此需要读出原来的数据 在此基础上修改得到新的数据
                     val rdata = data.io.lsuRead(w).resp.bits.data
                     val wdata = WordWrite(s2req(w) , rdata)
 
-
-                    data.io.lsuWrite.req.valid := Mux(isSC(s2req(w)) , s2valid(w) && io.lsu.llbit , s2valid(w))
-                    data.io.lsuWrite.req.bits.idx := getIdx(s2req(w).addr)
-                    data.io.lsuWrite.req.bits.pos := s2hitpos(w)
+                    /* data.io.lsuWrite.req.valid       := Mux(isSC(s2req(w)), s2valid(w) && io.lsu.llbit, s2valid(w)) */
+                    data.io.lsuWrite.req.valid       := s2valid(w) && !(isSC(s2req(w)) && !io.lsu.llbit)
+                    data.io.lsuWrite.req.bits.idx    := getIdx(s2req(w).addr)
+                    data.io.lsuWrite.req.bits.pos    := s2hitpos(w)
                     data.io.lsuWrite.req.bits.offset := getWordOffset(s2req(w).addr)
-                    data.io.lsuWrite.req.bits.data := wdata
+                    data.io.lsuWrite.req.bits.data   := wdata
 
-                    io.lsu.resp(w).bits.data := Mux(isSC(s2req(w)), io.lsu.llbit.asUInt , 0.U)
-                    // io.lsu.resp(w).bits.uop := s2req(w).uop
-
-                }.otherwise{
-                    // load，现在的meta,data自带转发功能不用特别判断什么
-
-                    io.lsu.resp(w).bits.data := data.io.lsuRead(w).resp.bits.data
-                    // io.lsu.resp(w).bits.uop := s2req(w).uop
+                    io.lsu.resp(w).bits.data := io.lsu.llbit.asUInt // only sc can write regfile
+                } .otherwise {
+                    /* io.lsu.resp(w).bits.data := data.io.lsuRead(w).resp.bits.data */
+                    io.lsu.resp(w).bits.data := loadDataGen(
+                        s2req(w).addr(1, 0),
+                        data.io.lsuRead(w).resp.bits.data,
+                        s2req(w).uop.mem_size,
+                        s2req(w).uop.mem_signed
+                    )
                 }
             }
         }
-    }.elsewhen(s2state === replay){
+    } .elsewhen (s2state === replay) {
         // 统一在0号位处理
         sendResp(0) := s2valid(0)
         sendNack(0) := false.B
         sendResp(1) := false.B
         sendNack(1) := false.B
-        // 只要s2valid(0)就是hit
-        when(isStore(s2req(0))) {
-            // store
 
+        // 只要s2valid(0)就是hit
+        when (isStore(s2req(0))) {
             // meta拉高dirty位
-            meta.io.replayWrite.req.valid := s2valid(0)
+            meta.io.replayWrite.req.valid    := s2valid(0)
             meta.io.replayWrite.req.bits.idx := getIdx(s2req(0).addr)
             meta.io.replayWrite.req.bits.pos := s2pos
 
             meta.io.replayWrite.req.bits.setdirty.valid := true.B
-            meta.io.replayWrite.req.bits.setdirty.bits := true.B
+            meta.io.replayWrite.req.bits.setdirty.bits  := true.B
 
             val replay_rdata = data.io.replayRead.resp.bits.data
             val replay_wdata = WordWrite(s2req(0), replay_rdata)
             // data执行写操作
-            data.io.replayWrite.req.valid := Mux(isSC(s2req(0)) , s2valid(0) && io.lsu.llbit , s2valid(0))
-            data.io.replayWrite.req.bits.idx := getIdx(s2req(0).addr)
-            data.io.replayWrite.req.bits.pos := s2pos
+            /* data.io.replayWrite.req.valid := Mux(isSC(s2req(0)) , s2valid(0) && io.lsu.llbit , s2valid(0)) */
+            data.io.replayWrite.req.valid       := s2valid(0) && !(isSC(s2req(0)) && !io.lsu.llbit)
+            data.io.replayWrite.req.bits.idx    := getIdx(s2req(0).addr)
+            data.io.replayWrite.req.bits.pos    := s2pos
             data.io.replayWrite.req.bits.offset := getWordOffset(s2req(0).addr)
-            data.io.replayWrite.req.bits.data := replay_wdata
+            data.io.replayWrite.req.bits.data   := replay_wdata
 
-            io.lsu.resp(0).bits.data := Mux(isSC(s2req(0)), io.lsu.llbit.asUInt , 0.U)
-            // io.lsu.resp(0).bits.uop := s2req(0).uop
+            io.lsu.resp(0).bits.data := io.lsu.llbit.asUInt
         }.otherwise {
-            // 准备resp
-            io.lsu.resp(0).bits.data := data.io.replayRead.resp.bits.data
-            // io.lsu.resp(0).bits.uop := s2req(0).uop
+            /* io.lsu.resp(0).bits.data := data.io.replayRead.resp.bits.data */
+            io.lsu.resp(0).bits.data := loadDataGen(
+                s2req(0).addr(1, 0),
+                data.io.replayRead.resp.bits.data,
+                s2req(0).uop.mem_size,
+                s2req(0).uop.mem_signed
+            )
         }
-
-    }.elsewhen(s2state === replace_find){
+    } .elsewhen (s2state === replace_find) {
         // 激活wfu在1阶段就做完了
         // 在s2，将那一行的readOnly拉高，直到该行处理完毕，不允许st指令操作这一行
-        meta.io.lineFreeze.req.valid := s2valid(0)
+        meta.io.lineFreeze.req.valid    := s2valid(0)
         meta.io.lineFreeze.req.bits.idx := getIdx(s2fetchAddr)
         meta.io.lineFreeze.req.bits.pos := s2pos
+
         meta.io.lineFreeze.req.bits.setreadOnly.valid := true.B
-        meta.io.lineFreeze.req.bits.setreadOnly.bits := true.B
-    }.elsewhen(s2state ===fence_read){
+        meta.io.lineFreeze.req.bits.setreadOnly.bits  := true.B
+    } .elsewhen (s2state === fence_read) {
         // 对于脏的行，激活wfu在1阶段就做完了,但是对于那些没有脏的，或者无效的行，此处需要由fence_read动用lineClear
-        when(s2fence_read_not_dirtyline){
-            meta.io.lineClear.req.valid := s2valid(0)
+        when (s2fence_read_not_dirtyline) {
+            meta.io.lineClear.req.valid        := s2valid(0)
             meta.io.lineClear.req.bits.isFence := true.B
 
             meta.io.lineClear.req.bits.idx := s2fence_read_idx
             meta.io.lineClear.req.bits.pos := s2fence_read_pos
 
             meta.io.lineClear.req.bits.setdirty.valid := true.B
-            meta.io.lineClear.req.bits.setdirty.bits := false.B
+            meta.io.lineClear.req.bits.setdirty.bits  := false.B
 
             // 彻底清除这一行
             meta.io.lineClear.req.bits.setvalid.valid := true.B
-            meta.io.lineClear.req.bits.setvalid.bits := false.B
+            meta.io.lineClear.req.bits.setvalid.bits  := false.B
 
             meta.io.lineClear.req.bits.setreadOnly.valid := true.B
-            meta.io.lineClear.req.bits.setreadOnly.bits := false.B
+            meta.io.lineClear.req.bits.setreadOnly.bits  := false.B
 
             meta.io.lineClear.req.bits.setfixed.valid := true.B
-            meta.io.lineClear.req.bits.setfixed.bits := false.B
+            meta.io.lineClear.req.bits.setfixed.bits  := false.B
 
             meta.io.lineClear.req.bits.setTag.valid := true.B
-            meta.io.lineClear.req.bits.setTag.bits := 0.U
+            meta.io.lineClear.req.bits.setTag.bits  := 0.U
         }
-    }.elsewhen(s2state === wb){
+    } .elsewhen (s2state === wb) {  // write back to memory
         // 将读到的data给wfu
-        wfu.io.wfu_read_resp.valid :=  data.io.wfuRead.resp.valid
+        wfu.io.wfu_read_resp.valid     :=  data.io.wfuRead.resp.valid
         wfu.io.wfu_read_resp.bits.data :=  data.io.wfuRead.resp.bits.data
 
         // wb的时候,判断addr的地址是不是那一行的最后一个字,如果是,废除掉对应那个pos的metaline（即将被refill 破坏）
-        when(s2req(0).addr(nOffsetBits -1, 2) === 0xf.U){
-            meta.io.wfuWrite.req.valid := s2valid(0)
+        when (s2req(0).addr(nOffsetBits -1, 2) === 0xf.U) {
+            meta.io.wfuWrite.req.valid    := s2valid(0)
             meta.io.wfuWrite.req.bits.idx := getIdx(s2req(0).addr)
             meta.io.wfuWrite.req.bits.pos := s2pos
 
             meta.io.wfuWrite.req.bits.setvalid.valid := true.B
-            meta.io.wfuWrite.req.bits.setvalid.bits := false.B
+            meta.io.wfuWrite.req.bits.setvalid.bits  := false.B
         }
-        
-        // resp和nack都不发
-        for (w <- 0 until memWidth) {
-            sendResp(w) := false.B
-            sendNack(w) := false.B
-        }
-
-    }.elsewhen(s2state === refill){
-
+    } .elsewhen (s2state === refill) {
         // 去写data,这里不是st请求，而是refill的内部事务，因此不需要做llbit的判断
-         data.io.wfuWrite.req.valid := s2valid(0)
-         data.io.wfuWrite.req.bits.idx := getIdx(s2req(0).addr)
-         data.io.wfuWrite.req.bits.pos := s2pos
-         data.io.wfuWrite.req.bits.offset := getWordOffset(s2req(0).addr)
-         data.io.wfuWrite.req.bits.data := s2req(0).data
+        data.io.wfuWrite.req.valid       := s2valid(0)
+        data.io.wfuWrite.req.bits.idx    := getIdx(s2req(0).addr)
+        data.io.wfuWrite.req.bits.pos    := s2pos
+        data.io.wfuWrite.req.bits.offset := getWordOffset(s2req(0).addr)
+        data.io.wfuWrite.req.bits.data   := s2req(0).data
 
         // 一个关于meta的特殊情况
         // refill的时候,判断addr的地址是不是那一行的第一个字,如果是,废除掉对应那个pos的metaline
-        when(s2req(0).addr(nOffsetBits -1, 2) === 0.U){
-            meta.io.wfuWrite.req.valid := s2valid(0)
+        when (s2req(0).addr(nOffsetBits -1, 2) === 0.U) {
+            meta.io.wfuWrite.req.valid    := s2valid(0)
             meta.io.wfuWrite.req.bits.idx := getIdx(s2req(0).addr)
             meta.io.wfuWrite.req.bits.pos := s2pos
 
             meta.io.wfuWrite.req.bits.setvalid.valid := true.B
-            meta.io.wfuWrite.req.bits.setvalid.bits := false.B
+            meta.io.wfuWrite.req.bits.setvalid.bits  := false.B
         }
-        
+
         // s2fetchReady 的时候,所有data将要写完了,这个时候可以将新的meta写入
-        when(s2fetchReady){
-            // 通告地址，以及refill到的行号
-            // mshrs.io.fetchReady := s2fetchReady
-            // mshrs.io.fetchedBlockAddr := getBlockAddr(s2activateAddr)
-            // mshrs.io.fetchedpos := s2pos
+        when (s2fetchReady) {
             // 告诉meta.io.wfuWrite要写入的行号
-            meta.io.wfuWrite.req.valid := s2valid(0)
+            meta.io.wfuWrite.req.valid    := s2valid(0)
             meta.io.wfuWrite.req.bits.idx := getIdx(s2req(0).addr)
             meta.io.wfuWrite.req.bits.pos := s2pos
 
             meta.io.wfuWrite.req.bits.setvalid.valid := true.B
-            meta.io.wfuWrite.req.bits.setvalid.bits := s2newMeta.valid
+            meta.io.wfuWrite.req.bits.setvalid.bits  := s2newMeta.valid
 
             meta.io.wfuWrite.req.bits.setdirty.valid := true.B
-            meta.io.wfuWrite.req.bits.setdirty.bits := s2newMeta.dirty
+            meta.io.wfuWrite.req.bits.setdirty.bits  := s2newMeta.dirty
 
             meta.io.wfuWrite.req.bits.setreadOnly.valid := true.B
-            meta.io.wfuWrite.req.bits.setreadOnly.bits := s2newMeta.readOnly
+            meta.io.wfuWrite.req.bits.setreadOnly.bits  := s2newMeta.readOnly
 
             // 解除fixed
             meta.io.wfuWrite.req.bits.setfixed.valid := true.B
-            meta.io.wfuWrite.req.bits.setfixed.bits := s2newMeta.fixed
+            meta.io.wfuWrite.req.bits.setfixed.bits  := s2newMeta.fixed
 
             // 将新的tag写入
             meta.io.wfuWrite.req.bits.setTag.valid := true.B
-            meta.io.wfuWrite.req.bits.setTag.bits := s2newMeta.tag
+            meta.io.wfuWrite.req.bits.setTag.bits  := s2newMeta.tag
         }
-    }.elsewhen(s2state === mmio_req){
+    } .elsewhen (s2state === mmio_req) {
         // 查pipeline，要求lsu发送的时候0号或1号是mmio请求，不会同时发两个
-
         val mmio_req = Mux(s2valid(0), s2req(0), s2req(1))
-        when(isSC(mmio_req) && !io.lsu.llbit){
+        when (isSC(mmio_req) && !io.lsu.llbit) {
             // 如果是一个llbit为0的sc指令，那么直接返回llbit，不真正执行
             // 选择0号做回复
             sendResp(0) := s2valid(0) || s2valid(1)
@@ -736,14 +720,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
             sendResp(1) := false.B
             sendNack(1) := false.B
             io.lsu.resp(0).bits.data := io.lsu.llbit.asUInt
-            io.lsu.resp(0).bits.uop := mmio_req.uop
-        }.otherwise{
-            // mmiou必须空闲
-            // assert(mmiou.io.ready , "mmiou must be idle")
+            io.lsu.resp(0).bits.uop  := mmio_req.uop
+        } .otherwise {
             mmiou.io.mmioReq.valid := s2valid(0) || s2valid(1)
             // 存入请求本身
-            mmiou.io.mmioReq.bits := mmio_req
-            when(!mmiou.io.mmioReq.fire){
+            mmiou.io.mmioReq.bits  := mmio_req
+            when (!mmiou.io.mmioReq.fire) {
                 assert(!(mmiou.io.mmioReq.valid && !isStore(mmio_req)),
                     "a mmio load request is sent but there is another store in mmio unit")
                 // 当前不接受，说明busy，这种情况一定是store，发nack，然后拉高storeFailed
@@ -752,66 +734,45 @@ class NonBlockingDcache extends Module with HasDcacheParameters{
                 sendNack(0) := s2valid(0) || s2valid(1)
                 sendResp(1) := false.B
                 sendNack(1) := false.B
-                s2StoreFailed := s2valid(0) || s2valid(1)
             }
+            s2StoreFailed := mmiou.io.mmioReq.valid && !mmiou.io.mmioReq.ready
         }
-    }.elsewhen(s2state === mmio_resp){
-        
-        // 装载newDataLine的0号数据作为可能的读操作的resp的data
-        // DcacheReq类,req的uop还是那个请求的uop，但是如果是一个ld指令，那么这里的data（原store的写入数据）将作为读取到的data的载体
-        io.lsu.resp(0).bits.data := Mux(isSC(s2req(0)), io.lsu.llbit.asUInt , s2req(0).data)
-        
-        // 选择0号做回复
-        sendResp(0) := s2valid(0)
-        sendNack(0) := false.B
-        sendResp(1) := false.B
-        sendNack(1) := false.B
-    }.elsewhen(s2state === fence_clear){
+    } .elsewhen (s2state === fence_clear) {
         // 清除对应的meta行的dirty位,以及valid 位
-        meta.io.lineClear.req.valid := s2valid(0)
+        meta.io.lineClear.req.valid        := s2valid(0)
         meta.io.lineClear.req.bits.isFence := true.B
 
         meta.io.lineClear.req.bits.idx := getIdx(s2req(0).addr)
         meta.io.lineClear.req.bits.pos := s2pos
 
         meta.io.lineClear.req.bits.setdirty.valid := true.B
-        meta.io.lineClear.req.bits.setdirty.bits := false.B
+        meta.io.lineClear.req.bits.setdirty.bits  := false.B
 
         // 彻底清除这一行
         meta.io.lineClear.req.bits.setvalid.valid := true.B
-        meta.io.lineClear.req.bits.setvalid.bits := false.B
+        meta.io.lineClear.req.bits.setvalid.bits  := false.B
 
         meta.io.lineClear.req.bits.setreadOnly.valid := true.B
-        meta.io.lineClear.req.bits.setreadOnly.bits := false.B
+        meta.io.lineClear.req.bits.setreadOnly.bits  := false.B
 
         meta.io.lineClear.req.bits.setfixed.valid := true.B
-        meta.io.lineClear.req.bits.setfixed.bits := false.B
+        meta.io.lineClear.req.bits.setfixed.bits  := false.B
 
         meta.io.lineClear.req.bits.setTag.valid := true.B
-        meta.io.lineClear.req.bits.setTag.bits := 0.U
-
-    }.elsewhen(s2state === prefetch){
+        meta.io.lineClear.req.bits.setTag.bits  := 0.U
+    } .elsewhen (s2state === prefetch) {
         // TODO
-    }.elsewhen(s2state === nil){
+    } .elsewhen(s2state === nil) {
         // 
-    }
-
-
-
-    // 按情况返回resp或nack(replay不用看kill，lsukiil自然为假)
-    for(w <- 0 until memWidth){
-        io.lsu.nack(w).valid := sendNack(w)
-        io.lsu.resp(w).valid := sendResp(w)
     }
 
     // mmiou 挑一个没有人用resp的周期发resp
     mmiou.io.mmioResp.ready := !sendResp(0)
-
-    when(mmiou.io.mmioResp.fire){
+    when (mmiou.io.mmioResp.fire) {
         // 0号发resp
-        io.lsu.resp(0).valid := true.B
+        io.lsu.resp(0).valid     := true.B
+        io.lsu.resp(0).bits.uop  := mmiou.io.mmioResp.bits.uop
         io.lsu.resp(0).bits.data := mmiou.io.mmioResp.bits.data
-        io.lsu.resp(0).bits.uop := mmiou.io.mmioResp.bits.uop
     }
 
     // difftest

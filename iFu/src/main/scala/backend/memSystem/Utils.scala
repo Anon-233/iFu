@@ -81,77 +81,27 @@ object storeMaskGen{
 
 }
 
-object loadDataGen{
-    def apply(addr: UInt, data:UInt, memSize:UInt,memSigned: Bool): UInt = {
-        val loadData = WireInit(0.U(32.W))
-        when(memSize === 0.U){
-            when(addr === 0.U){
-                when(memSigned) {
-                    loadData := Cat(Fill(24, data(7)), data(7, 0))
-                } .otherwise{
-                    loadData := data(7,0)
-                }
-            }.elsewhen(addr === 1.U) {
-                when(memSigned) {
-                    loadData := Cat(Fill(24, data(15)), data(15, 8))
-                }.otherwise {
-                    loadData := data(15, 8)
-                }
-            }.elsewhen(addr === 2.U){
-                when(memSigned) {
-                    loadData := Cat(Fill(24, data(23)), data(23, 16))
-                }.otherwise {
-                    loadData := data(23, 16)
-                }
-            }.elsewhen(addr === 3.U){
-                when(memSigned) {
-                    loadData := Cat(Fill(24, data(31)), data(31, 24))
-                }.otherwise {
-                    loadData := data(31, 24)
-                }
-            }
-        }.elsewhen(memSize === 1.U){
-            when(addr(1) === 0.U){
-                when(memSigned){
-                    loadData := Cat(Fill(16,data(15)),data(15,0))
-                }.otherwise{
-                    loadData := data(15,0)
-                }
-            }.elsewhen(addr(1) === 1.U){
-                when(memSigned) {
-                    loadData := Cat(Fill(16, data(31)), data(31, 16))
-                }.otherwise {
-                    loadData := data(31, 16)
-                }
-            }
-        }.elsewhen(memSize === 2.U){
-            loadData := data(31,0)
+object loadDataGen {
+    def apply(addr: UInt, data: UInt, mem_size: UInt, mem_signed: Bool): UInt = {
+        var res = data
+        for (i <- (2 - 1) to 0 by -1) {
+            val pos = 8 << i
+            val shifted = Mux(addr(i), res(2 * pos - 1, pos), res(pos - 1, 0))
+            res = Cat(
+                Mux(
+                    mem_size === i.U,
+                        Fill(8 * 4 - pos, mem_signed && shifted(pos - 1)),  // sign/zero extend
+                        res(8 * 4 - 1, pos) // keep the upper bits
+                ),
+                shifted
+            )
         }
-        loadData
+        res.asUInt
     }
 }
-object storeDataGen{
-    def apply(addr: UInt, data:UInt, memSize:UInt): UInt = {
-        val storeData = WireInit(0.U.asTypeOf(Vec(4,UInt(8.W))))
-        when(memSize === 0.U){
-            when(addr === 0.U){ 
-                storeData(0) := data(7,0)}
-                    .elsewhen(addr === 1.U){storeData(1) := data(7,0)}
-                    .elsewhen(addr === 2.U){storeData(2) := data(7,0)}
-                    .elsewhen(addr === 3.U){storeData(3) := data(7,0)}
-        }.elsewhen(memSize === 1.U){
-            when(addr(1) === 0.U){
-                storeData(0) := data(7,0)
-                storeData(1) := data(15,8)}
-            .elsewhen(addr(1) === 1.U){
-                storeData(2) := data(7,0)
-                storeData(3) := data(15,8)}
-        }.elsewhen(memSize === 2.U){
-            storeData(0) := data(7,0)
-            storeData(1) := data(15,8)
-            storeData(2) := data(23,16)
-            storeData(3) := data(31,24)
-        }
-        storeData.asUInt
+
+object storeDataGen {
+    def apply(addr: UInt, data: UInt, memSize: UInt): UInt = {
+        val res = (data << (addr << 3.U))(31, 0)
     }
 }
