@@ -760,8 +760,10 @@ class Lsu extends CoreModule {
     dcache.io.lsu.s1_kill zip s2_load_need_killed map {
         case (kill, need_killed) => kill := need_killed.asUInt.orR
     }
-    s2_load_need_cancel.zipWithIndex.map {
-        case (need_cancel, w) => s2_set_execute(lcam_ldq_idx(w)) := !need_cancel.asUInt.orR
+    for (w <- 0 until memWidth) {
+        when (s2_load_need_cancel(w).asUInt.orR) {
+            s2_set_execute(lcam_ldq_idx(w)) := false.B
+        }
     }
 // -----------------------------------------------------------------------
 // s2 stage: set the load as executed
