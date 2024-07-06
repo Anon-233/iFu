@@ -287,7 +287,7 @@ class Lsu extends CoreModule {
     val stqEmpty = (0 until numStqEntries).map{ i => stq(i).valid }.reduce(_||_) === 0.U
     dcache.io.lsu.fence_dmem := io.core.fence_dmem
     io.core.stq_empty  := stqEmpty
-    io.core.dcache_ord := dcache.io.lsu.ordered
+    io.core.dcache_ord := RegNext(dcache.io.lsu.ordered)    // delay one cycle for better timing
 
 /*=============================================================================*/
 
