@@ -80,7 +80,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
     wfu.io.meta_resp           := DontCare
     wfu.io.req_wb_only         := false.B
     wfu.io.wfu_read_resp.valid := false.B
-    wfu.io.wfu_write_req.bits  := DontCare
+    wfu.io.wfu_read_resp.bits  := DontCare
 
     io.smaw(1) <> wfu.io.smaw
     io.smar(1) <> wfu.io.smar
