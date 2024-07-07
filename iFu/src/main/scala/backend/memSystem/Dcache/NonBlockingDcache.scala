@@ -611,18 +611,20 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
             meta.io.wfuWrite.req.bits.setTag.bits  := s2newMeta.tag
         }
     } .elsewhen (s2state === mmio_req) {
-        // 查pipeline，要求lsu发送的时候0号或1号是mmio请求，不会同时发两个
-        val mmio_req = Mux(s2valid(0), s2req(0), s2req(1))
-        when (isSC(mmio_req) && !io.lsu.llbit) {
-            // 如果是一个llbit为0的sc指令，那么直接返回llbit，不真正执行
-            // 选择0号做回复
-            sendResp(0) := s2valid(0) || s2valid(1)
-            sendNack(0) := false.B
-            sendResp(1) := false.B
-            sendNack(1) := false.B
-            io.lsu.resp(0).bits.data := io.lsu.llbit.asUInt
-            io.lsu.resp(0).bits.uop  := mmio_req.uop
-        } .otherwise {
+        
+        for(w <- 0 until memWidth){
+            io.lsu.resp(w).bits.data := io.lsu.llbit.asUInt
+            io.lsu.resp(w).bits.uop  := s2req(w).uop
+        }
+
+        when(s2req.map(x => isSC(x)).reduce(_||_) && !io.lsu.llbit){
+            for(w <- 0 until memWidth){
+                sendResp(w) := s2valid(w)
+                sendNack(w) := false.B
+            }
+        }.otherwise {
+            // 查pipeline，要求lsu发送的时候0号或1号是mmio请求，不会同时发两个
+            val mmio_req = Mux(s2valid(0), s2req(0), s2req(1))
             mmiou.io.mmioReq.valid := s2valid(0) || s2valid(1)
             // 存入请求本身
             mmiou.io.mmioReq.bits  := mmio_req
@@ -632,9 +634,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
                 // 当前不接受，说明busy，这种情况一定是store，发nack，然后拉高storeFailed
                 // 0号发nack
                 sendResp(0) := false.B
-                sendNack(0) := s2valid(0) || s2valid(1)
+                sendNack(0) := s2valid(0)
                 sendResp(1) := false.B
-                sendNack(1) := false.B
+                sendNack(1) := s2valid(1)
             }
             s2StoreFailed := mmiou.io.mmioReq.valid && !mmiou.io.mmioReq.ready
         }
@@ -676,11 +678,10 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
         io.lsu.resp(0).bits.data := mmiou.io.mmioResp.bits.data
     }
 
-    // difftest
-    val isRealStoreState = (s2state === lsu || s2state === replay || mmiou.io.mmioResp.fire)
-
     if(!FPGAPlatform){
         val difftest = Module(new DifftestStoreEvent)
+        // difftest
+        val isRealStoreState = (s2state === lsu || s2state === replay || mmiou.io.mmioResp.fire)
         //{4'b0, llbit && sc_w, st_w, st_h, st_b}
         val sc_w =  isRealStoreState && io.lsu.resp(0).valid && io.lsu.resp(0).bits.uop.is_sc
         val st_w =  isRealStoreState && io.lsu.resp(0).valid && io.lsu.resp(0).bits.uop.use_stq &&  io.lsu.resp(0).bits.uop.mem_size === 2.U
