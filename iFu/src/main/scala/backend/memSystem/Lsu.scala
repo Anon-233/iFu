@@ -562,7 +562,8 @@ class Lsu extends CoreModule {
             val ldq_idx = ldq_incoming_idx(w)
             ldq(ldq_idx).bits.addr.valid     := true.B
             ldq(ldq_idx).bits.addr.bits      := s1_exe_tlb_paddr(w)
-            ldq(ldq_idx).bits.uop.pdst       := s1_exe_req(w).bits.uop.pdst
+            /* ldq(ldq_idx).bits.uop.pdst       := s1_exe_req(w).bits.uop.pdst */
+            assert(ldq(ldq_idx).bits.uop.pdst === s1_exe_req(w).bits.uop.pdst, "[lsu] mismatch load pdst")
             ldq(ldq_idx).bits.xcpt_valid     := s1_exe_tlb_xcpt(w)
             ldq(ldq_idx).bits.is_uncacheable := s1_exe_tlb_uncacheable(w)
 
@@ -918,11 +919,13 @@ class Lsu extends CoreModule {
             when (dcache.io.lsu.resp(w).bits.uop.use_ldq) {
                 val ldq_idx = dcache.io.lsu.resp(w).bits.uop.ldqIdx
 
-                io.core.exe(w).iresp.bits.uop := ldq(ldq_idx).bits.uop
+                /* io.core.exe(w).iresp.bits.uop := ldq(ldq_idx).bits.uop */
+                io.core.exe(w).iresp.bits.uop := dcache.io.lsu.resp(w).bits.uop
                 if (!FPGAPlatform) {
                     io.core.exe(w).iresp.bits.uop.debug_load_uncacheable := ldq(ldq_idx).bits.is_uncacheable
                 }
-                io.core.exe(w).iresp.valid := ldq(ldq_idx).bits.uop.dst_rtype === RT_FIX
+                /* io.core.exe(w).iresp.valid := ldq(ldq_idx).bits.uop.dst_rtype === RT_FIX */
+                io.core.exe(w).iresp.valid     := dcache.io.lsu.resp(w).bits.uop.dst_rtype === RT_FIX
                 io.core.exe(w).iresp.bits.data := dcache.io.lsu.resp(w).bits.data
 
                 /* dmem_resp_fired(w) := true.B */
@@ -935,7 +938,8 @@ class Lsu extends CoreModule {
                 when (dcache.io.lsu.resp(w).bits.uop.is_sc) {
                     /* dmem_resp_fired(w) := true.B */
                     io.core.exe(w).iresp.valid     := true.B
-                    io.core.exe(w).iresp.bits.uop  := stq(dcache.io.lsu.resp(w).bits.uop.stqIdx).bits.uop
+                    /* io.core.exe(w).iresp.bits.uop  := stq(dcache.io.lsu.resp(w).bits.uop.stqIdx).bits.uop */
+                    io.core.exe(w).iresp.bits.uop  := dcache.io.lsu.resp(w).bits.uop
                     io.core.exe(w).iresp.bits.data := dcache.io.lsu.resp(w).bits.data
                 }
             }
