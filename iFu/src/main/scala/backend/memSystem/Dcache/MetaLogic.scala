@@ -160,11 +160,8 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
 
         readReq(w) := Mux(io.lsuRead(w).req.valid, io.lsuRead(w).req.bits,
                         Mux(io.missReplace.req.valid, io.missReplace.req.bits,
-                        Mux(io.replayRead.req.valid, io.replayRead.req.bits,
                         Mux(io.fetchDirty.req.valid, io.fetchDirty.req.bits,
-                        Mux(io.cacopRead.req.valid, io.cacopRead.req.bits,
-                        Mux(io.refillLogout.req.valid , io.refillLogout.req.bits,
-                                                    0.U.asTypeOf(new DcacheMetaReq)))))))
+                                                    0.U.asTypeOf(new DcacheMetaReq))))
 
         readIdx(w) := Mux(io.lsuRead(w).req.valid, io.lsuRead(w).req.bits.idx,
                         Mux(io.missReplace.req.valid, io.missReplace.req.bits.idx,
@@ -286,10 +283,10 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
 
                 // assert(replay_hitoh.orR,"replayreq must hit")
                 // readResp(w).bits.pos := hitpos
-                readResp(w).bits.rmeta := rmetaSet(rpos)
+                readResp(w).bits.rmeta := DontCare
                 readResp(w).bits.hit := DontCare
                 readResp(w).bits.idx := ridx
-                readResp(w).bits.pos := rpos
+                // readResp(w).bits.pos := rpos
 
                 when(isReplayStore){
                     // 如果是一个replay的store指令，存s2Dir信息，以防来不及告诉下个周期的missReplace这里脏了
