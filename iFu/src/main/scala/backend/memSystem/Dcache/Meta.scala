@@ -153,10 +153,10 @@ class DcacheMeta extends Module with HasDcacheParameters{
     val bypass = Wire(Vec(memWidth, Bool()))
     if(!FPGAPlatform)dontTouch(bypass)
     for (w <- 0 until memWidth) {
-        bypass(w) := rvalid(w) && wvalid && (ridx(w) === widx)
+        bypass(w) := RegNext(rvalid(w)) && RegNext(wvalid) && (RegNext(ridx(w)) === RegNext(widx))
         // 当周期判断，下周期转发
         val wpos_bypass = RegNext(wpos)
-        when (RegNext(bypass(w))) {
+        when (bypass(w)) {
             // 看看write操作对应位有修改吗，如果有，用写的值，没有的话，还是保留原来读到的rmetaSet的值
             io.read(w).resp.bits.rmetaSet(wpos_bypass).valid := Mux(RegNext(wreq.setvalid.valid), RegNext(wreq.setvalid.bits), rmetaSet(w)(wpos_bypass).valid)
             io.read(w).resp.bits.rmetaSet(wpos_bypass).dirty := Mux(RegNext(wreq.setdirty.valid), RegNext(wreq.setdirty.bits), rmetaSet(w)(wpos_bypass).dirty)
