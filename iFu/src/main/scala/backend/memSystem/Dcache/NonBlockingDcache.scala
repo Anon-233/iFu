@@ -223,19 +223,19 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
     mshrs.io.fetchedBlockAddr := getBlockAddr(wfu.io.fetched_addr)
     mshrs.io.fetchedpos       := s0pos
 
-    meta.io.lsuRead zip s0req map {
+    meta.io.lsuRead zip io.lsu.req.bits(w).bits map {
         case (m, r) => {
             m.req.bits.tag     := getTag(r.addr)
             m.req.bits.idx     := getIdx(r.addr)
             m.req.bits.isStore := isStore(r)
         }
     }
-    meta.io.replayRead.req.bits.tag     := getTag(s0req(0).addr)
-    meta.io.replayRead.req.bits.idx     := getIdx(s0req(0).addr)
-    meta.io.replayRead.req.bits.isStore := isStore(s0req(0))
-    meta.io.missReplace.req.bits.idx    := getIdx(s0req(0).addr)
-    meta.io.refillLogout.req.bits.idx   := getIdx(s0req(0).addr)
-    meta.io.refillLogout.req.bits.pos   := s0pos
+    meta.io.replayRead.req.bits.tag     := getTag(mshrs.io.replay.bits.addr)
+    meta.io.replayRead.req.bits.idx     := getIdx(mshrs.io.replay.bits.addr)
+    meta.io.replayRead.req.bits.isStore := isStore(mshrs.io.replay.bits)
+    meta.io.missReplace.req.bits.idx    := getIdx(mshrs.io.newFetchreq.bits.addr)
+    meta.io.refillLogout.req.bits.idx   := getIdx(wfu.io.wfu_write_req.bits.addr)
+    meta.io.refillLogout.req.bits.pos   := wfu.io.pos
 
     when (s0state === lsu) {
         meta.io.lsuRead zip s0valid map { case (m, v) => m.req.valid := v }
