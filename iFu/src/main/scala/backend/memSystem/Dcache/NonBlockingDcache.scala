@@ -219,13 +219,14 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
     mshrs.io.fetchedBlockAddr := getBlockAddr(wfu.io.fetched_addr)
     mshrs.io.fetchedpos       := s0pos
 
-    meta.io.lsuRead zip io.lsu.req.bits(w).bits map {
+    meta.io.lsuRead zip io.lsu.req.bits map {
         case (m, r) => {
-            m.req.bits.tag     := getTag(r.addr)
-            m.req.bits.idx     := getIdx(r.addr)
-            m.req.bits.isStore := isStore(r)
+            m.req.bits.tag     := getTag(r.bits.addr)
+            m.req.bits.idx     := getIdx(r.bits.addr)
+            m.req.bits.isStore := isStore(r.bits)
         }
     }
+    
     meta.io.replayRead.req.bits.tag     := getTag(mshrs.io.replay.bits.addr)
     meta.io.replayRead.req.bits.idx     := getIdx(mshrs.io.replay.bits.addr)
     meta.io.replayRead.req.bits.isStore := isStore(mshrs.io.replay.bits)
