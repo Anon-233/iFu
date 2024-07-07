@@ -245,7 +245,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
         meta.io.missReplace.req.valid := s0valid(0)
     } .elsewhen (s0state === refill) {
         // when we get the first word of a line, we should tell meta to invalidate this line
-        when (s0req(0).addr(nOffsetBits -1, 2) === 0.U) {
+        when (wfu.io.wfu_write_req.bits.addr(nOffsetBits -1, 2) === 0.U) {
             meta.io.refillLogout.req.valid := s0valid(0)
         }
     } .elsewhen (s0state === wb) {
