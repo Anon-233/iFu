@@ -37,7 +37,6 @@ class DcacheMeta extends Module with HasDcacheParameters{
     val dirtys = RegInit(VecInit(Seq.fill(nSets)(0.U(nWays.W))))
     val readOnlys = RegInit(VecInit(Seq.fill(nSets)(0.U(nWays.W))))
     val fixeds = RegInit(VecInit(Seq.fill(nSets)(0.U(nWays.W))))
-    
     val tags = SyncReadMem(nSets, Vec(nWays, UInt(nTagBits.W)))
 
     // reset tags

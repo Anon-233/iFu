@@ -143,13 +143,12 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     if(!FPGAPlatform)dontTouch(hitoh)
 
     for(w <- 0 until memWidth){
-        readType :=  Mux(haslsuRead , lsu_R,
-                        Mux(io.missReplace.req.valid, miss_R,
-                        Mux(io.replayRead.req.valid, replay_R,
-                        Mux(io.fetchDirty.req.valid, fence_R,
-                        Mux(io.cacopRead.req.valid, cacop_R,
-                            Mux(io.refillLogout.req.valid, refill_L,
-                                                    none))))))
+        readType := Mux(io.missReplace.req.valid, miss_R,
+                    Mux(io.replayRead.req.valid, replay_R,
+                    Mux(io.fetchDirty.req.valid, fence_R,
+                    Mux(io.cacopRead.req.valid, cacop_R,
+                    Mux(io.refillLogout.req.valid, refill_L,
+                                                lsu_R)))))
 
         readValid(w) := io.lsuRead(w).req.valid ||
                         io.missReplace.req.valid ||
@@ -158,27 +157,19 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                         io.cacopRead.req.valid ||
                         io.refillLogout.req.valid
 
-        readReq(w) := Mux(io.lsuRead(w).req.valid, io.lsuRead(w).req.bits,
-                        Mux(io.missReplace.req.valid, io.missReplace.req.bits,
+        readReq(w) :=   Mux(io.missReplace.req.valid, io.missReplace.req.bits,
                         Mux(io.fetchDirty.req.valid, io.fetchDirty.req.bits,
-                                                    0.U.asTypeOf(new DcacheMetaReq))))
+                                                    io.lsuRead(w).req.bits))
 
-        readIdx(w) := Mux(io.lsuRead(w).req.valid, io.lsuRead(w).req.bits.idx,
-                        Mux(io.missReplace.req.valid, io.missReplace.req.bits.idx,
+        readIdx(w) :=   Mux(io.missReplace.req.valid, io.missReplace.req.bits.idx,
                         Mux(io.replayRead.req.valid, io.replayRead.req.bits.idx,
-                        Mux(io.fetchDirty.req.valid, io.fetchDirty.req.bits.idx,
-                        Mux(io.cacopRead.req.valid, io.cacopRead.req.bits.idx,
                         Mux(io.refillLogout.req.valid , io.refillLogout.req.bits.idx,
-                                                    0.U(nIdxBits.W)))))))
+                                                    io.lsuRead(w).req.bits.idx)))
 
 
-        readPos(w) := Mux(io.lsuRead(w).req.valid, io.lsuRead(w).req.bits.pos,
-                        Mux(io.missReplace.req.valid, io.missReplace.req.bits.pos,
-                        Mux(io.replayRead.req.valid, io.replayRead.req.bits.pos,
-                        Mux(io.fetchDirty.req.valid, io.fetchDirty.req.bits.pos,
-                        Mux(io.cacopRead.req.valid, io.cacopRead.req.bits.pos,
+        readPos(w) :=   Mux(io.replayRead.req.valid, io.replayRead.req.bits.pos,
                         Mux(io.refillLogout.req.valid , io.refillLogout.req.bits.pos,
-                                                    0.U(log2Ceil(nWays).W)))))))
+                                                    0.U(log2Ceil(nWays).W)))
 
         // only lsuRead and cacopRead need tag 
         readTag(w) := Mux(io.lsuRead(w).req.valid, io.lsuRead(w).req.bits.tag,
@@ -204,9 +195,9 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
 
 
     // 一些信息的s2内部转发
-    val s2ROval = RegInit(false.B)
-    val s2ROidx = RegInit(0.U(nIdxBits.W))
-    val s2ROtag = RegInit(0.U(nTagBits.W))
+    val s2_inv_val = RegInit(false.B)
+    val s2_inv_idx = RegInit(0.U(nIdxBits.W))
+    val s2_inv_mask = RegInit(0.U(nWays.W))
     val s2Dirval = RegInit(false.B)
     val s2Diridx = RegInit(0.U(nIdxBits.W))
     val s2Dirpos = RegInit(0.U(log2Ceil(nWays).W))
@@ -214,9 +205,9 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     val s2Refillidx = RegInit(0.U(nIdxBits.W))
     val s2Refillpos = RegInit(0.U(log2Ceil(nWays).W))
 
-    dontTouch(s2ROval)
-    dontTouch(s2ROidx)
-    dontTouch(s2ROtag)
+    dontTouch(s2_inv_val)
+    dontTouch(s2_inv_idx)
+    dontTouch(s2_inv_mask)
     dontTouch(s2Dirval)
     dontTouch(s2Diridx)
     dontTouch(s2Dirpos)
@@ -224,16 +215,15 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     dontTouch(s2Refillidx)
     dontTouch(s2Refillpos)
 
-    s2ROval := false.B
-    s2ROidx := 0.U
-    s2ROtag := 0.U
+    s2_inv_val := false.B
+    s2_inv_idx := 0.U
+    s2_inv_mask := 0.U
     s2Dirval := false.B
     s2Diridx := 0.U
     s2Dirpos := 0.U
     s2Refillval := false.B
     s2Refillidx := 0.U
     s2Refillpos := 0.U
-
 
     for(w <- 0 until memWidth){
         
@@ -251,14 +241,14 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                 // isLsuStore用来触发Store的命中机制
                 
                 val rtag = RegNext(readTag(w))// no need RegNext(readTag(w)) , because  the tag is from io.lsu.s1_paddr
-                hitoh(w) := VecInit(rmetaSet.map((x: MetaLine) => x.valid && x.tag === rtag &&
+                hitoh(w) := VecInit(rmetaSet.map((x: MetaLine) => x.valid && x.tag === rtag /* && */
                     // 如果是一个试图访问只读块(这行被设置成只读，或者上个周期有条missReplace将把这里设置成只读)的store指令，就认为是miss
-                     !( isLsuStore && (x.readOnly || (s2ROval && s2ROtag === rtag && s2ROidx === ridx)))
-                     )).asUInt
+                     /* !( isLsuStore && (x.readOnly || (s2ROval && s2ROtag === rtag && s2ROidx === ridx))) */
+                     )).asUInt & ~(s2_inv_mask & Fill (nWays, s2_inv_val))
                 assert(PopCount(hitoh(w)) <= 1.U,"At most one hit")
                 val hitpos = PriorityEncoder(hitoh(w))
-                //  如果是被refill第一个字报废的行，此时算未命中
-                readResp(w).bits.hit := hitoh(w).orR && !( s2Refillval && s2Refillidx === ridx && s2Refillpos === hitpos)
+                //  如果是被refill第一个字报废的行，此时算未命中(由于现在在mshr_replace就一定会报废掉这一行，之后没必要wb refill 报废了)
+                readResp(w).bits.hit := hitoh(w).orR /* && !( s2Refillval && s2Refillidx === ridx && s2Refillpos === hitpos) */
                 readResp(w).bits.pos := hitpos
                 readResp(w).bits.rmeta := rmetaSet(hitpos)
                 
@@ -268,7 +258,6 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                     s2Diridx := ridx
                     s2Dirpos := hitpos
                 }
-
             }
             is(replay_R){
                 
@@ -322,10 +311,9 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                 }
                 
                 // 记录这个s1取出来的，该被设为readOnly的行的信息
-                s2ROval := true.B
-                s2ROidx := ridx
-                s2ROtag := rmetaSet(replacePos).tag
-
+                s2_inv_val := true.B
+                s2_inv_idx := ridx
+                s2_inv_mask := UIntToOH(replacePos)
             }
 
             is(fence_R){
