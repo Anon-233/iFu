@@ -896,7 +896,7 @@ class Lsu extends CoreModule {
         io.core.exe(w).iresp.valid := false.B
     }
 
-    /* val dmem_resp_fired = WireInit(widthMap(w => false.B)) */
+    val dmem_resp_fired = WireInit(widthMap(w => false.B))
     val ld_forward_success = WireInit(0.U.asTypeOf(Vec(memWidth, Bool())))
     for (w <- 0 until memWidth) {
         // handle nacks
@@ -928,7 +928,7 @@ class Lsu extends CoreModule {
                 io.core.exe(w).iresp.valid     := dcache.io.lsu.resp(w).bits.uop.dst_rtype === RT_FIX
                 io.core.exe(w).iresp.bits.data := dcache.io.lsu.resp(w).bits.data
 
-                /* dmem_resp_fired(w) := true.B */
+                dmem_resp_fired(w) := true.B
 
                 ldq(ldq_idx).bits.succeeded := io.core.exe(w).iresp.valid
             } .otherwise {
@@ -936,7 +936,7 @@ class Lsu extends CoreModule {
 
                 stq(dcache.io.lsu.resp(w).bits.uop.stqIdx).bits.succeeded := true.B
                 when (dcache.io.lsu.resp(w).bits.uop.is_sc) {
-                    /* dmem_resp_fired(w) := true.B */
+                    dmem_resp_fired(w) := true.B
                     io.core.exe(w).iresp.valid     := true.B
                     /* io.core.exe(w).iresp.bits.uop  := stq(dcache.io.lsu.resp(w).bits.uop.stqIdx).bits.uop */
                     io.core.exe(w).iresp.bits.uop  := dcache.io.lsu.resp(w).bits.uop
@@ -945,10 +945,10 @@ class Lsu extends CoreModule {
             }
         }
 
-        /* when(dmem_resp_fired(w) && wb_forward_valid(w)) {
-            // impossible
-        } .else */
-        when (/* !dmem_resp_fired(w) && */ wb_forward_valid(w)) {
+        when(dmem_resp_fired(w) && wb_forward_valid(w)) {
+            // possible because if fire_load_incoming could do wb_forward_valid 
+            // and it dont see dcache fire 
+        } .elsewhen (!dmem_resp_fired(w) && wb_forward_valid(w)) {
             val f_idx       = wb_forward_ldq_idx(w)
             val forward_uop = ldq(f_idx).bits.uop
             val stq_e       = stq(wb_forward_stq_idx(w))
