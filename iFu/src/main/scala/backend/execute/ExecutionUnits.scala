@@ -75,9 +75,9 @@ class ExecutionUnits extends HasCoreParameters {
         val alu_exe_unit = Module(new ALUExeUnit(
             hasJmpUnit = is_nth(0),
             hasCSR = is_nth(1),
+            hasCnt = is_nth(1),
             hasMul = is_nth(2),
-            hasDiv = is_nth(3),
-            hasCnt = is_nth(1), // use the same unit as CSR
+            hasDiv = is_nth(2),
         ))
         exe_units += alu_exe_unit
     }
