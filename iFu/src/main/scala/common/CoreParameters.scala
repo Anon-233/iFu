@@ -57,7 +57,7 @@ class DcacheParameters {
     def nRowBits = nRowWords * 32
     def nRowBytes = nRowWords * 4
     val nSets = 64
-    val nWays = 8
+    val nWays = 4
 
     def nTotalWords    = nSets * nWays * nRowWords
 

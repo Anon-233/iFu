@@ -56,15 +56,13 @@ class DCacheReq extends CoreBundle {
     val mask            = UInt(4.W)
     val addr            = UInt(vaddrBits.W)
     val data            = Bits(xLen.W)
-//    val is_hella = Bool() // Is this the hellacache req? If so this is not tracked in LDQ or STQ
     val uop             = new MicroOp()
     val is_uncacheable  = Bool()
 }
 
 class DCacheResp extends CoreBundle {
     val data = Bits(xLen.W)
-//    val is_hella = Bool()
-    val uop = new MicroOp()
+    val uop  = new MicroOp()
 }
 
 class LSUDMemIO extends CoreBundle {
@@ -74,7 +72,7 @@ class LSUDMemIO extends CoreBundle {
     val req         = new DecoupledIO(Vec(memWidth,Valid(new DCacheReq)))
     val s1_kill     = Output(Vec(memWidth, Bool()))
     //val s1_paddr = Output(Vec(memWidth, UInt(paddrBits.W)))
-    val s2_hit      = Input(Vec(memWidth, Bool()))
+    val s1_hit      = Input(Vec(memWidth, Bool()))
     val resp        = Flipped(Vec(memWidth, new Valid(new DCacheResp)))
 
     val nack        = Flipped(Vec(memWidth, new Valid(new DCacheReq)))

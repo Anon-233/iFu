@@ -841,10 +841,12 @@ class Lsu extends CoreModule {
     io.core.lsu_xcpt.bits.cause      := Mux(use_tlb_xcpt, s1_tlb_xcpt_cause, MINI_EXCEPTION_MEM_ORDERING)
     io.core.lsu_xcpt.bits.badvaddr   := s1_tlb_xcpt_vaddr
 // -----------------------------------------------------------------------
-// s2 stage: speculative wakeup
+// s1 stage: speculative wakeup
     for (w <- 0 until memWidth) {
-        io.core.spec_ld_wakeup(w).valid := fired_load_incoming(w) && mem_incoming_uop(w).pdst =/= 0.U
-        io.core.spec_ld_wakeup(w).bits  := mem_incoming_uop(w).pdst
+        /* io.core.spec_ld_wakeup(w).valid := fired_load_incoming(w) && mem_incoming_uop(w).pdst =/= 0.U */
+        io.core.spec_ld_wakeup(w).valid := will_fire_load_incoming(w) && s1_exe_req(w).bits.uop.pdst =/= 0.U
+        /* io.core.spec_ld_wakeup(w).bits  := mem_incoming_uop(w).pdst */
+        io.core.spec_ld_wakeup(w).bits  := s1_exe_req(w).bits.uop.pdst
     }
 // -----------------------------------------------------------------------
 // s3 stage: clear busy bits for store instructions (load's busy bit is cleared when it writes back)
@@ -945,10 +947,11 @@ class Lsu extends CoreModule {
             }
         }
 
-        when(dmem_resp_fired(w) && wb_forward_valid(w)) {
+        /* when(dmem_resp_fired(w) && wb_forward_valid(w)) {
             // possible because if fire_load_incoming could do wb_forward_valid 
             // and it dont see dcache fire 
-        } .elsewhen (!dmem_resp_fired(w) && wb_forward_valid(w)) {
+        } .else */
+        when (!dmem_resp_fired(w) && wb_forward_valid(w)) {
             val f_idx       = wb_forward_ldq_idx(w)
             val forward_uop = ldq(f_idx).bits.uop
             val stq_e       = stq(wb_forward_stq_idx(w))
@@ -981,20 +984,21 @@ class Lsu extends CoreModule {
         }
     }
 // -----------------------------------------------------------------------
-// s3 stage: handle speculative load wakeup failure
+// s2 stage: handle speculative load wakeup failure
     io.core.ld_miss := RegNext(io.core.spec_ld_wakeup.map(_.valid).reduce(_||_))
     val spec_ld_succeed = widthMap(w =>
         !RegNext(io.core.spec_ld_wakeup(w).valid) ||
         // (io.core.exe(w).iresp.valid && io.core.exe(w).iresp.bits.uop.ldqIdx === RegNext(mem_incoming_uop(w).ldqIdx))
         (
-            (   // case 1: from forwarding
+            /* (   // case 1: from forwarding
                 ld_forward_success(w) &&
                 (wb_forward_valid(w) && wb_forward_ldq_idx(w) === RegNext(mem_incoming_uop(w).ldqIdx))
             )
-            ||
+            || */
             (   // case 2: from dcache response
-                RegNext(fired_load_incoming(w) && !dcache.io.lsu.s1_kill(w)) &&
-                dcache.io.lsu.s2_hit(w)
+                /* RegNext */
+                (fired_load_incoming(w) && !dcache.io.lsu.s1_kill(w)) &&
+                dcache.io.lsu.s1_hit(w)
             )
         )
     ).reduce(_ && _)
