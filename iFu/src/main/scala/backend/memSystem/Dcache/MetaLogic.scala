@@ -244,7 +244,7 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                 hitoh(w) := VecInit(rmetaSet.map((x: MetaLine) => x.valid && x.tag === rtag /* && */
                     // 如果是一个试图访问只读块(这行被设置成只读，或者上个周期有条missReplace将把这里设置成只读)的store指令，就认为是miss
                      /* !( isLsuStore && (x.readOnly || (s2ROval && s2ROtag === rtag && s2ROidx === ridx))) */
-                     )).asUInt & ~(s2_inv_mask & Fill (nWays, s2_inv_val))
+                     )).asUInt & ~(s2_inv_mask & Fill (nWays, s2_inv_val && s2_inv_idx === ridx))
                 assert(PopCount(hitoh(w)) <= 1.U,"At most one hit")
                 val hitpos = PriorityEncoder(hitoh(w))
                 //  如果是被refill第一个字报废的行，此时算未命中(由于现在在mshr_replace就一定会报废掉这一行，之后没必要wb refill 报废了)
