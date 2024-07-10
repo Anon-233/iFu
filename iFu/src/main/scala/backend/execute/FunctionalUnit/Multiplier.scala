@@ -60,7 +60,7 @@ class MultStar(val debug: Boolean = false, val latency: Int = 3) extends Abstrac
     }
 }
 
-class MultDSP48E1(val debug: Boolean = false, val latency: Int = 3) extends AbstractMult(MultFuncCode()) {
+class MultDSP48E1(val debug: Boolean = false, val latency: Int = 2) extends AbstractMult(MultFuncCode()) {
     // stage 1: calculate partial products
     val pp = RegInit(VecInit(Seq.fill(4)(0.U(xLen.W))))
     for (i <- 0 until 2) {
@@ -90,7 +90,6 @@ class MultDSP48E1(val debug: Boolean = false, val latency: Int = 3) extends Abst
     val data    = Mux(sign, -res, res)
     val result  = Mux(isL, data(xLen - 1, 0), data(2 * xLen - 1, xLen))
 
-    require(latency >= 3)
     io.resp.valid     := RegNext(RegNext(io.req.valid))
     io.resp.bits.data := RegNext(result)
 }

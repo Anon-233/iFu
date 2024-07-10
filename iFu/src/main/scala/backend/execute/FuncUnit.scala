@@ -224,7 +224,7 @@ class CntUnit(numStages: Int = 1) extends PipelinedFuncUnit (
     }
 }
 
-class PipelinedMulUnit(numStages: Int = 3) extends PipelinedFuncUnit (
+class PipelinedMulUnit(numStages: Int = 2) extends PipelinedFuncUnit (
     numStages = numStages,
 ) {
     val imult = Module(new MultDSP48E1)

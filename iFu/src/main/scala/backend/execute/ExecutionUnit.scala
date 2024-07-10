@@ -80,7 +80,7 @@ class ALUExeUnit (
     hasMul           = hasMul,
     hasDiv           = hasDiv,
     hasCnt           = hasCnt,
-    numStages        = if (hasAlu && hasMul) 3 else if (hasAlu) 1 else 0
+    numStages        = if (hasAlu && hasMul) 2 else if (hasAlu) 1 else 0
 ) {
     val div_busy  = WireInit(false.B)
 
