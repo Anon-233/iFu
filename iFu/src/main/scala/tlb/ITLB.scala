@@ -57,6 +57,7 @@ class ITLB extends CoreModule {
     val pg_mode = !csr_regs.crmd_da && csr_regs.crmd_pg
     val vaddr = io.req.vaddr
     io.r_req.vaddr := vaddr
+    val r_resp = RegNext(io.r_resp)
     when(vaddr(1, 0) =/= 0.U) {
         io.resp.exception.valid := true.B
         io.resp.exception.bits.xcpt_cause := ADEF
@@ -82,10 +83,10 @@ class ITLB extends CoreModule {
             io.resp.exception.valid := false.B
         }.otherwise {
             io.resp := 0.U.asTypeOf(new DTLBResp)
-            val entry = io.r_resp.bits.entry
+            val entry = r_resp.bits.entry
             val odd_even_page = Mux(entry.meta.ps === 12.U, vaddr(12), vaddr(21))
             val data = entry.data(odd_even_page)
-            when(!io.r_resp.valid) {
+            when(!r_resp.valid) {
                 io.resp.exception.valid := true.B
                 io.resp.exception.bits.xcpt_cause := TLBR
             }.otherwise {

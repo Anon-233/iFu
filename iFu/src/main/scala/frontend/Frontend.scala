@@ -105,6 +105,10 @@ class Frontend extends CoreModule {
     val fetch_buffer = Module(new FetchBuffer)
     val ftq          = Module(new FetchTargetQueue)
 
+    io.core.tlb_data.r_req := itlb.io.r_req
+    itlb.io.r_resp         := io.core.tlb_data.r_resp
+    itlb.io.itlb_csr_cxt   := io.core.csr.itlb_csr_cxt
+
     io.smar <> icache.io.smar
 
     icache.io.invalidate := io.core.flush_icache
@@ -127,6 +131,8 @@ class Frontend extends CoreModule {
         s0_ghist := 0.U.asTypeOf(new GlobalHistory)
     }
 
+    itlb.io.req.vaddr       := s0_vpc
+
     icache.io.req.valid     := s0_valid
     icache.io.req.bits.addr := s0_vpc
 
@@ -145,12 +151,7 @@ class Frontend extends CoreModule {
     if(!FPGAPlatform)dontTouch(s1_ghist)
 
 // --------------------------------------------------------
-// Stage 1 -> access tlb, send paddr to icache, and use bpd.f1 to predict next pc
-    // access TLB
-    io.core.tlb_data.r_req      := itlb.io.r_req
-    itlb.io.r_resp              := io.core.tlb_data.r_resp
-    itlb.io.itlb_csr_cxt        := io.core.csr.itlb_csr_cxt
-    itlb.io.req.vaddr           := s1_vpc
+// Stage 1 -> send paddr to icache, and use bpd.f1 to predict next pc
     val f1_tlb_resp = itlb.io.resp
 
     // send paddr to icache
