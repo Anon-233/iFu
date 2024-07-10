@@ -81,6 +81,6 @@ class MMIOUnit extends Module with HasDcacheParameters {
 
         state := Mux(io.smaw.resp.wready, s_resp, s_wb)
     } .elsewhen(state === s_resp) {
-        state := Mux(io.mmioResp.ready, s_ready, s_resp)
+        state := Mux(io.mmioResp.fire, s_ready, s_resp)
     }
 }

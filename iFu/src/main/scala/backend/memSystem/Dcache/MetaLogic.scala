@@ -114,6 +114,9 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
     // age在此维护
     val ages = RegInit(VecInit(Seq.fill(nSets)(VecInit(Seq.fill(nWays)(0.U(nAgeBits.W))))))
 
+    // LRU
+    val lru_pos = RegInit(VecInit(Seq.fill(nSets)((0.U(log2Ceil(nWays).W)))))
+
     val debug_clock = RegInit(0.U(32.W))
     if(!FPGAPlatform)dontTouch(io)
     debug_clock := debug_clock + 1.U
@@ -294,12 +297,14 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                 val invalidPos =  PriorityEncoder(VecInit(rmetaSet.map((x: MetaLine) => !x.valid && !x.fixed)).asUInt)
                 // 否则从fixed为假的行中挑一个
                 // (暂时没设置真的youngest)
-                // val youngestPos = PriorityEncoder(VecInit(rmetaSet.map((x: MetaLine) => !x.fixed)).asUInt)
+                // val rand_clk_pos = PriorityEncoder(VecInit(rmetaSet.map((x: MetaLine) => !x.fixed)).asUInt)
                 
                 // 这是随机替换策略
-                val youngestPos = debug_clock(log2Ceil(nWays)-1,0)
+                val rand_clk_pos = debug_clock(log2Ceil(nWays)-1,0)
+                // LRU 替换策略
+                val lru_repl_pos = lru_pos(ridx)
                 //满了取替换，没满取无效
-                val replacePos = Mux(isfull, youngestPos, invalidPos)
+                val replacePos = Mux(isfull, rand_clk_pos , invalidPos)
 
                 // 得以替换的路
                 readResp(w).bits.pos := replacePos
@@ -330,7 +335,6 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
                 s2Refillidx := ridx
                 s2Refillpos := rpos
             }
-
             // TODO cacop_R
         }
     }
@@ -339,6 +343,10 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
         switch(RegNext(readType)){
             is(lsu_R){
                 io.lsuRead(w).resp := readResp(w)
+                // 更新lru
+                when(readResp(w).valid && readResp(w).bits.hit){
+                    lru_pos(readIdx(w)) := readResp(w).bits.pos + 1.U
+                }
             }
             is(miss_R){
                 io.missReplace.resp := readResp(w)
@@ -352,6 +360,7 @@ class DcacheMetaLogic extends Module with HasDcacheParameters{
             }
         }
     }
+
 
     // 这个hasDirty要始终通过fetchDirty返回hasDirty给外界
     io.fetchDirty.resp.bits.hasDirty := meta.io.hasDirty

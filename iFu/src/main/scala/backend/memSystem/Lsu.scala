@@ -728,7 +728,7 @@ class Lsu extends CoreModule {
         val word_addr_matches = widthMap(w => ( // same word
             stq(i).bits.addr.valid  &&
             !stq(i).bits.xcpt_valid &&
-            (s_addr(xLen - 1, 2) === lcam_addr(w)(xLen - 1, 2))
+            (s_addr(9, 2) === lcam_addr(w)(9, 2))
         ))
         val write_mask = GenByteMask(s_addr, s_uop.mem_size)
 
@@ -843,10 +843,10 @@ class Lsu extends CoreModule {
 // -----------------------------------------------------------------------
 // s1 stage: speculative wakeup
     for (w <- 0 until memWidth) {
-        /* io.core.spec_ld_wakeup(w).valid := fired_load_incoming(w) && mem_incoming_uop(w).pdst =/= 0.U */
-        io.core.spec_ld_wakeup(w).valid := will_fire_load_incoming(w) && s1_exe_req(w).bits.uop.pdst =/= 0.U
-        /* io.core.spec_ld_wakeup(w).bits  := mem_incoming_uop(w).pdst */
-        io.core.spec_ld_wakeup(w).bits  := s1_exe_req(w).bits.uop.pdst
+        io.core.spec_ld_wakeup(w).valid := fired_load_incoming(w) && mem_incoming_uop(w).pdst =/= 0.U
+        /* io.core.spec_ld_wakeup(w).valid := will_fire_load_incoming(w) && s1_exe_req(w).bits.uop.pdst =/= 0.U */
+        io.core.spec_ld_wakeup(w).bits  := mem_incoming_uop(w).pdst
+        /* io.core.spec_ld_wakeup(w).bits  := s1_exe_req(w).bits.uop.pdst */
     }
 // -----------------------------------------------------------------------
 // s3 stage: clear busy bits for store instructions (load's busy bit is cleared when it writes back)
@@ -955,6 +955,7 @@ class Lsu extends CoreModule {
             val f_idx       = wb_forward_ldq_idx(w)
             val forward_uop = ldq(f_idx).bits.uop
             val stq_e       = stq(wb_forward_stq_idx(w))
+            val addr_match  = stq_e.bits.addr.bits(xLen - 1, 2) === wb_forward_ld_addr(w)(xLen - 1, 2)
             val data_ready  = stq_e.bits.data.valid
             val live        = !IsKilledByBranch(io.core.brupdate, forward_uop)
             val storegen    = storeDataGen(
@@ -969,7 +970,7 @@ class Lsu extends CoreModule {
                 forward_uop.mem_signed
             )
 
-            ld_forward_success(w)          := data_ready && live
+            ld_forward_success(w)          := addr_match && data_ready && live
             // io.core.exe(w).iresp.valid     := /* (forward_uop.dst_rtype === RT_FIX) && */ data_ready && live
             io.core.exe(w).iresp.valid     := ld_forward_success(w)
             io.core.exe(w).iresp.bits.uop  := forward_uop
@@ -997,8 +998,8 @@ class Lsu extends CoreModule {
             || */
             (   // case 2: from dcache response
                 /* RegNext */
-                (fired_load_incoming(w) && !dcache.io.lsu.s1_kill(w)) &&
-                dcache.io.lsu.s1_hit(w)
+                RegNext(fired_load_incoming(w) && !dcache.io.lsu.s1_kill(w)) &&
+                dcache.io.lsu.s2_hit(w)
             )
         )
     ).reduce(_ && _)
