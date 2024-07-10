@@ -251,7 +251,7 @@ class iFuCore extends CoreModule {
             true.B,
             ifu.io.core.getFtqPc(1).pc,
             ftq_entry.cfiIsCall && ftq_entry.cfiIdx.bits === cfi_idx,
-            ftq_entry.cfiIsCall && ftq_entry.cfiIdx.bits === cfi_idx
+            ftq_entry.cfiIsRet && ftq_entry.cfiIdx.bits === cfi_idx
         )
 
         ifu.io.core.redirect_ghist := Mux(use_same_ghist, ftq_ghist, next_ghist)

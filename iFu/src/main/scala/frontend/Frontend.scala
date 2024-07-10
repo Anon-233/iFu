@@ -349,10 +349,10 @@ class Frontend extends CoreModule {
         f3_tgts(i) := Mux(
             brsigs.cfiType === CFI_JIRL,
             f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits, // maybe wrong
-            brsigs.target   // surelly right
+            brsigs.target   // surely right
         )
         f3_btb_mispredicts(i) := (
-            brsigs.cfiType === CFI_BL &&   // predecode can only correct JAL
+            brsigs.cfiType === CFI_BL &&   // predecode can only correct BL
             f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.valid &&
             (f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits =/= brsigs.target)
         )
