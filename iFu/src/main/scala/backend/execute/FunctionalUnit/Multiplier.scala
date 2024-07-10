@@ -62,16 +62,18 @@ class MultStar(val debug: Boolean = false, val latency: Int = 3) extends Abstrac
 
 class MultDSP48E1(val debug: Boolean = false, val latency: Int = 2) extends AbstractMult(MultFuncCode()) {
     // stage 1: calculate partial products
+    val op1 = Mux(mulFn.SorU(io.req.bits.fn) & io.req.bits.op1(xLen - 1), -io.req.bits.op1, io.req.bits.op1)
+    val op2 = Mux(mulFn.SorU(io.req.bits.fn) & io.req.bits.op2(xLen - 1), -io.req.bits.op2, io.req.bits.op2)
     val pp = RegInit(VecInit(Seq.fill(4)(0.U(xLen.W))))
     for (i <- 0 until 2) {
         for (j <- 0 until 2) {
             val lhs = Cat(
                 0.U((25 - 1 - (xLen / 2).toInt).W),   // 8 bits
-                io.req.bits.op1((i + 1) * (xLen / 2).toInt - 1, i * (xLen / 2).toInt)
+                op1((i + 1) * (xLen / 2).toInt - 1, i * (xLen / 2).toInt)
             ).asUInt
             val rhs = Cat(
                 0.U((18 - 1 - (xLen / 2).toInt).W),   // 1 bits
-                io.req.bits.op2((j + 1) * (xLen / 2).toInt - 1, j * (xLen / 2).toInt)
+                op2((j + 1) * (xLen / 2).toInt - 1, j * (xLen / 2).toInt)
             ).asUInt
             pp(i * 2 + j) := (lhs * rhs)(xLen - 1, 0) // 32 bits
         }
