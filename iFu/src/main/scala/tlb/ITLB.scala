@@ -51,55 +51,57 @@ class ITLBIO extends CoreBundle {
 class ITLB extends CoreModule {
     val io = IO(new ITLBIO)
 
-    io.resp := 0.U.asTypeOf(new DTLBResp)
-    val csr_regs = io.itlb_csr_cxt
-    val da_mode = csr_regs.crmd_da && !csr_regs.crmd_pg
-    val pg_mode = !csr_regs.crmd_da && csr_regs.crmd_pg
-    val vaddr = io.req.vaddr
-    io.r_req.vaddr := vaddr
+    io.r_req.vaddr := io.req.vaddr
     val r_resp = RegNext(io.r_resp)
-    when(vaddr(1, 0) =/= 0.U) {
+
+    val csr_regs = io.itlb_csr_cxt
+    val da_mode  = csr_regs.crmd_da && !csr_regs.crmd_pg
+    val pg_mode  = !csr_regs.crmd_da && csr_regs.crmd_pg
+
+    io.resp := 0.U.asTypeOf(new DTLBResp)
+    val vaddr = RegNext(io.req.vaddr)
+    when (vaddr(1, 0) =/= 0.U) {
         io.resp.exception.valid := true.B
         io.resp.exception.bits.xcpt_cause := ADEF
-    }.elsewhen(da_mode) {
-        io.resp.paddr := io.req.vaddr
-    }.elsewhen(pg_mode) {
+    } .elsewhen (da_mode) {
+        io.resp.paddr := vaddr
+    } .elsewhen (pg_mode) {
         val dmw0_en = (
             (csr_regs.dmw0_plv0 && csr_regs.crmd_plv === 0.U) ||
                 (csr_regs.dmw0_plv3 && csr_regs.crmd_plv === 3.U)
             ) &&
-            (io.req.vaddr(31, 29) === csr_regs.dmw0_vseg) &&
+            (vaddr(31, 29) === csr_regs.dmw0_vseg) &&
             pg_mode
         val dmw1_en = (
             (csr_regs.dmw1_plv0 && csr_regs.crmd_plv === 0.U) ||
                 (csr_regs.dmw1_plv3 && csr_regs.crmd_plv === 3.U)
             ) &&
-            (io.req.vaddr(31, 29) === csr_regs.dmw1_vseg) &&
+            (vaddr(31, 29) === csr_regs.dmw1_vseg) &&
             pg_mode
         if (!FPGAPlatform) dontTouch(dmw0_en)
         if (!FPGAPlatform) dontTouch(dmw1_en)
-        when(dmw0_en || dmw1_en) {
-            io.resp.paddr := Cat(Mux(dmw0_en, csr_regs.dmw0_pseg, csr_regs.dmw1_pseg), io.req.vaddr(28, 0))
+        when (dmw0_en || dmw1_en) {
+            io.resp.paddr := Cat(Mux(dmw0_en, csr_regs.dmw0_pseg, csr_regs.dmw1_pseg), vaddr(28, 0))
             io.resp.exception.valid := false.B
-        }.otherwise {
+        } .otherwise {
             io.resp := 0.U.asTypeOf(new DTLBResp)
             val entry = r_resp.bits.entry
             val odd_even_page = Mux(entry.meta.ps === 12.U, vaddr(12), vaddr(21))
             val data = entry.data(odd_even_page)
-            when(!r_resp.valid) {
+            when (!r_resp.valid) {
                 io.resp.exception.valid := true.B
                 io.resp.exception.bits.xcpt_cause := TLBR
-            }.otherwise {
-                when(!data.v) {
+            } .otherwise {
+                when (!data.v) {
                     io.resp.exception.valid := true.B
                     io.resp.exception.bits.xcpt_cause := PIF
-                }.elsewhen(csr_regs.crmd_plv > data.plv) {
+                } .elsewhen(csr_regs.crmd_plv > data.plv) {
                     io.resp.exception.valid := true.B
                     io.resp.exception.bits.xcpt_cause := PPI
                 }
             }
             io.resp.paddr := Mux(entry.meta.ps === 12.U,
-                Cat(data.ppn, io.req.vaddr(11, 0)), Cat(data.ppn(paddrBits - 13, 9), vaddr(20, 0)))
+                Cat(data.ppn, vaddr(11, 0)), Cat(data.ppn(paddrBits - 13, 9), vaddr(20, 0)))
         }
     }
 }
