@@ -227,7 +227,7 @@ class CntUnit(numStages: Int = 1) extends PipelinedFuncUnit (
 class PipelinedMulUnit(numStages: Int = 3) extends PipelinedFuncUnit (
     numStages = numStages,
 ) {
-    val imult = Module(new MultStar)
+    val imult = Module(new MultDSP48E1)
 
     imult.io.req.valid := io.req.valid
     imult.io.req.bits.fn := io.req.bits.uop.ctrl.op_fcn

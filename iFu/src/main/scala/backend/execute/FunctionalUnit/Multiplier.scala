@@ -60,6 +60,41 @@ class MultStar(val debug: Boolean = false, val latency: Int = 3) extends Abstrac
     }
 }
 
+class MultDSP48E1(val debug: Boolean = false, val latency: Int = 3) extends AbstractMult(MultFuncCode()) {
+    // stage 1: calculate partial products
+    val pp = RegInit(VecInit(Seq.fill(4)(0.U(xLen.W))))
+    for (i <- 0 until 2) {
+        for (j <- 0 until 2) {
+            val lhs = Cat(
+                0.U((25 - 1 - (xLen / 2).toInt).W),   // 8 bits
+                io.req.bits.op1((i + 1) * (xLen / 2).toInt - 1, i * (xLen / 2).toInt)
+            ).asUInt
+            val rhs = Cat(
+                0.U((18 - 1 - (xLen / 2).toInt).W),   // 1 bits
+                io.req.bits.op2((j + 1) * (xLen / 2).toInt - 1, j * (xLen / 2).toInt)
+            ).asUInt
+            pp(i * 2 + j) := (lhs * rhs)(xLen - 1, 0) // 32 bits
+        }
+    }
+    // stage 2: calculate sum
+    var res = 0.U((2 * xLen).W)
+    for (i <- 0 until 2) {
+        for (j <- 0 until 2) {
+            res = res + Cat(pp(i * 2 + j), 0.U((((i + j) * (xLen / 2).toInt).W))).asUInt
+        }
+    }
+    val sign = RegNext(
+        mulFn.SorU(io.req.bits.fn) & (io.req.bits.op1(xLen - 1) ^ io.req.bits.op2(xLen - 1))
+    )
+    val isL     = RegNext(mulFn.LorH(io.req.bits.fn))
+    val data    = Mux(sign, -res, res)
+    val result  = Mux(isL, data(xLen - 1, 0), data(2 * xLen - 1, xLen))
+
+    require(latency >= 3)
+    io.resp.valid     := RegNext(RegNext(io.req.valid))
+    io.resp.bits.data := RegNext(result)
+}
+
 class MultWallace extends AbstractMult(MultFuncCode()) {
     // TODO: implement Wallace tree multiplier
 }
