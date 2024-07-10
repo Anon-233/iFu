@@ -23,7 +23,7 @@ class PredState extends Bundle {
     def update(taken: Bool) = {
         val next = Cat(
             taken ^ state(0),
-            ((~taken).asUInt & (~state(1)) & state(0)) | (taken & (state(1) | state(0)))
+            (!taken & !state(1) & state(0)) | (taken & (state(1) | state(0)))
         )
         this.state := next
     }
@@ -80,7 +80,7 @@ class FaUBtbPredictior extends Module with HasUbtbParameters {
 
         io.s1targs(w).valid := resp_valid
         io.s1targs(w).bits  := (
-            (io.s1pc | (w << 2).U).asSInt + btb(s1_hit_ways(w))(w).offset
+            (fetchAlign(io.s1pc) | (w << 2).U).asSInt + btb(s1_hit_ways(w))(w).offset
         ).asUInt
         io.s1br(w)  := resp_valid &&  entry_meta.is_br
         io.s1jal(w) := resp_valid && !entry_meta.is_br
@@ -117,10 +117,8 @@ class FaUBtbPredictior extends Module with HasUbtbParameters {
     val s1_update_way     = s1_update_ways(s1_update_cfi_idx)
 
     // we don't care if offset > 2^13, BTB will handle it
-    val new_offset = (
-        (s1_update.bits.target.asSInt) -
-        (s1_update.bits.pc.asUInt + (s1_update_cfi_idx << 2)).asSInt
-    )
+    val new_offset = s1_update.bits.target.asSInt -
+    (fetchAlign(s1_update.bits.pc) | (s1_update_cfi_idx << 2).asUInt).asSInt
 
     // update target offset
     val wen = (

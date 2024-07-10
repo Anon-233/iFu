@@ -150,7 +150,7 @@ class BranchPredictor extends Module with HasBPUParameters
 
             // btb推测为taken为真当且仅当检测到jal指令，这时bim置信度显然没有必然跳转的jal高，取btb的taken
             when(btb.io.s2taken(w)) {
-              io.resp.f2.predInfos(w).taken := btb.io.s2taken(w)
+              io.resp.f2.predInfos(w).taken := true.B
             }
         }
     }

@@ -102,7 +102,7 @@ class BTBPredictor extends Module with HasBtbParameters{
         io.s2targs(w).valid := RegNext(resp_valid)
         io.s2targs(w).bits  := RegNext(Mux(entry_btb.extended,
                 s1_ebtb,
-                ((s1_pc | (w << 2).asUInt).asSInt + entry_btb.offset.asSInt).asUInt
+                ((fetchAlign(s1_pc) | (w << 2).asUInt).asSInt + entry_btb.offset.asSInt).asUInt
         ))
     }
 // ---------------------------------------------
@@ -136,7 +136,7 @@ class BTBPredictor extends Module with HasBtbParameters{
     val max_offset = Cat(0.B, ~0.U((offsetSz - 1).W)).asSInt
     val min_offset = Cat(1.B,  0.U((offsetSz - 1).W)).asSInt
     val new_offset = s1_update.bits.target.asSInt -
-    (s1_update.bits.pc + (s1_update.bits.cfiIdx.bits << 2)).asSInt
+    (fetchAlign(s1_update.bits.pc) | (s1_update.bits.cfiIdx.bits << 2).asUInt).asSInt
 
     val need_extend = new_offset > max_offset || new_offset < min_offset
 
