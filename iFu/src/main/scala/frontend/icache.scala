@@ -33,87 +33,73 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 /*---------------------------------------------------------------------*/
 //========== ----i$ params--- ==========
     val fetchesPerLine = iParams.fetchesPerLine
-    val lineBytes = iParams.lineBytes
-    val smaBytes = io.smar.resp.rdata.getWidth / 8
-    val refillCycles = iParams.lineBytes / smaBytes
+    val lineBytes      = iParams.lineBytes
+    val smaBytes       = io.smar.resp.rdata.getWidth / 8
     require(
         iParams.lineBytes % smaBytes == 0,
         "LineBytes must be divisible by data width."
-    )
-    require(
-        isPow2(refillCycles),
-        "Refill cycles must be a power of 2."
     )
 
     val packetBits = frontendParams.fetchBytes * 8
 //========== ----i$ params--- ==========
 /*---------------------------------------------------------------------*/
 //========== ----i$ funcs---- ==========
+    def getTag(addr: UInt) = addr(iParams.tagBits + iParams.untagBits - 1, iParams.untagBits)
     def getSet(addr: UInt) = addr(iParams.untagBits - 1, iParams.untagBits - iParams.indexBits)
-
-    //========== ----i$ funcs---- ==========
+//========== ----i$ funcs---- ==========
 /*---------------------------------------------------------------------*/
 //========== ----i$ body----- ==========
-    val s2_miss = Wire(Bool())
     val s_Normal :: s_Fetch :: Nil = Enum(2)
     val iCacheState = RegInit(s_Normal)
-    val replWay = LFSR(16, s2_miss)(log2Ceil(iParams.nWays) - 1, 0)
-    val validArray = RegInit(0.U((iParams.nSets * iParams.nWays).W))
-    val tagArray = SyncReadMem(
+
+    val s2_miss     = Wire(Bool())
+    val replWay     = LFSR(16, s2_miss)(log2Ceil(iParams.nWays) - 1, 0)
+
+    val validArray  = RegInit(0.U((iParams.nSets * iParams.nWays).W))
+    val tagArray    = SyncReadMem(
         iParams.nSets,
         Vec(iParams.nWays, UInt(iParams.tagBits.W))
     )
-    val dataArray =
-        (0 until iParams.nWays).map{
-            x => SyncReadMem(
-                iParams.nSets * fetchesPerLine,
-                UInt(packetBits.W)
-            )
-        }
+    val dataArray   = SyncReadMem(
+        iParams.nSets * iParams.nWays * fetchesPerLine,
+        UInt(packetBits.W)
+    )
 //========== ----i$ body----- ==========
 /*---------------------------------------------------------------------*/
 //========== ----S0 Stage---- ==========
     val s0_valid = io.req.fire
     val s0_vaddr = io.req.bits.addr
-
-    val s0_tagReadEn = s0_valid
 //========== ----S0 Stage---- ==========
 /*---------------------------------------------------------------------*/
 //========== S0 - S1 Register ==========
-    val tagReadData = tagArray.read(
-        getSet(s0_vaddr),
-        s0_tagReadEn
-    )
-
-    val s1_valid = RegNext(s0_valid)
+    val s1_valid    = RegNext(s0_valid)
+    val s1_idx      = RegNext(getSet(s0_vaddr))
+    val s1_fetchIdx = RegNext(s0_vaddr(iParams.offsetBits - 1, log2Ceil(fetchBytes)))
+    val tagReadData = tagArray.read(getSet(s0_vaddr))
 //========== S0 - S1 Register ==========
 /*---------------------------------------------------------------------*/
 //========== ----S1 Stage---- ==========
     val s1_tagHit = Wire(Vec(iParams.nWays, Bool()))
-
     for (i <- 0 until iParams.nWays) {
-        val s1_idx = getSet(io.s1_paddr)
-        val s1_tag = io.s1_paddr(iParams.tagBits + iParams.untagBits -1, iParams.untagBits)
+        val s1_tag      = getTag(io.s1_paddr)
         val s1_validBit = validArray(Cat(i.U(log2Ceil(iParams.nWays).W), s1_idx))
-        val tag = tagReadData(i)
+        val tag         = tagReadData(i)
 
         s1_tagHit(i) := s1_validBit && tag === s1_tag
     }
-    val s1_hit = s1_tagHit.reduce(_||_)
-    val s1_dataOut = Wire(Vec(iParams.nWays, UInt(packetBits.W)))
+    val s1_hit     = s1_tagHit.asUInt.orR
+    val s1_hit_pos = OHToUInt(s1_tagHit)
 //========== ----S1 Stage---- ==========
 /*---------------------------------------------------------------------*/
 //========== S1 - S2 Register ==========
-    val s2_valid = RegNext(s1_valid && !io.s1_kill)
-    val s2_tagHit = RegNext(s1_tagHit)
-    val s2_hit = RegNext(s1_hit)
-    val s2_dataOut = RegNext(s1_dataOut)
+    val s2_valid   = RegNext(s1_valid && !io.s1_kill)
+    val s2_hit     = RegNext(s1_hit)
+    val s2_hit_pos = RegNext(s1_hit_pos)
+    val s2_data    = dataArray.read(Cat(s1_idx, s1_hit_pos, s1_fetchIdx))
 //========== S1 - S2 Register ==========
 /*---------------------------------------------------------------------*/
 //========== ----S2 Stage---- ==========
     s2_miss := s2_valid && !s2_hit && (iCacheState === s_Normal)
-
-    val s2_data = Mux1H(s2_tagHit, s2_dataOut)
 //========== ----S2 Stage---- ==========
 /*---------------------------------------------------------------------*/
 //========== --inv i$ logic-- ==========
@@ -132,7 +118,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         io.s1_paddr,
         s1_valid && !(s2_miss || iCacheState === s_Fetch)
     )
-    val refillTag = refillPaddr(iParams.tagBits + iParams.untagBits - 1, iParams.untagBits)
+    val refillTag = getTag(refillPaddr)
     val refillIdx = getSet(refillPaddr)
 
     var refillEn: Bool = null
@@ -140,22 +126,23 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     var refillLast: Bool = null
     val needBuffer = smaBytes != fetchBytes
     if (!needBuffer) {
-        refillEn = io.smar.req.arvalid && io.smar.resp.rvalid
+        refillEn   = io.smar.req.arvalid && io.smar.resp.rvalid
         refillData = io.smar.resp.rdata
         refillLast = io.smar.resp.rvalid && io.smar.resp.rlast
     } else {
         val refillBufWidth = fetchBytes / smaBytes
-        val refillBufCnt = RegInit(0.U(log2Ceil(refillBufWidth).W))
-        val refillBuf = RegInit(
+        val refillBufCnt   = RegInit(0.U(log2Ceil(refillBufWidth).W))
+        val refillBuf      = RegInit(
             VecInit(Seq.fill(refillBufWidth)(0.U((smaBytes * 8).W)))
         )
+
         val refillBufWriteEn = io.smar.req.arvalid && io.smar.resp.rvalid
         when (refillBufWriteEn) {
-            refillBufCnt := refillBufCnt + 1.U
+            refillBufCnt            := refillBufCnt + 1.U
             refillBuf(refillBufCnt) := io.smar.resp.rdata
         }
 
-        refillEn = RegNext(refillBufWriteEn) && refillBufCnt === 0.U
+        refillEn   = RegNext(refillBufWriteEn) && refillBufCnt === 0.U
         refillData = refillBuf.asUInt
         refillLast = RegNext(io.smar.resp.rvalid && io.smar.resp.rlast)
     }
@@ -165,21 +152,13 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         refillCnt := refillCnt + 1.U
     }
 
-    for (i <- 0 until iParams.nWays) {
-        val dataArrayIdx = Mux(
-            refillEn,
-            Cat(refillIdx, refillCnt),
-            Cat(getSet(s0_vaddr), s0_vaddr(iParams.offsetBits - 1, log2Ceil(fetchBytes)))
-        )
-        // read data
-        s1_dataOut(i) := dataArray(i).read(dataArrayIdx, s0_valid)
-        // write data
-        val writeEn = (refillEn && !invalidated) && replWay === i.U
-        when (writeEn) {
-            dataArray(i).write(dataArrayIdx, refillData)
-        }
+    val writeEn = refillEn
+    val writeIdx = Cat(refillIdx, replWay, refillCnt)
+    when (writeEn) {
+        dataArray.write(writeIdx, refillData)
     }
-    when(refillLast){
+
+    when (refillLast) {
         tagArray.write(
             refillIdx,
             VecInit(Seq.fill(iParams.nWays)(refillTag)),
@@ -189,7 +168,6 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
             Cat(replWay, refillIdx), refillLast && !invalidated
         )
     }
-
 
 //========== --Refill Logic-- ==========
 /*---------------------------------------------------------------------*/
@@ -213,7 +191,6 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     io.smar.req.araddr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
     io.smar.req.arburst := AXI3Parameters.BURST_INCR
     io.smar.req.arlen := AXI3Parameters.MLEN16
-    require(refillCycles == 16)
     require(iParams.lineBytes == 64)
 //========== ------ IO ------ ==========
 }
