@@ -520,6 +520,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
     } .elsewhen (s2state === s_replace_find) {
         // 激活wfu在1阶段就做完了
         // 不管readOnly，而是直接清除这一行
+        meta.io.replaceLogout.valid        := s2valid(0)
         meta.io.replaceLogout.bits.setvalid.valid := true.B
         meta.io.replaceLogout.bits.setvalid.bits  := false.B
     } .elsewhen (s2state === s_fence_read) {
