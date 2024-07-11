@@ -65,7 +65,8 @@ class FaUBtbPredictior extends Module with HasUbtbParameters {
 
 // ---------------------------------------------
 //      Predict Logic
-    val s1_tag = fetchIdx(io.s1pc)
+    // val s1_tag = fetchIdx(io.s1pc)
+    val s1_tag = io.s1pc(tagSz + log2Ceil(fetchBytes) - 1, log2Ceil(fetchBytes))
     val s1_hit_OHs = VecInit((0 until fetchWidth) map { i =>
         VecInit((0 until nWays) map { w =>
             (meta(w)(i).tag === s1_tag) && valid(Cat(w.U(log2Ceil(nWays).W), i.U(log2Ceil(fetchWidth).W)))
@@ -154,7 +155,8 @@ class FaUBtbPredictior extends Module with HasUbtbParameters {
         when (branch_taken) {
             wastaken(w)      :=  (s1_update_cfi_idx === w.U && s1_update.bits.cfiIdx.valid &&
                                 (s1_update.bits.cfiTaken || s1_update.bits.cfiIsJal))
-            val s1_update_tag = fetchIdx(s1_update.bits.pc)
+            /* val s1_update_tag = fetchIdx(s1_update.bits.pc) */
+            val s1_update_tag = s1_update.bits.pc(tagSz + log2Ceil(fetchBytes) - 1, log2Ceil(fetchBytes))
 
             valid(Cat(s1_update_way, w.U(log2Ceil(fetchWidth).W))) := true.B
             meta(s1_update_way)(w).is_br := s1_update.bits.brMask(w)
