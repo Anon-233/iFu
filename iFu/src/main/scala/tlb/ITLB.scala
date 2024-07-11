@@ -54,13 +54,15 @@ object L0ITLBEntry {
         e
     }
 
-    def fake_entry(vppn: UInt) = {
+    def fake_entry(vppn: UInt, asid: UInt) = {
         val e = Wire(new L0ITLBEntry)
         e := DontCare
         e.exist           := false.B
-        e.entry.meta.e    := true.B
-        e.entry.meta.g    := true.B
         e.entry.meta.vppn := vppn
+        e.entry.meta.ps   := 12.U
+        e.entry.meta.g    := false.B
+        e.entry.meta.asid := asid
+        e.entry.meta.e    := true.B
         e
     }
 }
@@ -172,7 +174,7 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule {
         l0_entry(refill_idx) := Mux(
             r_resp.valid,
             L0ITLBEntry.new_entry(r_resp.bits.entry),
-            L0ITLBEntry.fake_entry(refill_vppn)
+            L0ITLBEntry.fake_entry(refill_vppn, csr_regs.asid_asid)
         )
         state_nxt := s_ready
     }
