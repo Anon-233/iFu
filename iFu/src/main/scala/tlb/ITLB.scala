@@ -177,6 +177,6 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule {
         state_nxt := s_ready
     }
     when (csr_regs.inv_l0_tlb) {
-        l0_entry map { e => e := L0ITLBEntry.new_entry(0.U) }
+        l0_entry map { e => e.entry.meta.e := false.B }
     }
 }
