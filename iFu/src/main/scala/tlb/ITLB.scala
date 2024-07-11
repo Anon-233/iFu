@@ -129,7 +129,7 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule {
             switch (state) {
                 is (s_ready) {
                     when (!l0_hit) {
-                        state_nxt := s_refill
+                        state_nxt := Mux(io.req.valid, s_refill, s_ready)
                         io.resp.exception.valid           := true.B
                         io.resp.exception.bits.xcpt_cause := CauseCode.MINI_EXCEPTION_L0TLB_MISS
                     } .elsewhen (!l0_hit_entry.exist) {
