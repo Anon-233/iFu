@@ -7,6 +7,7 @@ import iFu.common._
 import iFu.common.Consts._
 
 class ITLBCsrContext extends CoreBundle {
+    val inv_l0_tlb = Bool()
     val asid_asid = UInt(10.W)
 
     val crmd_da = Bool()
@@ -85,7 +86,7 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule {
         Seq.fill(num_l0_itlb_entries)(0.U.asTypeOf(new L0ITLBEntry))
     ))
 
-    val csr_regs = RegNext(io.itlb_csr_cxt)
+    val csr_regs = io.itlb_csr_cxt
     val da_mode  =  csr_regs.crmd_da && !csr_regs.crmd_pg
     val pg_mode  = !csr_regs.crmd_da &&  csr_regs.crmd_pg
 
@@ -174,5 +175,8 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule {
             L0ITLBEntry.fake_entry(refill_vppn)
         )
         state_nxt := s_ready
+    }
+    when (csr_regs.inv_l0_tlb) {
+        l0_entry map { e => e := L0ITLBEntry.new_entry(0.U) }
     }
 }

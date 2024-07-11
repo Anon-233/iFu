@@ -455,6 +455,11 @@ class CSRFile extends CoreModule {
 
     io.lsu_csr_ctx.llbit := csrReg.llbctl.rollb
 
+    io.itlb_csr_ctx.inv_l0_tlb := (
+        io.csr.instr === TLB_W ||
+        io.csr.instr === TLB_F ||
+        io.csr.instr === TLB_I
+    )
     io.itlb_csr_ctx.asid_asid := csrReg.asid.asid
     io.itlb_csr_ctx.crmd_da := csrReg.crmd.da
     io.itlb_csr_ctx.crmd_pg := csrReg.crmd.pg
