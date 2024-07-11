@@ -137,13 +137,6 @@ class DcacheMeta extends Module with HasDcacheParameters{
             // fixeds(widx)(wpos) := wreq.setfixed.bits
             fixeds(widx) := (fixeds(widx) & ~wmask) | (VecInit(Seq.fill(nWays)(wreq.setfixed.bits)).asUInt & wmask)
         }
-
-        when(wreq.isFence){
-            // set all valid bits to false
-            for(i <- 0 until nWays){
-                valids := 0.U.asTypeOf(VecInit(Seq.fill(nSets)(0.U(nWays.W))))
-            }
-        }
     }
     
     io.write.resp.valid := RegNext(wvalid)
