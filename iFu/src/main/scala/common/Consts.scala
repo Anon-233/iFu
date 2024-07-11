@@ -37,7 +37,8 @@ object CauseCode {
     // 映射地址模式下 访存地址不落在任何有效的直接映射窗口中 且在 TLB 中找不到对应的表项
     def TLBR = Cat(0x3f.U(ecodeBits.W), 0x0.U(subcodeBits.W))
 
-    def MINI_EXCEPTION_MEM_ORDERING = Cat(0x13.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    def MINI_EXCEPTION_MEM_ORDERING = Cat(0x1a.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    def MINI_EXCEPTION_L0TLB_MISS   = Cat(0x1a.U(ecodeBits.W), 0x1.U(subcodeBits.W))
 }
 
 object Consts {

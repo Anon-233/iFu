@@ -131,8 +131,6 @@ class Frontend extends CoreModule {
         s0_ghist := 0.U.asTypeOf(new GlobalHistory)
     }
 
-    itlb.io.req.vaddr       := s0_vpc
-
     icache.io.req.valid     := s0_valid
     icache.io.req.bits.addr := s0_vpc
 
@@ -152,6 +150,8 @@ class Frontend extends CoreModule {
 
 // --------------------------------------------------------
 // Stage 1 -> send paddr to icache, and use bpd.f1 to predict next pc
+    itlb.io.req.valid      := s1_valid
+    itlb.io.req.bits.vaddr := s1_vpc
     val f1_tlb_resp = itlb.io.resp
 
     // send paddr to icache

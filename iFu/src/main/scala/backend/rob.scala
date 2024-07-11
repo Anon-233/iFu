@@ -287,7 +287,10 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     }
 
     exceptionThrown := willThrowException
-    val isMiniException = io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING
+    val isMiniException = (
+        io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING ||
+        io.com_xcpt.bits.cause === MINI_EXCEPTION_L0TLB_MISS
+    )
     io.com_xcpt.valid := exceptionThrown && !isMiniException
     io.com_xcpt.bits.cause := rXcptUop.xcpt_cause
     io.com_xcpt.bits.vaddrWriteEnable := rXcptUop.vaddrWriteEnable
