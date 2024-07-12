@@ -6,6 +6,8 @@ import chisel3._
 import chisel3.util._
 import chisel3.util.random.LFSR
 
+import iFu.util._
+
 import iFu.frontend.FrontendUtils._
 
 class UBTBEntry extends Bundle with HasUbtbParameters {
@@ -69,7 +71,8 @@ class FaUBtbPredictior extends Module with HasUbtbParameters {
     val s1_tag = io.s1pc(tagSz + log2Ceil(fetchBytes) - 1, log2Ceil(fetchBytes))
     val s1_hit_OHs = VecInit((0 until fetchWidth) map { i =>
         VecInit((0 until nWays) map { w =>
-            (meta(w)(i).tag === s1_tag) && valid(Cat(w.U(log2Ceil(nWays).W), i.U(log2Ceil(fetchWidth).W)))
+            /* (meta(w)(i).tag === s1_tag) && valid(Cat(w.U(log2Ceil(nWays).W), i.U(log2Ceil(fetchWidth).W))) */
+            IsEqual(meta(w)(i).tag, s1_tag) && valid(Cat(w.U(log2Ceil(nWays).W), i.U(log2Ceil(fetchWidth).W)))
         })
     })
     val s1_hits = s1_hit_OHs.map(_.asUInt.orR)

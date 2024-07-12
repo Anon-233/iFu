@@ -658,11 +658,13 @@ class Lsu extends CoreModule {
     val mem_forward_ldq_idx = lcam_ldq_idx
     val mem_forward_ld_addr = lcam_addr
     val mem_forward_stq_idx = Wire(Vec(memWidth, UInt(log2Ceil(numStqEntries).W)))
+    val mem_forward_st_addr = Wire(Vec(memWidth, UInt((xLen - 20).W)))
 
     val wb_forward_valid    = RegNext(mem_forward_valid)
     val wb_forward_ldq_idx  = RegNext(mem_forward_ldq_idx)
     val wb_forward_ld_addr  = RegNext(mem_forward_ld_addr)
     val wb_forward_stq_idx  = RegNext(mem_forward_stq_idx)
+    val wb_forward_st_addr  = RegNext(mem_forward_st_addr)
 // -----------------------------------------------------------------------
 // s2 stage: st-ld search for ordering failures
     // loads which we will throws a mini-exception
@@ -728,7 +730,8 @@ class Lsu extends CoreModule {
         val word_addr_matches = widthMap(w => ( // same word
             stq(i).bits.addr.valid  &&
             !stq(i).bits.xcpt_valid &&
-            (s_addr(9, 2) === lcam_addr(w)(9, 2))
+            /* (s_addr(19, 2) === lcam_addr(w)(19, 2)) */
+            IsEqual(s_addr(19, 2), lcam_addr(w)(19, 2))
         ))
         val write_mask = GenByteMask(s_addr, s_uop.mem_size)
 
@@ -791,6 +794,9 @@ class Lsu extends CoreModule {
         !io.core.exception && !RegNext(io.core.exception)
     ))
     mem_forward_stq_idx := forwarding_idx
+    mem_forward_st_addr zip forwarding_idx map {
+        case (st_addr, idx) => st_addr := stq(idx).bits.addr.bits(xLen - 1, 20)
+    }
 // -----------------------------------------------------------------------
 // s2 stage: exception detection
     // one exception port, but multiple causes!
@@ -955,7 +961,8 @@ class Lsu extends CoreModule {
             val f_idx       = wb_forward_ldq_idx(w)
             val forward_uop = ldq(f_idx).bits.uop
             val stq_e       = stq(wb_forward_stq_idx(w))
-            val addr_match  = stq_e.bits.addr.bits(xLen - 1, 2) === wb_forward_ld_addr(w)(xLen - 1, 2)
+            /* val addr_match  = stq_e.bits.addr.bits(xLen - 1, 20) === wb_forward_ld_addr(w)(xLen - 1, 20) */
+            val addr_match  = IsEqual(wb_forward_st_addr(w), wb_forward_ld_addr(w)(xLen - 1, 20))
             val data_ready  = stq_e.bits.data.valid
             val live        = !IsKilledByBranch(io.core.brupdate, forward_uop)
             val storegen    = storeDataGen(

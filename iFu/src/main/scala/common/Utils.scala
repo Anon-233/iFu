@@ -8,6 +8,12 @@ import iFu.backend.HasUop
 import iFu.common._
 import iFu.common.Consts._
 
+object IsEqual {
+    def apply(a: UInt, b: UInt): Bool = {
+        !((a ^ b).orR)
+    }
+}
+
 object MaskLower {
     def apply(in: UInt): UInt = {
         val n = in.getWidth
