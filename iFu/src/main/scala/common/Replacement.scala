@@ -26,8 +26,14 @@ class PseudoLRU(nWays: Int) extends ReplPolicy(nWays) {
             assert(right_subtree.getWidth == num_ways / 2 - 1)
             val direction = !access_way(log2Ceil(num_ways) - 1)
             return Cat(direction,
-                Mux(direction, update_tree(left_subtree , access_way, num_ways / 2), left_subtree),
-                Mux(direction, right_subtree, update_tree(right_subtree, access_way, num_ways / 2))
+                Mux(direction,
+                    update_tree(left_subtree, access_way(log2Ceil(num_ways) - 2, 0), num_ways / 2),
+                    left_subtree
+                ),
+                Mux(direction,
+                    right_subtree,
+                    update_tree(right_subtree, access_way(log2Ceil(num_ways) - 2, 0), num_ways / 2)
+                )
             )
         }
     }
