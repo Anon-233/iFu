@@ -53,7 +53,12 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val iCacheState = RegInit(s_Normal)
 
     val s2_miss     = Wire(Bool())
-    val replWay     = LFSR(16, s2_miss)(log2Ceil(iParams.nWays) - 1, 0)
+    /* val replWay     = LFSR(16, s2_miss)(log2Ceil(iParams.nWays) - 1, 0) */
+    val repls       = (0 until iParams.nSets) map { i =>
+        val repl = Module(new PseudoLRU(iParams.nWays))
+        repl.io
+    }
+    val replWays    = VecInit(repls map { _.repl_way })
 
     val validArray  = RegInit(0.U((iParams.nSets * iParams.nWays).W))
     val tagArray    = SyncReadMem(
@@ -93,6 +98,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 /*---------------------------------------------------------------------*/
 //========== S1 - S2 Register ==========
     val s2_valid   = RegNext(s1_valid && !io.s1_kill)
+    val s2_idx     = RegNext(s1_idx)
     val s2_hit     = RegNext(s1_hit)
     val s2_hit_pos = RegNext(s1_hit_pos)
     val s2_data    = dataArray.read(Cat(s1_idx, s1_hit_pos, s1_fetchIdx))
@@ -100,6 +106,16 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 /*---------------------------------------------------------------------*/
 //========== ----S2 Stage---- ==========
     s2_miss := s2_valid && !s2_hit && (iCacheState === s_Normal)
+
+    repls.zipWithIndex.foreach { case (repl, i) =>
+        repl.access.valid := (
+            (iCacheState === s_Normal) &&
+            (i.U === s2_idx)           &&
+            s2_valid                   &&
+            s2_hit
+        )
+        repl.access.bits  := s2_hit_pos
+    }
 //========== ----S2 Stage---- ==========
 /*---------------------------------------------------------------------*/
 //========== --inv i$ logic-- ==========
@@ -153,7 +169,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     }
 
     val writeEn = refillEn
-    val writeIdx = Cat(refillIdx, replWay, refillCnt)
+    val writeIdx = Cat(refillIdx, replWays(refillIdx), refillCnt)
     when (writeEn) {
         dataArray.write(writeIdx, refillData)
     }
@@ -162,10 +178,10 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         tagArray.write(
             refillIdx,
             VecInit(Seq.fill(iParams.nWays)(refillTag)),
-            Seq.tabulate(iParams.nWays)(replWay === _.U)
+            Seq.tabulate(iParams.nWays)(replWays(refillIdx) === _.U)
         )
         validArray := validArray.bitSet(
-            Cat(replWay, refillIdx), refillLast && !invalidated
+            Cat(replWays(refillIdx), refillIdx), refillLast && !invalidated
         )
     }
 
