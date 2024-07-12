@@ -520,8 +520,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
     } .elsewhen (s2state === s_replace_find) {
         // 激活wfu在1阶段就做完了
         // 不管readOnly，而是直接清除这一行
+        meta.io.replaceLogout.valid        := s2valid(0)
         meta.io.replaceLogout.bits.setvalid.valid := true.B
         meta.io.replaceLogout.bits.setvalid.bits  := false.B
+        
+        meta.io.replaceLogout.bits.idx := getIdx(s2req(0).addr)
+        meta.io.replaceLogout.bits.pos := s2pos
     } .elsewhen (s2state === s_fence_read) {
         // 对于脏的行，激活wfu在1阶段就做完了,但是对于那些没有脏的，或者无效的行，此处需要由fence_read动用lineClear
         when (s2fence_read_not_dirtyline) {
