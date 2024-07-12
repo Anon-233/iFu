@@ -53,7 +53,7 @@ class FrontendTLBDataIO extends CoreBundle {
 }
 
 class FrontendCsrIO extends CoreBundle {
-    val itlb_csr_cxt = Input(new ITLBCsrContext)
+    val itlb_csr_cxt = Input(new TLBCsrContext)
 }
 
 class FrontendToCoreIO extends CoreBundle {

@@ -79,7 +79,7 @@ class LSUCoreIO extends CoreBundle {
 }
 
 class LSUCsrIO extends CoreBundle {
-    val dtlb_csr_ctx = Input(new DTLBCsrContext)
+    val dtlb_csr_ctx = Input(new TLBCsrContext)
     val llbit        = Input(Bool())
 }
 
@@ -306,10 +306,11 @@ class Lsu extends CoreModule {
     val s0_exe_tlb_vaddr = widthMap(w => io.core.exe(w).req.bits.addr)
 
     for (w <- 0 until memWidth) {
-        dtlb.io.req(w).vaddr   := s0_exe_tlb_vaddr(w)
-        dtlb.io.req(w).size    := s0_exe_tlb_uop(w).mem_size
-        dtlb.io.req(w).use_stq := s0_exe_tlb_uop(w).use_stq
-        dtlb.io.req(w).use_ldq := s0_exe_tlb_uop(w).use_ldq
+        dtlb.io.req(w).valid        := s0_exe_tlb_valid(w)
+        dtlb.io.req(w).bits.vaddr   := s0_exe_tlb_vaddr(w)
+        dtlb.io.req(w).bits.size    := s0_exe_tlb_uop(w).mem_size
+        dtlb.io.req(w).bits.use_stq := s0_exe_tlb_uop(w).use_stq
+        dtlb.io.req(w).bits.use_ldq := s0_exe_tlb_uop(w).use_ldq
     }
 // -----------------------------------------------------------------------
 // s1 stage: handle tlb response

@@ -156,7 +156,7 @@ class CSRFileIO extends CoreBundle {
     val r2       = Input(UInt(32.W))
 
     val lsu_csr_ctx  = Output(new LSUCsrIO)
-    val itlb_csr_ctx = Output(new ITLBCsrContext)
+    val itlb_csr_ctx = Output(new TLBCsrContext)
     val tlb_data     = Flipped(new TLBDataCSRIO)
 }
 
@@ -438,43 +438,47 @@ class CSRFile extends CoreModule {
 
 // --------------------------------------------------------
 // below code is for tlb
-    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_da   := csrReg.crmd.da
-    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_pg   := csrReg.crmd.pg
-    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_datm := csrReg.crmd.datm
-    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_plv  := csrReg.crmd.plv
-    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_mat  := csrReg.dmw0.mat
-    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_mat  := csrReg.dmw1.mat
-    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_plv0 := csrReg.dmw0.plv0
-    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_plv3 := csrReg.dmw0.plv3
-    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_plv0 := csrReg.dmw1.plv0
-    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_plv3 := csrReg.dmw1.plv3
-    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_pseg := csrReg.dmw0.pseg
-    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_vseg := csrReg.dmw0.vseg
-    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_pseg := csrReg.dmw1.pseg
-    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_vseg := csrReg.dmw1.vseg
-
-    io.lsu_csr_ctx.llbit := csrReg.llbctl.rollb
-
-    io.itlb_csr_ctx.inv_l0_tlb := (
+    val inv_l0_tlb = (
         io.cmd === TLB_W ||
         io.cmd === TLB_F ||
         io.cmd === TLB_I
     )
-    io.itlb_csr_ctx.asid_asid := csrReg.asid.asid
-    io.itlb_csr_ctx.crmd_da := csrReg.crmd.da
-    io.itlb_csr_ctx.crmd_pg := csrReg.crmd.pg
-    io.itlb_csr_ctx.crmd_datm := csrReg.crmd.datm
-    io.itlb_csr_ctx.crmd_plv := csrReg.crmd.plv
-    io.itlb_csr_ctx.dmw0_mat := csrReg.dmw0.mat
-    io.itlb_csr_ctx.dmw1_mat := csrReg.dmw1.mat
-    io.itlb_csr_ctx.dmw0_plv0 := csrReg.dmw0.plv0
-    io.itlb_csr_ctx.dmw0_plv3 := csrReg.dmw0.plv3
-    io.itlb_csr_ctx.dmw1_plv0 := csrReg.dmw1.plv0
-    io.itlb_csr_ctx.dmw1_plv3 := csrReg.dmw1.plv3
-    io.itlb_csr_ctx.dmw0_pseg := csrReg.dmw0.pseg
-    io.itlb_csr_ctx.dmw0_vseg := csrReg.dmw0.vseg
-    io.itlb_csr_ctx.dmw1_pseg := csrReg.dmw1.pseg
-    io.itlb_csr_ctx.dmw1_vseg := csrReg.dmw1.vseg
+
+    io.lsu_csr_ctx.dtlb_csr_ctx.inv_l0_tlb := inv_l0_tlb
+    io.lsu_csr_ctx.dtlb_csr_ctx.asid_asid  := csrReg.asid.asid
+    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_da    := csrReg.crmd.da
+    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_pg    := csrReg.crmd.pg
+    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_datm  := csrReg.crmd.datm
+    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_plv   := csrReg.crmd.plv
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_mat   := csrReg.dmw0.mat
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_mat   := csrReg.dmw1.mat
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_plv0  := csrReg.dmw0.plv0
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_plv3  := csrReg.dmw0.plv3
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_plv0  := csrReg.dmw1.plv0
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_plv3  := csrReg.dmw1.plv3
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_pseg  := csrReg.dmw0.pseg
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_vseg  := csrReg.dmw0.vseg
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_pseg  := csrReg.dmw1.pseg
+    io.lsu_csr_ctx.dtlb_csr_ctx.dmw1_vseg  := csrReg.dmw1.vseg
+
+    io.lsu_csr_ctx.llbit := csrReg.llbctl.rollb
+
+    io.itlb_csr_ctx.inv_l0_tlb := inv_l0_tlb
+    io.itlb_csr_ctx.asid_asid  := csrReg.asid.asid
+    io.itlb_csr_ctx.crmd_da    := csrReg.crmd.da
+    io.itlb_csr_ctx.crmd_pg    := csrReg.crmd.pg
+    io.itlb_csr_ctx.crmd_datm  := csrReg.crmd.datm
+    io.itlb_csr_ctx.crmd_plv   := csrReg.crmd.plv
+    io.itlb_csr_ctx.dmw0_mat   := csrReg.dmw0.mat
+    io.itlb_csr_ctx.dmw1_mat   := csrReg.dmw1.mat
+    io.itlb_csr_ctx.dmw0_plv0  := csrReg.dmw0.plv0
+    io.itlb_csr_ctx.dmw0_plv3  := csrReg.dmw0.plv3
+    io.itlb_csr_ctx.dmw1_plv0  := csrReg.dmw1.plv0
+    io.itlb_csr_ctx.dmw1_plv3  := csrReg.dmw1.plv3
+    io.itlb_csr_ctx.dmw0_pseg  := csrReg.dmw0.pseg
+    io.itlb_csr_ctx.dmw0_vseg  := csrReg.dmw0.vseg
+    io.itlb_csr_ctx.dmw1_pseg  := csrReg.dmw1.pseg
+    io.itlb_csr_ctx.dmw1_vseg  := csrReg.dmw1.vseg
 
     io.tlb_data.csr_ctx.asid_asid    := csrReg.asid.asid
     io.tlb_data.csr_ctx.estat_ecode  := csrReg.estat.ecode

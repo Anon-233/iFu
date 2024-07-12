@@ -6,28 +6,6 @@ import chisel3.util._
 import iFu.common._
 import iFu.common.Consts._
 
-class ITLBCsrContext extends CoreBundle {
-    val inv_l0_tlb = Bool()
-    val asid_asid = UInt(10.W)
-
-    val crmd_da = Bool()
-    val crmd_pg = Bool()
-    val crmd_datm = UInt(2.W)
-    val crmd_plv = UInt(2.W)
-
-    val dmw0_plv0 = Bool()
-    val dmw0_plv3 = Bool()
-    val dmw0_mat = UInt(2.W)
-    val dmw0_pseg = UInt(3.W)
-    val dmw0_vseg = UInt(3.W)
-
-    val dmw1_plv0 = Bool()
-    val dmw1_plv3 = Bool()
-    val dmw1_mat = UInt(2.W)
-    val dmw1_pseg = UInt(3.W)
-    val dmw1_vseg = UInt(3.W)
-}
-
 class ITLBReq extends CoreBundle {
     val vaddr = UInt(vaddrBits.W)
 }
@@ -42,43 +20,19 @@ class ITLBResp extends CoreBundle {
     val exception = Valid(new ITLBException)
 }
 
-class L0ITLBEntry extends CoreBundle {
-    val exist = Bool()
-    val entry = new TLBEntry()
-}
-object L0ITLBEntry {
-    def new_entry(entry: TLBEntry) = {
-        val e = Wire(new L0ITLBEntry)
-        e.exist := true.B
-        e.entry := entry
-        e
-    }
-
-    def fake_entry(vppn: UInt, asid: UInt) = {
-        val e = Wire(new L0ITLBEntry)
-        e := DontCare
-        e.exist           := false.B
-        e.entry.meta.vppn := vppn
-        e.entry.meta.ps   := 12.U
-        e.entry.meta.g    := false.B
-        e.entry.meta.asid := asid
-        e.entry.meta.e    := true.B
-        e
-    }
-}
-
 class ITLBIO extends CoreBundle {
-    val itlb_csr_cxt = Input(new ITLBCsrContext)
+    val itlb_csr_cxt = Input(new TLBCsrContext)
     val req          = Flipped(Valid(new ITLBReq))
     val resp         = Output(new ITLBResp)
     val r_req        = Output(new TLBDataRReq)
     val r_resp       = Flipped(Valid(new TLBDataRResp))
 }
 
-class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule {
+class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule with L0TLBState {
+    require(isPow2(num_l0_itlb_entries))
+
     val io = IO(new ITLBIO)
 
-    val s_ready :: s_refill :: Nil = Enum(2)
     val state     = RegInit(s_ready)
     val state_nxt = WireInit(state)
     state := state_nxt
