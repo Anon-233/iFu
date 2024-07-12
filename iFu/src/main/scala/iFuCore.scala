@@ -147,7 +147,7 @@ class iFuCore extends CoreModule {
     b1.mispredictMask := brinfos.map(x =>
         ((x.valid && x.mispredict) << x.uop.brTag).asUInt
     ).reduce(_|_)
-    val b1_mispredict_val = brinfos.map(x => x.valid && x.mispredict).asUInt.orR
+    val b1_mispredict_val = brinfos.map(x => x.valid && x.mispredict).reduce(_||_)
 
     var mispredict_val = false.B
     var oldest_mispredict = brinfos(0)
