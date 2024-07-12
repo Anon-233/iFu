@@ -75,8 +75,8 @@ class DcacheParameters {
 
     val memWidth = 2
 
-    val nFirstMSHRs = 4
-    val nSecondMSHRs = 8
+    val nFirstMSHRs = 2
+    val nSecondMSHRs = 3
 
     def getWordOffset(vaddr: UInt): UInt = vaddr(nOffsetBits - 1, 2)
     def getIdx(vaddr: UInt): UInt = vaddr(nOffsetBits + nIdxBits - 1, nOffsetBits)
