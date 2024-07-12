@@ -130,12 +130,12 @@ class iFuCore extends CoreModule {
 
     // --------------------------------------
     // Dealing with branch resolutions
-    val brinfos = Reg(Vec(coreWidth, new BrResolutionInfo()))
+    val brinfos = Reg(Vec(coreWidth, new BrResolutionInfo))
+    if (!FPGAPlatform) dontTouch(brinfos)
 
     val brUpdate = Wire(new BrUpdateInfo)
     val b1       = Wire(new BrUpdateMasks)
     val b2       = Reg(new BrResolutionInfo)
-    if(!FPGAPlatform)dontTouch(brinfos)
     brUpdate.b1 := b1
     brUpdate.b2 := b2
 
@@ -147,6 +147,7 @@ class iFuCore extends CoreModule {
     b1.mispredictMask := brinfos.map(x =>
         ((x.valid && x.mispredict) << x.uop.brTag).asUInt
     ).reduce(_|_)
+    val b1_mispredict_val = brinfos.map(x => x.valid && x.mispredict).reduce(_||_)
 
     var mispredict_val = false.B
     var oldest_mispredict = brinfos(0)
@@ -169,7 +170,7 @@ class iFuCore extends CoreModule {
     val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftqIdx
     ifu.io.core.getFtqPc(1).ftqIdx := oldest_mispredict_ftq_idx
 
-    assert(!((brUpdate.b1.mispredictMask =/= 0.U || brUpdate.b2.mispredict)
+    assert(!((b1_mispredict_val || brUpdate.b2.mispredict)
             && rob.io.commit.rollback), "Can't have a mispredict during rollback.")
 
     ifu.io.core.brupdate := brUpdate
@@ -256,14 +257,14 @@ class iFuCore extends CoreModule {
 
         ifu.io.core.redirect_ghist := Mux(use_same_ghist, ftq_ghist, next_ghist)
         ifu.io.core.redirect_ghist.currentSawBranchNotTaken := use_same_ghist
-    } .elsewhen (rob.io.flush_frontend || brUpdate.b1.mispredictMask =/= 0.U) {
-        ifu.io.core.redirect_flush := true.B
-        ifu.io.core.redirect_pc := DontCare
-        ifu.io.core.redirect_ghist := DontCare
+    } .elsewhen (rob.io.flush_frontend || b1_mispredict_val) {
+        ifu.io.core.redirect_flush   := true.B
+        ifu.io.core.redirect_pc      := DontCare
+        ifu.io.core.redirect_ghist   := DontCare
         ifu.io.core.redirect_ftq_idx := DontCare
     } .otherwise {
-        ifu.io.core.redirect_pc := DontCare
-        ifu.io.core.redirect_ghist := DontCare
+        ifu.io.core.redirect_pc      := DontCare
+        ifu.io.core.redirect_ghist   := DontCare
         ifu.io.core.redirect_ftq_idx := DontCare
     }
 
@@ -354,13 +355,14 @@ class iFuCore extends CoreModule {
 
     val dec_hazards = (0 until coreWidth).map(w =>
         dec_valids(w) && (
-            !dis_ready || 
-            rob.io.commit.rollback ||
-            dec_xcpt_stall ||
-            branch_mask_full(w) ||
-            brUpdate.b1.mispredictMask =/= 0.U||
-            brUpdate.b2.mispredict||
-            ifu.io.core.redirect_flush)
+            !dis_ready                ||
+            rob.io.commit.rollback    ||
+            dec_xcpt_stall            ||
+            branch_mask_full(w)       ||
+            b1_mispredict_val         ||
+            brUpdate.b2.mispredict    ||
+            ifu.io.core.redirect_flush
+        )
     )
     val dec_stalls = dec_hazards.scanLeft(false.B)((s, h) => s || h).takeRight(coreWidth)
     dec_fire := (0 until coreWidth).map { w => dec_valids(w) && !dec_stalls(w) }
@@ -428,17 +430,18 @@ class iFuCore extends CoreModule {
     }
 
     val dis_hazards = (0 until coreWidth).map { w =>
-        dis_valids(w) &&
-        (!rob.io.ready
-        || ren_stalls(w)
-        || lsu.io.core.ldq_full(w) && dis_uops(w).use_ldq
-        || lsu.io.core.stq_full(w) && dis_uops(w).use_stq
-        || !dispatcher.io.ren_uops(w).ready
-        || wait_for_empty_pipeline(w)
-        || dis_prior_slot_unique(w)
-        || brUpdate.b1.mispredictMask =/= 0.U
-        || brUpdate.b2.mispredict
-        || ifu.io.core.redirect_flush)
+        dis_valids(w) && (
+            !rob.io.ready                                  ||
+            ren_stalls(w)                                  ||
+            lsu.io.core.ldq_full(w) && dis_uops(w).use_ldq ||
+            lsu.io.core.stq_full(w) && dis_uops(w).use_stq ||
+            !dispatcher.io.ren_uops(w).ready               ||
+            wait_for_empty_pipeline(w)                     ||
+            dis_prior_slot_unique(w)                       ||
+            b1_mispredict_val                              ||
+            brUpdate.b2.mispredict                         ||
+            ifu.io.core.redirect_flush
+        )
     }
 
     /* lsu.io.core.fence_dmem := (dis_valids zip dis_uops zip wait_for_empty_pipeline).map {
