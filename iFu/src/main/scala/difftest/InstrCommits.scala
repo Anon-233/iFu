@@ -42,7 +42,7 @@ class InstrCommits extends CoreModule {
         idxs(0).valid := rawCommit.valids(0) && !io.exception
         idxs(0).bits  := Mux(rawCommit.valids(0), 0.U, 3.U/*2'b11*/)
 
-        for (i <- 1 until 4) {
+        for (i <- 1 until cmtsz) {
             idxs(i).valid := rawCommit.valids(i) && !io.exception
             idxs(i).bits  := Mux(rawCommit.valids(i), idxs(i-1).bits + 1.U, idxs(i-1).bits)
         }
@@ -50,7 +50,7 @@ class InstrCommits extends CoreModule {
 
     val zippedCommit = WireInit(0.U.asTypeOf(new InstrCommit))
 
-    for (i <- 0 until 4) {
+    for (i <- 0 until cmtsz) {
         val valid = idxs(i).valid
         val idx = idxs(i).bits
 
@@ -66,7 +66,7 @@ class InstrCommits extends CoreModule {
         }
     }
 
-    for (i <- 0 until 4) {
+    for (i <- 0 until cmtsz) {
         val dic = Module(new DifftestInstrCommit)
         dic.io.clock  := clock
         dic.io.coreid := 0.U   // only support 1 core now

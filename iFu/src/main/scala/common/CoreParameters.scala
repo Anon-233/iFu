@@ -30,14 +30,14 @@ class FrontendParameters{
     // val numFTQEntries: Int             = 40
     val numFTQEntries: Int             = 16
     // val numFetchBufferEntries: Int     = 32
-    val numFetchBufferEntries: Int     = 16
+    val numFetchBufferEntries: Int     = 15
     val iCacheParams: ICacheParameters = new ICacheParameters(fetchWidth)
     val bpdParams: BPUParameters       = new BPUParameters
 }
 
 class ROBParameters {
-    val coreWidth: Int = 4
-    val retireWidth: Int = 4 //decodeWidth
+    val coreWidth: Int = 3
+    val retireWidth: Int = 3 //decodeWidth
     // val numRobEntries:Int = 128
     // val numRobEntries:Int = 32
     val numRobEntries:Int = 64
@@ -109,7 +109,7 @@ trait HasCoreParameters {
     val paddrBits: Int = xLen
     val coreInstrBytes: Int = 4
     val coreInstrBits: Int = coreInstrBytes * 8
-    val coreWidth = 4
+    val coreWidth = 3
     val memWidth = 2
     val maxBrCount: Int = 8
     val brTagSz: Int = log2Ceil(maxBrCount)
@@ -123,7 +123,7 @@ trait HasCoreParameters {
     val lsuParameters: LSUParameters = new LSUParameters
     val dcacheParameters: DcacheParameters = new DcacheParameters
     val issueParams: Seq[IssueParams] = Seq(
-        IssueParams(issueWidth = 2, numIssueSlots =  6, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 4),
-        IssueParams(issueWidth = 3, numIssueSlots = 10, iqType = IQT_INT.litValue.toInt, dispatchWidth = 4)
+        IssueParams(issueWidth = 2, numIssueSlots =  6, iqType = IQT_MEM.litValue.toInt, dispatchWidth = 3),
+        IssueParams(issueWidth = 3, numIssueSlots = 10, iqType = IQT_INT.litValue.toInt, dispatchWidth = 3)
     )
 }
