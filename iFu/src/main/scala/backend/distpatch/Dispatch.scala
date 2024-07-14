@@ -22,11 +22,22 @@ abstract class Dispatcher extends CoreModule {
 class BasicDispatcher extends Dispatcher {
     issueParams.map(ip => require(ip.dispatchWidth == coreWidth))
 
-    // both int issue queue and mem issue queue must be ready
+    /* // both int issue queue and mem issue queue must be ready
     val ren_readys = io.dis_uops.map(d => VecInit(d.map(_.ready)).asUInt).reduce(_&_)
 
     for (w <- 0 until coreWidth) {
         io.ren_uops(w).ready := ren_readys(w)
+    } */
+
+    val ren_readys = Wire(Vec(issueParams.size, Vec(coreWidth, Bool())))
+    for (i <- 0 until issueParams.size) {
+        val ip = issueParams(i)
+        val iqType_match = io.ren_uops.map(r => (r.bits.iqType & ip.iqType.U).orR)
+        val iqType_ready = io.dis_uops(i).map(_.ready)
+        ren_readys(i) := VecInit(iqType_match zip iqType_ready map { case (m, r) => m && r })
+    }
+    for (w <- 0 until coreWidth) {
+        io.ren_uops(w).ready := ren_readys.map(_(w)).reduce(_||_)
     }
 
     for (i <- 0 until issueParams.size) {
