@@ -12,7 +12,8 @@ abstract class FuncUnit (
     val isPiplined: Boolean,
     val numStages: Int,
     val isJmpUnit: Boolean,
-    val isAluUnit: Boolean
+    val isAluUnit: Boolean,
+    val isCSRUnit: Boolean
 ) extends CoreModule {
     val io = IO(new Bundle {
         val req      = Flipped(Decoupled(new FuncUnitReq))
@@ -22,6 +23,7 @@ abstract class FuncUnit (
 
         val brInfo   = if (isAluUnit) Output(new BrResolutionInfo) else null
         val getFtqPC = if (isJmpUnit) Flipped(new GetPCFromFtqIO) else null
+        val imm      = if (isCSRUnit) Output(UInt(14.W)) else null
     })
     io <> DontCare
 }
@@ -29,12 +31,14 @@ abstract class FuncUnit (
 abstract class PipelinedFuncUnit (
     numStages: Int,
     isJmpUnit: Boolean = false,
-    isAluUnit: Boolean = false
+    isAluUnit: Boolean = false,
+    isCSRUnit: Boolean = false
 ) extends FuncUnit (
     isPiplined = true,
     numStages = numStages,
     isJmpUnit = isJmpUnit,
-    isAluUnit = isAluUnit
+    isAluUnit = isAluUnit,
+    isCSRUnit = isCSRUnit
 ) {
     io.req.ready := true.B
     var rValids: Vec[Bool]  = null
@@ -85,15 +89,21 @@ abstract class PipelinedFuncUnit (
 
 class ALUUnit(
     isJmpUnit: Boolean = false,
+    isCSRUnit: Boolean = false,
     numStages: Int = 1,
 ) extends PipelinedFuncUnit (
     numStages = numStages,
     isAluUnit = true,
-    isJmpUnit = isJmpUnit
+    isJmpUnit = isJmpUnit,
+    isCSRUnit = isCSRUnit
 ) {
     val uop = io.req.bits.uop
 
     val imm = immGen(uop.immPacked, uop.ctrl.imm_sel)
+    if (isCSRUnit) {
+        require (numStages == 1, "CSRUnit only supports 1 stage")
+        io.imm := uop.immPacked(23, 10).asUInt
+    }
 
     var op1Data: UInt = null
     if (isJmpUnit) {
@@ -253,7 +263,8 @@ abstract class IterativeFuncUnit extends FuncUnit (
     isPiplined = false,
     numStages = 1,
     isJmpUnit = false,
-    isAluUnit = false
+    isAluUnit = false,
+    isCSRUnit = false
 ) {
     val rUop = Reg(new MicroOp)
     val doKill = Wire(Bool())

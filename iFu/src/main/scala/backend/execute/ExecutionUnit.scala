@@ -99,6 +99,7 @@ class ALUExeUnit (
     if (hasAlu) {
         alu = Module(new ALUUnit(
             isJmpUnit = hasJmpUnit,
+            isCSRUnit = hasCSR,
             numStages = numStages
         ))
         alu.io.req.valid := (io.req.valid && (
@@ -203,14 +204,11 @@ class ALUExeUnit (
         )
 
         if (hasCSR) {
-            io.iresp.bits.csr_addr := immGen(
-                alu.io.resp.bits.uop.immPacked,
-                alu.io.resp.bits.uop.ctrl.imm_sel
-            ).asUInt
-            io.iresp.bits.csr_cmd := alu.io.resp.bits.uop.ctrl.csr_cmd
-            io.iresp.bits.tlb_op  := alu.io.resp.bits.uop.tlb_op
-            io.iresp.bits.csr_r1  := alu.io.resp.bits.r1
-            io.iresp.bits.csr_r2  := alu.io.resp.bits.r2
+            io.iresp.bits.csr_addr := RegNext(alu.io.imm)
+            io.iresp.bits.csr_cmd  := alu.io.resp.bits.uop.ctrl.csr_cmd
+            io.iresp.bits.tlb_op   := alu.io.resp.bits.uop.tlb_op
+            io.iresp.bits.csr_r1   := alu.io.resp.bits.r1
+            io.iresp.bits.csr_r2   := alu.io.resp.bits.r2
         }
     }
     assert ((PopCount(iresp_fu_units.map(_.io.resp.valid)) <= 1.U && !div_resp_val) ||
