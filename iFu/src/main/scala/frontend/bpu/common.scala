@@ -19,7 +19,8 @@ trait HasTageParameters extends HasBPUParameters {
 }
 
 trait HasUbtbParameters extends HasBPUParameters {
-    val nWays = 16
+    // val nWays = 16
+    val nWays = 4
     /* def tagSz = vaddrBits - log2Ceil(fetchBytes) */
     def tagSz = 8
     val offsetSz = 6
