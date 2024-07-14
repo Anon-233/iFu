@@ -202,7 +202,7 @@ class ALUExeUnit (
             (f.io.resp.valid, f.io.resp.bits.data)).toSeq
         )
 
-        if (hasAlu) {
+        if (hasCsr) {
             io.iresp.bits.csr_addr := immGen(
                 alu.io.resp.bits.uop.immPacked,
                 alu.io.resp.bits.uop.ctrl.imm_sel
