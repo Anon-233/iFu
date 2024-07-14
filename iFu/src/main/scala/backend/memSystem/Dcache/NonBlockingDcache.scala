@@ -228,6 +228,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
     
     meta.io.replayRead.bits.tag     := getTag(mshrs.io.replay.bits.addr)
     meta.io.replayRead.bits.idx     := getIdx(mshrs.io.replay.bits.addr)
+    meta.io.replayRead.bits.pos     := s0pos
     meta.io.replayRead.bits.isStore := isStore(mshrs.io.replay.bits)
     meta.io.missReplace.bits.idx    := getIdx(mshrs.io.newFetchreq.bits.addr)
 
