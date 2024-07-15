@@ -40,7 +40,8 @@ class ROBParameters {
     val retireWidth: Int = 3 //decodeWidth
     // val numRobEntries:Int = 128
     // val numRobEntries:Int = 32
-    val numRobEntries:Int = 64
+    // val numRobEntries:Int = 64
+    val numRobEntries:Int = 48
     val numRobRows: Int = numRobEntries/coreWidth
     val robAddrSz: Int = log2Ceil(numRobRows) + log2Ceil(coreWidth)
 }
