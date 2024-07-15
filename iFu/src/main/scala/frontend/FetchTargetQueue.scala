@@ -2,11 +2,11 @@ package iFu.frontend
 
 import chisel3._
 import chisel3.util._
-
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
 import iFu.frontend.FrontendUtils._
+import ram.SDPRam
 
 class FTQBundle extends CoreBundle {
     val fetchWidth      = frontendParams.fetchWidth
@@ -87,44 +87,43 @@ class FetchTargetQueue extends CoreModule {
     val pcs   = Reg(Vec(numFTQEntries, UInt(vaddrBits.W)))
     val meta  = SyncReadMem(numFTQEntries, Vec(fetchWidth ,new PredictionMeta))
     val ram   = Reg(Vec(numFTQEntries, new FTQBundle))
-    val gHist = Seq.fill(2) { SyncReadMem(numFTQEntries, new GlobalHistory) }
+    val gHist = Seq.fill(2) { Module(new SDPRam(numFTQEntries, new GlobalHistory)) }
 
     val previousgHist = RegInit((0.U).asTypeOf(new GlobalHistory))
     val previousEntry = RegInit((0.U).asTypeOf(new FTQBundle))
     val previouspc    = RegInit(0.U(vaddrBits.W))
 
     // 入队操作
-    when (io.enq.fire) {
-        pcs(bpu_ptr)           := io.enq.bits.pc
+    val newEntry = Wire(new FTQBundle)
+    newEntry.cfiIdx          := io.enq.bits.cfiIdx
+    newEntry.cfiTaken        := io.enq.bits.cfiIdx.valid
+    newEntry.cfiMispredicted := false.B
+    newEntry.cfiType         := io.enq.bits.cfiType
+    newEntry.cfiIsCall       := io.enq.bits.cfiIsCall
+    newEntry.cfiIsRet        := io.enq.bits.cfiIsRet
+    newEntry.rasTop          := io.enq.bits.rasTop
+    newEntry.rasIdx          := io.enq.bits.gHist.rasIdx
+    newEntry.brMask          := io.enq.bits.brMask & io.enq.bits.mask
 
-        val newEntry = Wire(new FTQBundle)
-        newEntry.cfiIdx          := io.enq.bits.cfiIdx
-        newEntry.cfiTaken        := io.enq.bits.cfiIdx.valid
-        newEntry.cfiMispredicted := false.B
-        newEntry.cfiType         := io.enq.bits.cfiType
-        newEntry.cfiIsCall       := io.enq.bits.cfiIsCall
-        newEntry.cfiIsRet        := io.enq.bits.cfiIsRet
-        newEntry.rasTop          := io.enq.bits.rasTop
-        newEntry.rasIdx          := io.enq.bits.gHist.rasIdx
-        newEntry.brMask          := io.enq.bits.brMask & io.enq.bits.mask
-
-        // 全局历史，如果currentSawBranchNotTaken为true，那么就用这个历史，否则用根据上一个表项更新的历史
-        val newgHist = Mux(io.enq.bits.gHist.currentSawBranchNotTaken,
-            io.enq.bits.gHist,
-            previousgHist.update(
-                previousEntry.brMask,
-                previousEntry.cfiTaken,
-                previousEntry.brMask(previousEntry.cfiIdx.bits),
-                previousEntry.cfiIdx.bits,
-                previousEntry.cfiIdx.valid,
-                previouspc,
-                previousEntry.cfiIsCall,
-                previousEntry.cfiIsRet
-            )
+    // 全局历史，如果currentSawBranchNotTaken为true，那么就用这个历史，否则用根据上一个表项更新的历史
+    val newgHist = Mux(io.enq.bits.gHist.currentSawBranchNotTaken,
+        io.enq.bits.gHist,
+        previousgHist.update(
+            previousEntry.brMask,
+            previousEntry.cfiTaken,
+            previousEntry.brMask(previousEntry.cfiIdx.bits),
+            previousEntry.cfiIdx.bits,
+            previousEntry.cfiIdx.valid,
+            previouspc,
+            previousEntry.cfiIsCall,
+            previousEntry.cfiIsRet
         )
+    )
+
+    when(io.enq.fire) {
+        pcs(bpu_ptr) := io.enq.bits.pc
 
         // 进行写入操作
-        gHist.map(g => g.write(bpu_ptr, newgHist))
         meta.write(bpu_ptr, io.enq.bits.bpdMeta)
         ram(bpu_ptr) := newEntry
 
@@ -135,6 +134,12 @@ class FetchTargetQueue extends CoreModule {
 
         bpu_ptr := WrapInc(bpu_ptr, numFTQEntries)
     }
+    gHist.foreach(g => {
+        g.io.wen := io.enq.fire
+        g.io.waddr := bpu_ptr
+        g.io.wdata := newgHist
+        g.io.wstrobe := 1.U
+    })
     io.enqIdx := bpu_ptr
 
     when (io.deq.valid) {
@@ -144,7 +149,8 @@ class FetchTargetQueue extends CoreModule {
     val bpdIdx    = Mux(io.redirect.valid, io.redirect.bits,
                                            train_ptr)
     val bpdEntry  = RegNext(ram(bpdIdx))
-    val bpdgHist  = gHist(0).read(bpdIdx, true.B)
+    gHist(0).io.raddr := bpdIdx
+    val bpdgHist  = gHist(0).io.rdata
     val bpdMeta   = meta.read(bpdIdx, true.B)
     val bpdpc     = RegNext(pcs(bpdIdx))
     val bpdTarget = RegNext(pcs(WrapInc(bpdIdx, numFTQEntries)))
@@ -235,7 +241,8 @@ class FetchTargetQueue extends CoreModule {
         val getEntry = ram(idx)
         io.getFtqpc(i).entry       := RegNext(getEntry)
         if (i == 1) {
-            io.getFtqpc(i).gHist   := gHist(1).read(idx, true.B)
+            gHist(1).io.raddr      := idx
+            io.getFtqpc(i).gHist   := gHist(1).io.rdata
         } else {
             io.getFtqpc(i).gHist   := DontCare
         }

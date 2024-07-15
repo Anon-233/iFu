@@ -1,13 +1,12 @@
 package iFu.frontend
 
 import chisel3._
-import chisel3.util.ImplicitConversions.intToUInt
 import chisel3.util._
-import chisel3.util.random.LFSR
 import iFu.axi3._
-import iFu.sma._
-import iFu.frontend.FrontendUtils._
 import iFu.common._
+import iFu.frontend.FrontendUtils._
+import iFu.sma._
+import ram.SDPRam
 
 class ICacheReq extends CoreBundle {
   val addr = UInt(vaddrBits.W)
@@ -65,10 +64,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
         iParams.nSets,
         Vec(iParams.nWays, UInt(iParams.tagBits.W))
     )
-    val dataArray   = SyncReadMem(
-        iParams.nSets * iParams.nWays * fetchesPerLine,
-        UInt(packetBits.W)
-    )
+    val dataArray   = Module(new SDPRam(iParams.nSets * iParams.nWays * fetchesPerLine, UInt(packetBits.W)))
 //========== ----i$ body----- ==========
 /*---------------------------------------------------------------------*/
 //========== ----S0 Stage---- ==========
@@ -101,7 +97,8 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val s2_idx     = RegNext(s1_idx)
     val s2_hit     = RegNext(s1_hit)
     val s2_hit_pos = RegNext(s1_hit_pos)
-    val s2_data    = dataArray.read(Cat(s1_idx, s1_hit_pos, s1_fetchIdx))
+    dataArray.io.raddr := Cat(s1_idx, s1_hit_pos, s1_fetchIdx)
+    val s2_data    = dataArray.io.rdata
 //========== S1 - S2 Register ==========
 /*---------------------------------------------------------------------*/
 //========== ----S2 Stage---- ==========
@@ -170,9 +167,10 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
 
     val writeEn = refillEn
     val writeIdx = Cat(refillIdx, replWays(refillIdx), refillCnt)
-    when (writeEn) {
-        dataArray.write(writeIdx, refillData)
-    }
+    dataArray.io.wen := writeEn
+    dataArray.io.waddr := writeIdx
+    dataArray.io.wdata := refillData
+    dataArray.io.wstrobe := 1.U
 
     when (refillLast) {
         tagArray.write(
