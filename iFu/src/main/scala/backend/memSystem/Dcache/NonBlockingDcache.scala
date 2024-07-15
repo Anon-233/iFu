@@ -389,10 +389,22 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
         )
     }
 
+    val s2enter_missStore = WireInit(false.B)
+
     val s2hit = WireInit(0.U.asTypeOf(Vec(memWidth , Bool())))
     for(w <- 0 until memWidth){
         // 对于lsu的store请求，要现在mshr里面找，如果有store，就当作miss处理
-        s2hit(w) := RegNext(s1hit(w)) && !(s2state === s_lsu && (isStore(s2req(w)) && mshrs.io.hasStore))
+        s2hit(w) := RegNext(s1hit(w) && 
+                            // 在lsu状态下的store，以下情况需要转变为false
+                                !(s1state === s_lsu && isStore(s1req(w)) &&
+                                    (
+                                        // s1的时候看到mshrs有store
+                                        mshrs.io.hasStore ||
+                                        // 看到s2即将向mshr成功存入一个miss的store（实际上是hasStore信号由于延迟一周期的转发）
+                                        s2enter_missStore
+                                    )
+                                 )
+                            )
     }
 
 
@@ -416,6 +428,9 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
         missArbiter.io.alive(w) := s2valid(w) && s2state === s_lsu
     }
     missArbiter.io.mshrReq <> mshrs.io.req
+    // 此时的s2 为lsu状态（区分mmioresp）即将向mshr成功存入一个miss的store
+    s2enter_missStore := missArbiter.io.store_enter_mshr
+
 
     // fetchAddr成功送给axi之后,就可以将告诉mshr去fetching状态转换
     val s2fetchAddr    = RegNext(s1_fetch_addr)
@@ -606,14 +621,12 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
             mmiou.io.mmioReq.valid := s2valid(0) || s2valid(1)
             // 存入请求本身
             mmiou.io.mmioReq.bits  := mmio_req
-            val debug_is_mmio_load = WireInit(false.B)
-            dontTouch(debug_is_mmio_load)
+
             when (!mmiou.io.mmioReq.fire) {
                 assert(!(mmiou.io.mmioReq.valid && !isStore(mmio_req)),
                     "a mmio load request is sent but there is another store in mmio unit")
                 // 当前不接受，说明busy，这种情况一定是store，发nack，然后拉高storeFailed
                 // 0号发nack
-                debug_is_mmio_load := (mmiou.io.mmioReq.valid && !isStore(mmio_req))
                 sendResp(0) := false.B
                 sendNack(0) := s2valid(0)
                 sendResp(1) := false.B

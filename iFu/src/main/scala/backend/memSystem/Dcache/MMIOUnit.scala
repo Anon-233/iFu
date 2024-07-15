@@ -74,10 +74,13 @@ class MMIOUnit extends Module with HasDcacheParameters {
         state := Mux(io.smar.resp.rvalid, s_resp, s_fetch)
         mmioReq.data := io.smar.resp.rdata
     } .elsewhen (state === s_wb){
-        val debug_lo_byte = mmioReq.data(7, 0)
-        val debug_lo_half = mmioReq.data(15, 0)
-        dontTouch(debug_lo_byte)
-        dontTouch(debug_lo_half)
+        if(!FPGAPlatform){
+            val debug_lo_byte = mmioReq.data(7, 0)
+            val debug_lo_half = mmioReq.data(15, 0)
+            dontTouch(debug_lo_byte)
+            dontTouch(debug_lo_half)
+        }
+
 
         state := Mux(io.smaw.resp.wready, s_resp, s_wb)
     } .elsewhen(state === s_resp) {

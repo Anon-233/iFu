@@ -225,7 +225,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
     // 搜索是否有等待fetch的项
     val waitinglist = WireInit(0.U.asTypeOf(Vec(nFirstMSHRs, Bool())))
-    val haswait = waitinglist.reduce(_ || _)
+    val haswait = waitinglist.asUInt.orR
     val waitingpos = PriorityEncoder(waitinglist)
 
     // if(!FPGAPlatform)dontTouch(waitinglist)
@@ -276,20 +276,21 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     firstFetchMatchway := PriorityEncoder(fetchedBlockAddrMatches.asUInt)
     firstNewMatchway := PriorityEncoder(newblockAddrMatches.asUInt)
 
-    firstFull := !(firstAllocatable.reduce(_ || _))
+    firstFull := !(firstAllocatable.asUInt.orR)
 
     // 传入的请求是不是首次miss, 如果是store指令，必须作为首次miss(见log)
-    val firstMiss = !(newblockAddrMatches.reduce(_ || _))
+    val firstMiss = !(newblockAddrMatches.asUInt.orR)
     val allocFirstMSHR = PriorityEncoder(firstAllocatable.asUInt)
 
     // 二表中的每一项是否可以写入新的请求
     val secondAllocatable = WireInit(0.U.asTypeOf(Vec(nSecondMSHRs, Bool())))
     val allocSecondMSHR = PriorityEncoder(secondAllocatable.asUInt)
     // 二表是否已满
-    val secondFull = !(secondAllocatable.reduce(_ || _))
+    val secondFull = !(secondAllocatable.asUInt.orR)
 
     val secondHasStores = WireInit(0.U.asTypeOf(Vec(nSecondMSHRs, Bool())))
-    val hasStore = secondHasStores.reduce(_ || _) || firstHasStores.reduce(_ || _)
+    // 这里用regNext是为了更好的时序
+    val hasStore = RegNext(secondHasStores.asUInt.orR) /* || firstHasStores.asUInt.orR */
 
     // hasStore
     io.hasStore := hasStore
@@ -334,9 +335,8 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
     io.full := mshrFull
 
     // 不满，并且不会再已有store的时候再存入新的store，才接收外界信号
-
-    when(!mshrFull && !(hasStore && isStore(io.req.bits))&& io.req.valid){
-        io.req.ready := true.B
+    io.req.ready := !mshrFull && !(hasStore && isStore(io.req.bits))
+    when(io.req.fire){
         // 首次miss，一表二表都要写入
         when(firstMiss){
             firstMSHRs(allocFirstMSHR).req.valid := io.req.valid
@@ -367,7 +367,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
         }
     }.otherwise{
         // 否则根本不接受外界信号
-        io.req.ready := false.B
+        // io.req.ready := false.B
     }
 
     // 如果一个fetch取好了，就把它从一表中删掉，然后激活二表中的对应项，等待之后用到它的时候一项一项的拿
@@ -408,7 +408,7 @@ class MSHRFile extends CoreModule with HasDcacheParameters{
 
     // 选取replay阶段
     // 是否真的有被激活的二表项
-    val repalyactive = actives.reduce(_ || _)
+    val repalyactive = actives.asUInt.orR
     // 选一个被激活的二表项，发出去replay
     val replayIdx = PriorityEncoder(actives)
 
