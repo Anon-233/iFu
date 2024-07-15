@@ -20,4 +20,6 @@ object FrontendUtils extends FrontendParameters {
 
     def fetchIdx(addr: UInt): UInt = (addr >> log2Ceil(fetchBytes)).asUInt
 
+    def getPc(pc: UInt, cfiIdx: UInt): UInt = Cat(fetchIdx(pc), cfiIdx(log2Ceil(fetchWidth) - 1, 0), 0.U(2.W))
+
 }

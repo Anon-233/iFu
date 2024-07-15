@@ -2,6 +2,7 @@ package iFu.frontend
 
 import chisel3.{RegNext, _}
 import chisel3.util._
+import frontend.bpu.{LocalHistoryPredictMeta, LocalHistoryPredictor}
 import iFu.common._
 import iFu.frontend.FrontendUtils._
 
@@ -21,6 +22,7 @@ class PredictionMeta extends Bundle with HasBPUParameters{
   val BTBMeta  = Output(new BTBPredictMeta)
   val tageMeta = Output(new TagePredictMeta)
   val uBTBMeta = Output(new UBTBPredictMeta)
+  val localHistoryMeta = Output(new LocalHistoryPredictMeta)
 }
 
 class BranchPredictionBundle extends Bundle with HasBPUParameters{
@@ -101,15 +103,17 @@ class BranchPredictor extends Module with HasBPUParameters
     val s0update = io.update
     val s1update = RegNext(s0update)
 
-    val faubtb = Module(new FaUBtbPredictior())
+    val faubtb = Module(new FaUBtbPredictior)
+    val lh = Module(new LocalHistoryPredictor)
     val bim = Module(new BimPredictor)
     val btb = Module(new BTBPredictor)
-    // val tage = Module(new TagePredictor)
+//    val tage = Module(new TagePredictor)
 
     faubtb.io.s1update := s1update
     btb.io.s1update := s1update
+    lh.io.s1update := s1update
     bim.io.s1update := s1update
-    // tage.io.f1update := s1update
+//    tage.io.f1update := s1update
 
     // 基本的pc和使能位
     faubtb.io.s1valid := s1valid
@@ -118,11 +122,13 @@ class BranchPredictor extends Module with HasBPUParameters
     btb.io.s0valid := s0valid
     btb.io.s0pc := s0pc
 
+    lh.io.s0pc := s0pc
+
     bim.io.s0valid := s0valid
     bim.io.s0pc := s0pc
 
-    // tage.io.f1valid := s1valid
-    // tage.io.f1pc := s1pc
+//    tage.io.f1valid := s1valid
+//    tage.io.f1pc := s1pc
 
     // f1接收faubtb输出结果
     for (w <- 0 until fetchWidth) {
@@ -140,7 +146,7 @@ class BranchPredictor extends Module with HasBPUParameters
 
     for (w <- 0 until fetchWidth) {
         // bim预测taken（不存在命不命中的说法）覆盖f2的初值
-        io.resp.f2.predInfos(w).taken := bim.io.s2taken(w)
+        io.resp.f2.predInfos(w).taken := Mux(lh.io.s2taken(w).valid, lh.io.s2taken(w).bits, bim.io.s2taken(w))
 
         // 对于btb，当且仅当命中，结果的valid有效，才会把对应的结果覆盖f2的初值
         when(btb.io.s2targs(w).valid) {
@@ -165,17 +171,17 @@ class BranchPredictor extends Module with HasBPUParameters
 
     // tage可以根据传入的初值，在内部判断命中与否，在内部自行选择好是否覆盖f3的初值
     // 传出来的值不需要像btb一样再次判断，直接覆盖初值即可
-    // for(w <- 0 until bankWidth){
-    //     io.resp.f3.predInfos(w).taken := tage.io.f3taken(w)
-    // }
+//     for(w <- 0 until bankWidth){
+//         io.resp.f3.predInfos(w).taken := tage.io.f3taken(w)
+//     }
 
     // 最后收集五个计数器预测过程中产生的meta信息
     for (w <- 0 until fetchWidth) {
         io.resp.f3.meta(w).uBTBMeta := faubtb.io.s3meta(w)
+        io.resp.f3.meta(w).localHistoryMeta := lh.io.s3meta(w)
         io.resp.f3.meta(w).bimMeta := bim.io.s3meta(w)
         io.resp.f3.meta(w).BTBMeta := btb.io.s3meta(w)
         io.resp.f3.meta(w).tageMeta := DontCare
-        // io.resp.f3.meta(w).tageMeta := tage.io.f3meta(w)
     }
 
     io.resp.f1.pc := RegNext(io.f0req.bits.pc)

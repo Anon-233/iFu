@@ -7,8 +7,6 @@ trait HasBPUParameters {
     val globalHistoryLength: Int = 8
     val vaddrBits = 32
     val fetchWidth = 4
-    val nBanks = 2
-    val bankWidth = fetchWidth / nBanks
     val fetchBytes = fetchWidth * 4
 }
 
@@ -48,4 +46,26 @@ trait HasBtbParameters extends HasBPUParameters {
     val BTBEntrySz = offsetSz + 1
 
     val BTBMetaSz = tagSz + 1
+}
+
+trait HasLocalHistoryParameters extends HasBPUParameters {
+    val localHistoryLength = 16
+    val nLHRs = 64
+    val nCounters = 512
+    val nLHRBits = log2Ceil(nLHRs)
+    val nCounterBits = log2Ceil(nCounters)
+
+    def update(v: UInt, taken: Bool): UInt = {
+        val extended = Cat(0.U(1.W), v)
+        val newCnt = Mux(taken, extended + 1.U, extended - 1.U)
+        Mux(newCnt(2), v, newCnt(1, 0))
+    }
+
+    def hash(pc: UInt, hist: UInt): UInt = {
+        val nChunks = (localHistoryLength + nCounterBits - 1) / nCounterBits
+        val hist_chunks = (0 until nChunks) map { i =>
+            hist(math.min((i + 1) * nCounterBits, localHistoryLength) - 1, i * nCounterBits)
+        }
+        hist_chunks.reduce(_ ^ _) ^ pc(nCounterBits + log2Ceil(fetchBytes) - 1, log2Ceil(fetchBytes))
+    }
 }

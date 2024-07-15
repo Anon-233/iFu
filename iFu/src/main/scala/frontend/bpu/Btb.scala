@@ -3,11 +3,12 @@ package iFu.frontend
 import chisel3._
 import chisel3.util._
 import iFu.frontend.FrontendUtils._
+
 import scala.math.min
 import iFu.common.Consts._
 import chisel3.util.random.LFSR
-
 import iFu.frontend.FrontendUtils._
+import ram.SDPRam
 
 class BTBEntry extends Bundle with HasBtbParameters {
     val offset   = SInt(offsetSz.W)
@@ -47,7 +48,7 @@ class BTBPredictor extends Module with HasBtbParameters{
     val btb  = Seq.fill(nWays) {
         SyncReadMem(nSets, Vec(fetchWidth, UInt(BTBEntrySz.W)))
     }
-    val ebtb = SyncReadMem(extendedNSets, UInt(vaddrBits.W))
+    val ebtb = Module(new SDPRam(extendedNSets, UInt(vaddrBits.W)))
 
 // ---------------------------------------------
 //      Reset Logic
@@ -77,7 +78,8 @@ class BTBPredictor extends Module with HasBtbParameters{
     val s1_meta = VecInit(meta.map(m => VecInit(
         m.read(s0_tag_idx.asUInt, s0_valid).map(_.asTypeOf(new BTBMeta))
     )))
-    val s1_ebtb = ebtb.read(s0_tag_idx.asUInt, s0_valid)
+    ebtb.io.raddr := s0_tag_idx
+    val s1_ebtb = ebtb.io.rdata
 
     val s1_tag = s1_tag_idx >> log2Ceil(nSets)
     val s1_hit_OHs = VecInit((0 until fetchWidth) map { i =>
@@ -192,9 +194,10 @@ class BTBPredictor extends Module with HasBtbParameters{
         }
     }
 
-    when (s1_update_wbtb_mask =/= 0.U && need_extend) {
-        ebtb.write(s1_update_idx.asUInt, s1_update.bits.target)
-    }
+    ebtb.io.wen := s1_update_wbtb_mask =/= 0.U && need_extend
+    ebtb.io.waddr := s1_update_idx
+    ebtb.io.wdata := s1_update.bits.target
+    ebtb.io.wstrobe := 1.U
 // ---------------------------------------------
 
 // ---------------------------------------------
