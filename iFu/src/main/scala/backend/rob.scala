@@ -3,11 +3,9 @@ package iFu.backend
 import chisel3._
 import chisel3.util._
 
-import iFu.common._
 import iFu.util._
+import iFu.common._
 import iFu.common.Consts._
-import iFu.common.CauseCode._
-
 
 class RobIO(val numWritePorts: Int) extends CoreBundle {
     val enq_valids        = Input(Vec(coreWidth, Bool()))
@@ -65,8 +63,8 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     // -------------------------------
 
     // state
-    val stateReset :: stateNormal ::stateRollback ::stateWatiTillEmpty :: Nil = Enum(4)
-    val robState = RegInit(stateReset)
+    val stateNormal :: stateRollback ::stateWatiTillEmpty :: Nil = Enum(3)
+    val robState = RegInit(stateNormal)
 
     // rob pointers
     val robHead    = RegInit(0.U(log2Ceil(numRobRows).W))
@@ -77,19 +75,17 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     val robTailLsb = RegInit(0.U(log2Ceil(coreWidth).W))
     val robTailIdx = Cat(robTail, robTailLsb)
 
-    // 有什么用
-    val comIdx = Mux(robState === stateRollback, robTail, robHead)
+    val commit_idx = Mux(robState === stateRollback, robTail, robHead)
 
     val willCommit        = Wire(Vec(coreWidth, Bool()))
-    val canCommit         = Wire(Vec(coreWidth, Bool()))
-    val isXcpt2Commit     = Wire(Vec(coreWidth, Bool()))
+    val can_commit        = Wire(Vec(coreWidth, Bool()))
+    val commit_syscall    = Wire(Vec(coreWidth, Bool()))
 
-    // 4 instr, which one is valid and exception is true
     val canThrowException = Wire(Vec(coreWidth, Bool()))
 
     val robHeadVals    = Wire(Vec(coreWidth, Bool()))
     val robHeadUsesLdq = Wire(Vec(coreWidth, Bool()))
-    
+
     val exceptionThrown = Wire(Bool())
 
     val rXcptVal      = RegInit(false.B)
@@ -103,158 +99,142 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     val empty = (robHead === robTail) && (robHeadVals.asUInt === 0.U)
 
     //-----------------tool def---------------------
-    def GetRowIdx(robIdx : UInt): UInt ={
-        return (robIdx >> log2Ceil(coreWidth)).asUInt
-    }
-    def GetBankIdx(robIdx :UInt):UInt = {
-        return robIdx(log2Ceil(coreWidth)-1, 0).asUInt
-    }
+    def GetRowIdx(robIdx: UInt): UInt  = (robIdx >> log2Ceil(coreWidth)).asUInt
+    def GetBankIdx(robIdx: UInt): UInt = robIdx(log2Ceil(coreWidth) - 1, 0).asUInt
 
-    // Used for trace port, for debug purposes only
-    val rob_debug_inst_mem   = if (!FPGAPlatform) SyncReadMem(numRobRows, Vec(coreWidth, UInt(32.W))) else null
-    val rob_debug_inst_wmask = if (!FPGAPlatform) WireInit(VecInit(0.U(coreWidth.W).asBools)) else null
-    val rob_debug_inst_wdata = if (!FPGAPlatform) Wire(Vec(coreWidth, UInt(32.W))) else null
+    // for difftest instruction commit
+    val rob_debug_inst_mem   = if (!FPGAPlatform) SyncReadMem(numRobRows, Vec(coreWidth, UInt(32.W)))       else null
+    val rob_debug_inst_wmask = if (!FPGAPlatform) WireInit(VecInit(0.U(coreWidth.W).asBools))               else null
+    val rob_debug_inst_wdata = if (!FPGAPlatform) Wire(Vec(coreWidth, UInt(32.W)))                          else null
     val rob_debug_inst_rdata = if (!FPGAPlatform) rob_debug_inst_mem.read(robHead, willCommit.reduce(_||_)) else null
     if (!FPGAPlatform) rob_debug_inst_mem.write(robTail, rob_debug_inst_wdata, rob_debug_inst_wmask)
 
-
-    //---------------------------------------------
-
     for (w <- 0 until coreWidth) {
-        def MatchBank(bankIdx : UInt): Bool = (bankIdx === w.U)
+// --------------------------------------------------------------------
+// helper functions
+        def MatchBank(bankIdx: UInt): Bool = (bankIdx === w.U)
+// --------------------------------------------------------------------
+// rob entries(one column)
+        val robVal          = RegInit(VecInit(Seq.fill(numRobRows){ false.B }))
+        val robBsy          = Reg(Vec(numRobRows, Bool()))
+        val robUop          = Reg(Vec(numRobRows,new MicroOp))
+        val robException    = Reg(Vec(numRobRows, Bool()))
 
-        val robVal        = RegInit(VecInit(Seq.fill(numRobRows){ false.B }))
-        val robBsy        = Reg(Vec(numRobRows, Bool()))
-        val robUop        = Reg(Vec(numRobRows,new MicroOp))
-        val robException  = Reg(Vec(numRobRows, Bool()))
-
-        val rob_debug_wdata = Mem(numRobRows, UInt(xLen.W))
-        val rob_debug_ldst  = Mem(numRobRows,UInt(lregSz.W))
-        val rob_debug_pc    = Mem(numRobRows,UInt(32.W))
-        val rob_debug_load_uncacheable = Mem(numRobRows, Bool())
-
-        //------------------dispatch stage------------------
-        //enqueue
-
-        if (!FPGAPlatform) {
-            rob_debug_inst_wmask(w) := io.enq_valids(w)
-            rob_debug_inst_wdata(w) := io.enq_uops(w).debug_inst
-        }
-
-        when (io.enq_valids(w)) {
-            robVal(robTail)        := true.B
-            robBsy(robTail)        := !(io.enq_uops(w).is_ibar ||
-                                        io.enq_uops(w).is_nop  ||
-                                        io.enq_uops(w).xcpt_cause === SYS ||
-                                        io.enq_uops(w).xcpt_cause === BRK)
-            robException(robTail)  := io.enq_uops(w).xcpt_valid
-            robUop(robTail)        := io.enq_uops(w)
-        } .elsewhen (io.enq_valids.reduce(_|_) && !robVal(robTail)) {
-            if (!FPGAPlatform) robUop(robTail).debug_inst := BUBBLE
-        }
-
-        //------------------writeback-----------------------
-
-        for(i <- 0 until numWritePorts){
-            val wbResp = io.wb_resps(i)
-            val wbUop  = wbResp.bits.uop
-            val rowIdx = GetRowIdx(wbUop.robIdx)
-            when (wbResp.valid && MatchBank(GetBankIdx(wbUop.robIdx))) {
-                robBsy(rowIdx)        := false.B
-                if (!FPGAPlatform) {
-                    robUop(rowIdx).debug_mispred := wbUop.debug_mispred
-                }
-            }
-        }
-
-        //-----------------lsu------------------------
-
-        for(clr_rob_idx <- io.lsu_clr_bsy){
-            when (clr_rob_idx.valid && MatchBank(GetBankIdx(clr_rob_idx.bits))) {
-                robBsy(GetRowIdx(clr_rob_idx.bits)) := false.B
-            }
-        }
-
-        //----------------exception-----------------
-
-        when (io.lsu_xcpt.valid && MatchBank(GetBankIdx(io.lsu_xcpt.bits.uop.robIdx))) {
-            robException(GetRowIdx(io.lsu_xcpt.bits.uop.robIdx)) := true.B
-        }
-
-        canThrowException(w) := robVal(robHead) && robException(robHead)
-
-        //---------------output:commit------------
-        canCommit(w) := robVal(robHead) && !(robBsy(robHead)) && !io.idle
-        isXcpt2Commit(w) := (robUop(robHead).xcpt_cause === SYS) || (robUop(robHead).xcpt_cause === BRK)
-
-        io.commit.valids(w)      := willCommit(w)
-        io.commit.arch_valids(w) := willCommit(w)
-        io.commit.uops(w)        := robUop(comIdx)
-        if (!FPGAPlatform) io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
-
-        // 感觉没什么用
-        when (
-            io.brupdate.b2.mispredict &&
-            MatchBank(GetBankIdx(io.brupdate.b2.uop.robIdx)) &&
-            GetRowIdx(io.brupdate.b2.uop.robIdx) === comIdx
-        ) {
-            io.commit.uops(w).taken := io.brupdate.b2.taken
-        }
-
-        val rbkRow = robState === stateRollback && !full
-
-        io.commit.rbk_valids(w) := rbkRow && robVal(comIdx)
-        io.commit.rollback      := (robState === stateRollback)
-
-        when (rbkRow) {
-            robVal(comIdx)       := false.B
-            robException(comIdx) := false.B
-        }
-
+        val rob_debug_wdata = if (!FPGAPlatform) Mem(numRobRows, UInt(xLen.W))   else null
+        val rob_debug_ldst  = if (!FPGAPlatform) Mem(numRobRows, UInt(lregSz.W)) else null
+        val rob_debug_pc    = if (!FPGAPlatform) Mem(numRobRows, UInt(32.W))     else null
+        val rob_debug_ld_uc = if (!FPGAPlatform) Mem(numRobRows, Bool())         else null
+// --------------------------------------------------------------------
+// handle branch mispredicts
         for (i <- 0 until numRobRows) {
-            var brMask = robUop(i).brMask
-            when (IsKilledByBranch(io.brupdate,brMask)) {
-                robVal(i)            := false.B
+            val brMask = robUop(i).brMask
+            when (IsKilledByBranch(io.brupdate, brMask)) {
+                robVal(i) := false.B
                 if (!FPGAPlatform) robUop(i).debug_inst := BUBBLE
-            } .elsewhen (robVal(i)) {
-                robUop(i).brMask := GetNewBrMask(io.brupdate,brMask)
             }
+            robUop(i).brMask := GetNewBrMask(io.brupdate, brMask)
         }
 
-        // 感觉这个也没什么地方用
         when (
             io.brupdate.b2.mispredict &&
             MatchBank(GetBankIdx(io.brupdate.b2.uop.robIdx))
         ) {
             robUop(GetRowIdx(io.brupdate.b2.uop.robIdx)).taken := io.brupdate.b2.taken
         }
+// --------------------------------------------------------------------
+// enqueue uops from dispatch
+        when (io.enq_valids(w)) {
+            robVal(robTail)       := true.B
+            robBsy(robTail)       := !(
+                io.enq_uops(w).is_nop                       ||
+                io.enq_uops(w).xcpt_cause === CauseCode.SYS ||
+                io.enq_uops(w).xcpt_cause === CauseCode.BRK
+            )
+            robException(robTail) := io.enq_uops(w).xcpt_valid
+            robUop(robTail)       := io.enq_uops(w)
+        } .elsewhen (io.enq_valids.reduce(_|_) && !robVal(robTail)) {
+            if (!FPGAPlatform) robUop(robTail).debug_inst := BUBBLE
+        }
+        if (!FPGAPlatform) {
+            rob_debug_inst_wmask(w) := io.enq_valids(w)
+            rob_debug_inst_wdata(w) := io.enq_uops(w).debug_inst
+        }
+// --------------------------------------------------------------------
+// clear busy bits
+        // clear busy bit when an instruction writes back
+        for (wb_resp <- io.wb_resps) {
+            val uop = wb_resp.bits.uop
+            val idx = GetRowIdx(uop.robIdx)
+            when (wb_resp.valid && MatchBank(GetBankIdx(uop.robIdx))) {
+                robBsy(idx) := false.B
+                if (!FPGAPlatform) {
+                    robUop(idx).debug_mispred := uop.debug_mispred
+                }
+            }
+        }
+        // clear busy bit when a store finishes addr-gen and data-gen
+        for (idx <- io.lsu_clr_bsy) {
+            when (idx.valid && MatchBank(GetBankIdx(idx.bits))) {
+                robBsy(GetRowIdx(idx.bits)) := false.B
+            }
+        }
+// --------------------------------------------------------------------
+// handle exception from lsu
+        // mark the rob entry as having an exception
+        when (io.lsu_xcpt.valid && MatchBank(GetBankIdx(io.lsu_xcpt.bits.uop.robIdx))) {
+            robException(GetRowIdx(io.lsu_xcpt.bits.uop.robIdx)) := true.B
+        }
+// --------------------------------------------------------------------
+// commit instructions
+        can_commit(w)     := robVal(robHead) && !robBsy(robHead) && !io.idle
+        commit_syscall(w) := (
+            IsEqual(robUop(robHead).xcpt_cause, CauseCode.SYS) ||
+            IsEqual(robUop(robHead).xcpt_cause, CauseCode.BRK)
+        )
 
-        //------------------commit--------------------------
+        io.commit.valids(w)          := willCommit(w)
+        io.commit.arch_valids(w)     := willCommit(w)
+        io.commit.uops(w)            := robUop(commit_idx)
+        if (!FPGAPlatform) {
+            io.commit.debug_insts(w) := rob_debug_inst_rdata(w)
+        }
+
+        when (
+            io.brupdate.b2.mispredict &&
+            MatchBank(GetBankIdx(io.brupdate.b2.uop.robIdx)) &&
+            GetRowIdx(io.brupdate.b2.uop.robIdx) === commit_idx
+        ) {
+            io.commit.uops(w).taken := io.brupdate.b2.taken
+        }
+
+        // we need to decrement rob_tail on the first rollback cycle
+        // if rob is full, we need to disable rollback to prevent rolling back the instruction at rob_head
+        val rollback = robState === stateRollback && !full
+
+        io.commit.rbk_valids(w) := rollback && robVal(commit_idx)
+        io.commit.rollback      := (robState === stateRollback)
+
+        when (rollback) {
+            robVal(commit_idx)       := false.B
+            robException(commit_idx) := false.B
+        }
         when (willCommit(w)) {
             robVal(robHead) := false.B
         }
 
-        //--------------------output-----------------------
-        robHeadVals(w)    := robVal(robHead)
-        robHeadUsesLdq(w) := robUop(robHead).use_ldq
-
         if (!FPGAPlatform) {
-            when(willCommit(w)) {
+            when (willCommit(w) || rollback) {
                 robUop(robHead).debug_inst := BUBBLE
-            }.elsewhen(rbkRow) {
-                robUop(robTail).debug_inst := BUBBLE
             }
         }
-
-        // 给 debug 用的
         if (!FPGAPlatform) {
             for (i <- 0 until numWritePorts) {
                 val rob_idx = io.wb_resps(i).bits.uop.robIdx
-                when(io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx))) {
+                when (io.debug_wb_valids(i) && MatchBank(GetBankIdx(rob_idx))) {
                     rob_debug_wdata(GetRowIdx(rob_idx)) := io.debug_wb_wdata(i)
-                    rob_debug_ldst(GetRowIdx(rob_idx)) := io.debug_wb_ldst(i)
-                    rob_debug_pc(GetRowIdx(rob_idx)) := io.debug_wb_pc(i)
-                    rob_debug_load_uncacheable(GetRowIdx(rob_idx)) := io.debug_load_uncacheable(i)
+                    rob_debug_ldst(GetRowIdx(rob_idx))  := io.debug_wb_ldst(i)
+                    rob_debug_pc(GetRowIdx(rob_idx))    := io.debug_wb_pc(i)
+                    rob_debug_ld_uc(GetRowIdx(rob_idx)) := io.debug_load_uncacheable(i)
                 }
                 val temp_uop = robUop(GetRowIdx(rob_idx))
 
@@ -268,11 +248,17 @@ class Rob(val numWritePorts: Int) extends CoreModule {
                     temp_uop.ldst_val && temp_uop.pdst =/= io.wb_resps(i).bits.uop.pdst),
                     "[rob] writeback (" + i + ") occurred to the wrong pdst.")
             }
-            io.commit.debug_wdata(w) := rob_debug_wdata(robHead)
-            io.commit.debug_ldst(w) := rob_debug_ldst(robHead)
-            io.commit.debug_pc(w) := rob_debug_pc(robHead)
-            io.commit.debug_load_uncacheable(w) := rob_debug_load_uncacheable(robHead)
+            io.commit.debug_wdata(w)            := rob_debug_wdata(robHead)
+            io.commit.debug_ldst(w)             := rob_debug_ldst(robHead)
+            io.commit.debug_pc(w)               := rob_debug_pc(robHead)
+            io.commit.debug_load_uncacheable(w) := rob_debug_ld_uc(robHead)
         }
+// --------------------------------------------------------------------
+// others
+        canThrowException(w) := robVal(robHead) && robException(robHead)
+        robHeadVals(w)       := robVal(robHead)
+        robHeadUsesLdq(w)    := robUop(robHead).use_ldq
+// --------------------------------------------------------------------
     }
 
     var blockCommit = (robState =/= stateNormal) && (robState =/= stateWatiTillEmpty) || RegNext(exceptionThrown) || RegNext(RegNext(exceptionThrown))
@@ -281,15 +267,15 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     for (w <- 0 until coreWidth) {
         willThrowException = (canThrowException(w) && !blockCommit && !blockXcpt) || willThrowException
-        willCommit(w) := canCommit(w) && (!canThrowException(w) || isXcpt2Commit(w)) && !blockCommit
-        blockCommit = (robHeadVals(w) && (!canCommit(w) || canThrowException(w))) ||blockCommit
+        willCommit(w) := can_commit(w) && (!canThrowException(w) || commit_syscall(w)) && !blockCommit
+        blockCommit = (robHeadVals(w) && (!can_commit(w) || canThrowException(w))) || blockCommit
         blockXcpt = willCommit(w)
     }
 
     exceptionThrown := willThrowException
     val isMiniException = (
-        io.com_xcpt.bits.cause === MINI_EXCEPTION_MEM_ORDERING ||
-        io.com_xcpt.bits.cause === MINI_EXCEPTION_L0TLB_MISS
+        IsEqual(io.com_xcpt.bits.cause, CauseCode.MINI_EXCEPTION_MEM_ORDERING) ||
+        IsEqual(io.com_xcpt.bits.cause, CauseCode.MINI_EXCEPTION_L0TLB_MISS)
     )
     io.com_xcpt.valid := exceptionThrown && !isMiniException
     io.com_xcpt.bits.cause := rXcptUop.xcpt_cause
@@ -297,12 +283,11 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     io.com_xcpt.bits.uop := rXcptUop
 
     io.com_xcpt.bits.badvaddr := Sext(rXcptBadvaddr, xLen)
-    val insnSysPc2epc = robHeadVals.reduce(_||_) && PriorityMux(robHeadVals,io.commit.uops.map{u => u.is_sys_pc2epc})
 
-    val refetchInst = exceptionThrown || insnSysPc2epc
-    val comXcptUop = PriorityMux(robHeadVals,io.commit.uops)
-    io.com_xcpt.bits.ftq_idx := comXcptUop.ftqIdx
-    io.com_xcpt.bits.pc_lob := comXcptUop.pcLowBits
+    val refetchInst = exceptionThrown
+    val comXcptUop = PriorityMux(robHeadVals, io.commit.uops)
+    io.com_xcpt.bits.ftq_idx   := comXcptUop.ftqIdx
+    io.com_xcpt.bits.pc_lob    := comXcptUop.pcLowBits
     io.com_xcpt.bits.flush_typ := DontCare
 
     //------------------flush-------------------
@@ -311,15 +296,13 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     val flushCommit = flushCommitMask.reduce(_|_)
     val flushVal = exceptionThrown || flushCommit
 
-    val flushUop = Mux(exceptionThrown,comXcptUop,Mux1H(flushCommitMask,io.commit.uops))
+    val flushUop = Mux(exceptionThrown,comXcptUop, Mux1H(flushCommitMask,io.commit.uops))
 
     //优化时序，延迟一个周期
     io.flush.valid := flushVal
     io.flush.bits.uop := DontCare
     io.flush.bits.ftq_idx := flushUop.ftqIdx
     io.flush.bits.pc_lob := flushUop.pcLowBits
-    //io.flush.bits.edge_inst := flushUop.edge_inst
-    //io.flush.bits.is_rvc := flushUop.is_rvc
     io.flush.bits.flush_typ := FlushTypes.getType(flushVal,
                                                 exceptionThrown && !isMiniException,
                                                 flushCommit && flushUop.uopc === uopERET,
@@ -376,7 +359,6 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     val robDeq = WireInit(false.B)
     val rPartialRow = RegInit(false.B)
 
-
     when(io.enq_valids.reduce(_|_)){
         rPartialRow := io.enq_partial_stall
     }
@@ -417,7 +399,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     }
 
     //----------------------maybefull--------------------
-    maybeFull := !robDeq &&(robEnq||maybeFull) || io.brupdate.b1.mispredictMask =/= 0.U
+    maybeFull := !robDeq && (robEnq || maybeFull) || io.brupdate.b1.mispredictMask =/= 0.U
 
     io.rob_head_idx := robHeadIdx
     io.rob_tail_idx := robTailIdx
@@ -427,9 +409,6 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     //---------------------state change(FSM)-------------------
 
     switch (robState) {
-        is (stateReset) {
-            robState := stateNormal
-        }
         is (stateNormal) {
             when (RegNext(RegNext(exceptionThrown))) {
                 robState := stateRollback

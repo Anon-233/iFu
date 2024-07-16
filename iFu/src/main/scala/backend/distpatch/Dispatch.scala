@@ -37,7 +37,7 @@ class BasicDispatcher extends Dispatcher {
         ren_readys(i) := VecInit(iqType_match zip iqType_ready map { case (m, r) => m && r })
     }
     for (w <- 0 until coreWidth) {
-        io.ren_uops(w).ready := ren_readys.map(_(w)).reduce(_||_)
+        io.ren_uops(w).ready := ren_readys.map(_(w)).reduce(_||_) || io.ren_uops(w).bits.xcpt_valid
     }
 
     for (i <- 0 until issueParams.size) {

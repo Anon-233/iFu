@@ -22,7 +22,7 @@ class xpm_memory_sdpram(ADDR_WIDTH: Int, DATA_WIDTH: Int, BYTE_WIDTH: Int) exten
     "USE_MEM_INIT" -> 0,
     "WAKEUP_TIME" -> "disable_sleep",
     "WRITE_DATA_WIDTH_A" -> DATA_WIDTH,
-    "WRITE_MODE_B" -> "read_first"
+    "WRITE_MODE_B" -> "no_change"
 )) {
     val io = IO(new Bundle {
         val clka = Input(Bool())

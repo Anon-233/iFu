@@ -309,7 +309,7 @@ class iFuCore extends CoreModule {
 
     val reg_xcpt_fetch_pc = RegEnable(ifu.io.core.getFtqPc(0).pc, 0.U, RegNext(xcpt_pc_req.fire))
     dontTouch(reg_xcpt_fetch_pc)
-    rob.io.xcpt_fetch_pc := Mux(RegNext(xcpt_pc_req.ready), ifu.io.core.getFtqPc(0).pc, reg_xcpt_fetch_pc)
+    rob.io.xcpt_fetch_pc := Mux(RegNext(xcpt_pc_req.fire), ifu.io.core.getFtqPc(0).pc, reg_xcpt_fetch_pc)
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------

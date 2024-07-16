@@ -102,7 +102,8 @@ class ALUUnit(
     val imm = immGen(uop.immPacked, uop.ctrl.imm_sel)
     if (isCSRUnit) {
         require (numStages == 1, "CSRUnit only supports 1 stage")
-        io.imm := uop.immPacked(23, 10).asUInt
+        io.imm := Mux(uop.ctrl.imm_sel === immCID, CSR_TID,
+                                                   uop.immPacked(23, 10).asUInt)
     }
 
     var op1Data: UInt = null
