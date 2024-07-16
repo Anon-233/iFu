@@ -14,7 +14,7 @@ class SDPRam[T <: Data](size: Int, t: T, lineSize: Int = 1) extends Module {
         val wstrobe = Input(UInt(lineSize.W))
         val wdata = Input(t)
     })
-    require(lineSize == 1 || t.getWidth % 8 == 0 || t.getWidth % 9 == 0)
+    require(lineSize == 1 || t.getWidth == 8 || t.getWidth == 9)
     if (FPGAPlatform) {
         val mem = Module(new xpm_memory_sdpram(log2Ceil(size), t.getWidth * lineSize, t.getWidth))
         mem.io.clka := clock.asBool
