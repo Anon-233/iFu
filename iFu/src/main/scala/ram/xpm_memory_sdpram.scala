@@ -11,7 +11,7 @@ class xpm_memory_sdpram(ADDR_WIDTH: Int, DATA_WIDTH: Int, BYTE_WIDTH: Int) exten
     "MEMORY_INIT_FILE" -> "none",
     "MEMORY_INIT_PARAM" -> "0",
     "MEMORY_OPTIMIZATION" -> "true",
-    "MEMORY_PRIMITIVE" -> 0,
+    "MEMORY_PRIMITIVE" -> "auto",
     "MEMORY_SIZE" -> (math.pow(2, ADDR_WIDTH) * DATA_WIDTH).toInt,
     "MESSAGE_CONTROL" -> 0,
     "READ_DATA_WIDTH_B" -> DATA_WIDTH,

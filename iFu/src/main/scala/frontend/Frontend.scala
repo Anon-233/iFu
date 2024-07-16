@@ -264,11 +264,11 @@ class Frontend extends CoreModule {
         s0_ghist     := s2_ghist
         f1_clear     := true.B
     } .elsewhen (s2_valid && f3_ready) {
-        when (s1_valid && s1_vpc === f2_predicted_target && !f2_correct_f1_ghist) {
+        when (s1_valid && IsEqual(s1_vpc, f2_predicted_target) && !f2_correct_f1_ghist) {
             // all right, use the predicted information to update the global history
             s2_ghist := f2_predicted_ghist
         }
-        when ((s1_valid && (s1_vpc =/= f2_predicted_target || f2_correct_f1_ghist)) || !s1_valid) {
+        when ((s1_valid && (!IsEqual(s1_vpc, f2_predicted_target) || f2_correct_f1_ghist)) || !s1_valid) {
             // redirect, next cycle, s2_ghist is meaningless, so we don't care
             s0_valid := !s2_tlb_resp.exception.valid
             s0_vpc   := f2_predicted_target
@@ -355,7 +355,7 @@ class Frontend extends CoreModule {
         f3_btb_mispredicts(i) := (
             brsigs.cfiType === CFI_BL &&   // predecode can only correct BL
             f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.valid &&
-            (f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits =/= brsigs.target)
+            !IsEqual(f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits, brsigs.target)
         )
 
         /**
@@ -418,13 +418,13 @@ class Frontend extends CoreModule {
             ras.io.write_valid := true.B
         }
 
-        when (s2_valid && s2_vpc === f3_predicted_target&& !f3_correct_f2_ghist) {
+        when (s2_valid && IsEqual(s2_vpc, f3_predicted_target) && !f3_correct_f2_ghist) {
             f3_ifu_resp.io.enq.bits.gHist := f3_predicted_ghist
-        } .elsewhen (!s2_valid && s1_valid && s1_vpc === f3_predicted_target && !f3_correct_f1_ghist) {
+        } .elsewhen (!s2_valid && s1_valid && IsEqual(s1_vpc, f3_predicted_target) && !f3_correct_f1_ghist) {
             s2_ghist := f3_predicted_ghist
         } .elsewhen (
-            (s2_valid && (s2_vpc =/= f3_predicted_target || f3_correct_f2_ghist)) ||
-            (!s2_valid && s1_valid && (s1_vpc =/= f3_predicted_target || f3_correct_f1_ghist)) ||
+            (s2_valid && (!IsEqual(s2_vpc, f3_predicted_target) || f3_correct_f2_ghist)) ||
+            (!s2_valid && s1_valid && (!IsEqual(s1_vpc, f3_predicted_target) || f3_correct_f1_ghist)) ||
             (!s2_valid && !s1_valid)
         ) {
             f2_clear     := true.B

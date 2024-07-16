@@ -31,6 +31,7 @@ class SDPRam[T <: Data](size: Int, t: T, lineSize: Int = 1) extends Module {
         mem.io.sleep := false.B
         mem.io.injectdbiterra := false.B
         mem.io.injectsbiterra := false.B
+        
     } else {
         val mem = SyncReadMem(size, t)
         io.rdata := mem.read(io.raddr)

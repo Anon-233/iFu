@@ -284,7 +284,7 @@ class Lsu extends CoreModule {
     ldq_tail := idxAllocator.io.new_ldq_tail
     stq_tail := idxAllocator.io.new_stq_tail
 
-    val stqEmpty = (0 until numStqEntries).map{ i => stq(i).valid }.reduce(_||_) === 0.U
+    val stqEmpty = VecInit((0 until numStqEntries).map{ i => !stq(i).valid }).asUInt.andR
     dcache.io.lsu.fence_dmem := io.core.fence_dmem
     io.core.stq_empty  := stqEmpty
     io.core.dcache_ord := RegNext(dcache.io.lsu.ordered)    // delay one cycle for better timing
@@ -502,7 +502,7 @@ class Lsu extends CoreModule {
 // -----------------------------------------------------------------------
 // s1 stage: dcache access
     val dmem_req = Wire(Vec(memWidth, Valid(new DCacheReq)))
-    dcache.io.lsu.req.valid := dmem_req.map(_.valid).reduce(_||_)
+    dcache.io.lsu.req.valid := VecInit(dmem_req.map(_.valid)).asUInt.orR
     dcache.io.lsu.req.bits := dmem_req
     // decache will accept both two requests or reject both two requests
     val dmem_req_fire = widthMap(w => dmem_req(w).valid && dcache.io.lsu.req.fire)
@@ -678,7 +678,7 @@ class Lsu extends CoreModule {
 
         // last cycle, there is a store forword to this load
         val l_forwarders      = widthMap(w => wb_forward_valid(w) && wb_forward_ldq_idx(w) === i.U)
-        val l_is_forwarding   = l_forwarders.reduce(_||_)
+        val l_is_forwarding   = l_forwarders.reduce(_ || _)
         val l_forward_stq_idx = Mux(l_is_forwarding, Mux1H(l_forwarders, wb_forward_stq_idx), l_bits.forward_stq_idx)
 
         val offsetBits = dcacheParameters.nOffsetBits
@@ -814,7 +814,7 @@ class Lsu extends CoreModule {
 
     // s3 stage
     val l_idx         = RegNext(PriorityEncoder(temp_bits)(ldqAddrSz - 1, 0))
-    val ld_xcpt_valid = RegNext(failed_loads.reduce(_|_)) && ldq(l_idx).valid
+    val ld_xcpt_valid = RegNext(failed_loads.asUInt.orR) && ldq(l_idx).valid
     val ld_xcpt_uop   = ldq(l_idx).bits.uop
 
     /* val r_xcpt_valid = RegInit(false.B) */
