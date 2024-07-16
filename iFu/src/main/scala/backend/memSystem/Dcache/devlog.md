@@ -274,8 +274,47 @@ mshrread看valid和dirty
 mshr写readonly
 refill写新的meta行
 replay和lsu写dirty
+(添加lsLsuStore 和 isReplayStore 两个信号，
+lsu如果hit了，其idx，hitpos对应的meta要做转发，当然，可能lsu hit但是到s2因为mshr有其他st，并不会做，可能会导致后面的mshrread读到的meta“认为”是dirty，但是没问题，因为将干净的行重写回去，不会影响。
+对于replay，需要s0传入自己将写入的idx和pos（pos之前没加，现在加了7.14），从而完成转发
+)
 
 - mshrread 写readonly要让前一周期lsu看到(done)
 - refill第一个字会废meta行，但是前一个周期的只读load的lsu还是可见的，此时行的第一个字被破坏了，因此调整到wb结束的时候就废除meta行**wb就除掉，到refill的时候至少隔一个周期，所有命中的ld数据行不会被refill破坏**，从而可以保证到refill写第一个字的时候那一行已经作废，lsu ld全部已经算miss(done)
 - refill最后一个字会写meta行，前一个lsu可能还是会误判为miss，解决方案如19所示（done）
 - 写dirty的replay和lsu要让前一周期mshrread看到从而正确反映给wfu(done) 至于valid，只有refill会改动，二者互斥，不会出现问题
+
+
+时序问题，对于lsu看到mshr 的 replace_find 万一是store就会错， 直接bubble掉，mshr在s1不让lsu发请求，不然在判断hitoh就会有若干复杂逻辑
+```java
+/*  & ~(s2_inv_mask & Fill (nWays, s2_inv_val && s2_inv_idx === ridx)) */
+```
+事实证明这对ipc几乎没影响
+
+而且现在也不做只读的判断了，在mshr的s2周期直接报销掉那个cache行
+那么mshr的replace_find -> (wb 的refill_logout) -> refill 第一个字的refill_logout
+现在就很简单了，wb和refill没必要去报废meta行了
+
+24. mshr hasstore 逻辑
+hasStore可以只看二表项里面是否有store，然后对外做一个regNext(hasStore)以减少时序计算
+需要在s1计算hit，同时做一个转发，保证s2当周期将存入的miss Store 前递
+
+ 需要被转发信息的那条指令包括： s1的要看s2的s2enter_missStore，来判断store miss ， s2不能参与写入mshr，并且发回nack和storeFailed
+
+正确性：
+一条st，miss之后不允许后面任何的cached st提前做完
+|s0 | s1 | s2 | mshr |
+|---|----|----| ---- |
+| st3  | st2（forwarded hasStore） | st1(miss,into mshr) | no entry no hasStore |
+| st4  | st3         | st2(must miss, send Nack and StoreFailed, wont enter mshr) | has entry no hasStore |
+| st2  | st4(killed) | st3(killed) | has entry hasStore |
+| st3  | st2(get io.hasStore) | st4(killed) | has entry hasStore |
+
+于是下一条st2不会先于st1做完
+
+当st1replay的时候，要保证后面的st2（可能和s1同一块地址）不能再miss（再refill会出问题）
+|s0 | s1 | s2| mshr |
+|---|---|---| --- |
+| st1（replay）| * | * | hasentry hasStore |
+| st2 | st1(replay) | * | no entry hasStore |
+| st3 | st2(hit, wont miss again) | st1(replay) | no entry no hasStore |

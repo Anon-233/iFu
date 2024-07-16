@@ -140,8 +140,8 @@ class MSHREntry extends CoreModule with HasDcacheParameters {
     val mshrBlockAddr = Mux(mshr.valid, getBlockAddr(mshr.req.addr), 0.U)
     // if(!FPGAPlatform)dontTouch(mshrBlockAddr)
     // 给外界返回match判断
-    io.newblockAddrMatch := mshr.valid && mshrBlockAddr === io.newBlockAddr
-    io.fetchedBlockAddrMatch := mshr.valid && mshrBlockAddr === io.fetchedBlockAddr
+    io.newblockAddrMatch     := mshr.valid && IsEqual(mshrBlockAddr, io.newBlockAddr)
+    io.fetchedBlockAddrMatch := mshr.valid && IsEqual(mshrBlockAddr, io.fetchedBlockAddr)
     // 状态机
     when (mshr.valid) {
         when (io.wakeUp){

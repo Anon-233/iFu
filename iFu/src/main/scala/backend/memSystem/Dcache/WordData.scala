@@ -7,6 +7,7 @@ import scala.annotation.switch
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
+import ram.SDPRam
 
 
 class DcacheData extends Module with HasDcacheParameters{
