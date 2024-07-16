@@ -129,55 +129,19 @@ class iFuCore extends CoreModule {
     require(jmp_unit.bypassable)
 
     // --------------------------------------
-    // Dealing with branch resolutions
-    val brinfos = Reg(Vec(coreWidth, new BrResolutionInfo))
-    if (!FPGAPlatform) dontTouch(brinfos)
-
-    val brUpdate = Wire(new BrUpdateInfo)
-    val b1       = Wire(new BrUpdateMasks)
-    val b2       = Reg(new BrResolutionInfo)
-    brUpdate.b1 := b1
-    brUpdate.b2 := b2
-
-    for ((b, a) <- brinfos zip exe_units.alu_units) {
-        b := a.io.brinfo
-        b.valid := a.io.brinfo.valid && !rob.io.flush.valid
+    val bru = Module(new BranchUnit)
+    bru.io.br_infos zip exe_units.alu_units map {
+        case (b, e) => b := e.io.brinfo
     }
-    b1.resolveMask := brinfos.map(x => (x.valid << x.uop.brTag).asUInt).reduce(_|_)
-    /* b1.mispredictMask := brinfos.map(x =>
-        ((x.valid && x.mispredict) << x.uop.brTag).asUInt
-    ).reduce(_|_) */
-    b1.mispredictMask := RegNext(exe_units.alu_units.map { u =>
-        (u.io.brinfo.valid && !rob.io.flush.valid && u.io.brinfo.mispredict) << u.io.brinfo.uop.brTag
-    }.reduce(_|_))
-    val b1_mispredict_val = brinfos.map(x => x.valid && x.mispredict).reduce(_||_)
+    bru.io.rob_flush := rob.io.flush.valid
+    bru.io.rob_head  := rob.io.rob_head_idx
+    bru.io.jalr_tgt  := jmp_unit.io.brinfo.jalrTarget
 
-    var mispredict_val = false.B
-    var oldest_mispredict = brinfos(0)
-    for (b <- brinfos) {
-        val mispred = b.valid && b.mispredict
-        val use_this_mispredict = !mispredict_val ||
-            mispred && IsOlder(b.uop.robIdx, oldest_mispredict.uop.robIdx, rob.io.rob_head_idx)
-        mispredict_val = mispredict_val || mispred
-        oldest_mispredict = Mux(use_this_mispredict, b, oldest_mispredict)
-    }
-
-    b2.mispredict := mispredict_val
-    b2.cfiType := oldest_mispredict.cfiType
-    b2.taken := oldest_mispredict.taken
-    b2.pcSel := oldest_mispredict.pcSel
-    b2.uop := UpdateBrMask(brUpdate, oldest_mispredict.uop)
-    b2.jalrTarget := RegNext(jmp_unit.io.brinfo.jalrTarget)
-    b2.targetOffset := oldest_mispredict.targetOffset
-
-    val oldest_mispredict_ftq_idx = oldest_mispredict.uop.ftqIdx
-    ifu.io.core.getFtqPc(1).ftqIdx := oldest_mispredict_ftq_idx
-
-    assert(!((b1_mispredict_val || brUpdate.b2.mispredict)
-            && rob.io.commit.rollback), "Can't have a mispredict during rollback.")
+    val b1_mispredict_val = bru.io.br_s1_mispredict
+    ifu.io.core.getFtqPc(1).ftqIdx := bru.io.mis_br_ftqIdx
+    val brUpdate = bru.io.br_update
 
     ifu.io.core.brupdate := brUpdate
-
     for (exu <- exe_units) {
         exu.io.brupdate := brUpdate
     }
@@ -847,70 +811,5 @@ class iFuCore extends CoreModule {
             rawCommit.debug_wen(w)   := rob.io.commit.uops(w).ldst_val && rob.io.commit.arch_valids(w)
             rawCommit.valids(w)      := rob.io.commit.arch_valids(w) & (~RegNext(rob.io.com_xcpt.valid))
         }
-
     }
-
-    //-------------------------------------------------------------
-    // *** Perfomance Counters ***
-    //-------------------------------------------------------------
-    
-    // a counter
-    // val (cntVal, cntWrap) = Counter(true.B, 1000)
-
-    // val dec_throughput = RegInit(0.U(64.W))
-    // dec_throughput := dec_throughput + PopCount(dec_valids.asUInt)
-    // when (cntWrap) {
-    //     printf("dec_throughput: %d\n", dec_throughput)
-    //     dec_throughput := 0.U
-    // }
-
-    // val dis_throughput = RegInit(0.U(64.W))
-    // dis_throughput := dis_throughput + PopCount(dis_valids.asUInt)
-    // when (cntWrap) {
-    //     printf("dis_throughput: %d\n", dis_throughput)
-    //     dis_throughput := 0.U
-    // }
-
-
-    // val iss_throughput = RegInit(0.U(64.W))
-    // iss_throughput := iss_throughput + PopCount(iss_valids.asUInt)
-    // when (cntWrap) {
-    //     printf("iss_throughput: %d\n", iss_throughput)
-    //     iss_throughput := 0.U
-    // }
-
-    // val rob_throughput = RegInit(0.U(64.W))
-    // rob_throughput := rob_throughput + PopCount(rob.io.commit.valids.asUInt)
-    // when (cntWrap) {
-    //     printf("rob_throughput: %d\n", rob_throughput)
-    //     rob_throughput := 0.U
-    // }
-
-    // val rob_throughput_arch = RegInit(0.U(64.W))
-    // rob_throughput_arch := rob_throughput_arch + PopCount(rob.io.commit.arch_valids.asUInt)
-    // when (cntWrap) {
-    //     printf("rob_throughput_arch: %d\n", rob_throughput_arch)
-    //     rob_throughput_arch := 0.U
-    // }
-
-    // val redirect_flush = RegInit(0.U(64.W))
-    // redirect_flush := redirect_flush + PopCount(ifu.io.core.redirect_flush.asUInt)
-    // when (cntWrap) {
-    //     printf("redirect_flush: %d\n", redirect_flush)
-    //     redirect_flush := 0.U
-    // }
-
-    // val lsu_ldq_num = RegInit(0.U(64.W))
-    // lsu_ldq_num := lsu_ldq_num + PopCount(lsu.io.core.ldq_valids.asUInt)
-    // when (cntWrap) {
-    //     printf("lsu_ldq_num: %d\n", lsu_ldq_num)
-    //     lsu_ldq_num := 0.U
-    // }
-
-    // val lsu_stq_num = RegInit(0.U(64.W))
-    // lsu_stq_num := lsu_stq_num + PopCount(lsu.io.core.stq_valids.asUInt)
-    // when(cntWrap) {
-    //     printf("lsu_stq_num: %d\n", lsu_stq_num)
-    //     lsu_stq_num := 0.U
-    // }
 }
