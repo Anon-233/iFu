@@ -337,7 +337,7 @@ class Frontend extends CoreModule {
 
     var redirect_found = false.B
     for (i <- 0 until fetchWidth) {
-        val pc    = f3_aligned_pc + (i << log2Ceil(coreInstrBytes)).U
+        val pc    = getPc(f3_aligned_pc, i.U)
         val instr = f3_instrs(i * coreInstrBits + coreInstrBits - 1, i * coreInstrBits)
 
         val pre_decoder = Module(new PreDecode)
@@ -407,7 +407,7 @@ class Frontend extends CoreModule {
     )
 
     ras.io.write_valid := false.B
-    ras.io.write_addr  := f3_aligned_pc + (f3_fetch_bundle.cfiIdx.bits << 2).asUInt + 4.U
+    ras.io.write_addr  := getPc(f3_aligned_pc, f3_fetch_bundle.cfiIdx.bits) + 4.U
     ras.io.write_idx   := WrapInc(f3_fetch_bundle.gHist.rasIdx, numRasEntries)
 
     val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist
