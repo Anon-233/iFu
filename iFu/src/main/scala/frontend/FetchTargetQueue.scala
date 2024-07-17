@@ -137,7 +137,7 @@ class FetchTargetQueue extends CoreModule {
     gHist.foreach(g => {
         g.io.wen := io.enq.fire
         g.io.waddr := bpu_ptr
-        g.io.wdata := newgHist
+        g.io.wdata.head := newgHist
         g.io.wstrobe := 1.U
     })
     io.enqIdx := bpu_ptr
@@ -150,7 +150,7 @@ class FetchTargetQueue extends CoreModule {
                                            train_ptr)
     val bpdEntry  = RegNext(ram(bpdIdx))
     gHist(0).io.raddr := bpdIdx
-    val bpdgHist  = gHist(0).io.rdata
+    val bpdgHist  = gHist(0).io.rdata.head
     val bpdMeta   = meta.read(bpdIdx, true.B)
     val bpdpc     = RegNext(pcs(bpdIdx))
     val bpdTarget = RegNext(pcs(WrapInc(bpdIdx, numFTQEntries)))
@@ -242,7 +242,7 @@ class FetchTargetQueue extends CoreModule {
         io.getFtqpc(i).entry       := RegNext(getEntry)
         if (i == 1) {
             gHist(1).io.raddr      := idx
-            io.getFtqpc(i).gHist   := gHist(1).io.rdata
+            io.getFtqpc(i).gHist   := gHist(1).io.rdata.head
         } else {
             io.getFtqpc(i).gHist   := DontCare
         }
