@@ -203,7 +203,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     io.smar.req.arvalid := ((s2_miss && !io.s2_kill) || (iCacheState === s_Fetch)) && !RegNext(io.smar.resp.rlast)
     io.smar.req.arsize := AXI3Parameters.MSIZE4
     io.smar.req.araddr := (refillPaddr >> iParams.offsetBits) << iParams.offsetBits
-    io.smar.req.arburst := AXI3Parameters.BURST_INCR
+    io.smar.req.arburst := AXI3Parameters.BURST_WRAP
     io.smar.req.arlen := AXI3Parameters.MLEN16
     require(iParams.lineBytes == 64)
 //========== ------ IO ------ ==========

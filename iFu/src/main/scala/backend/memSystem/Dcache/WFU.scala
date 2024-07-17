@@ -87,7 +87,7 @@ class WriteFetchUnit extends Module with HasDcacheParameters {
 
     io.smar.req.arvalid := state === fetch
     io.smar.req.arlen   := AXI3Parameters.MLEN16
-    io.smar.req.arburst := AXI3Parameters.BURST_INCR
+    io.smar.req.arburst := AXI3Parameters.BURST_WRAP
     io.smar.req.arsize  := AXI3Parameters.MSIZE4
     io.smar.req.araddr  := fetchAddr
 
@@ -95,7 +95,7 @@ class WriteFetchUnit extends Module with HasDcacheParameters {
     io.smaw.req.wvalid  := state === wb && getfirstWord
     io.smaw.req.wstrb   := 0xf.U
     io.smaw.req.awlen   := AXI3Parameters.MLEN16
-    io.smaw.req.awburst := AXI3Parameters.BURST_INCR
+    io.smaw.req.awburst := AXI3Parameters.BURST_WRAP
     io.smaw.req.awsize  := AXI3Parameters.MSIZE4
     io.smaw.req.awaddr  := replaceAddr
     io.smaw.req.wdata   := dataLineBuffer(execute_head)
