@@ -79,7 +79,7 @@ class BTBPredictor extends Module with HasBtbParameters{
         m.read(s0_tag_idx.asUInt, s0_valid).map(_.asTypeOf(new BTBMeta))
     )))
     ebtb.io.raddr := s0_tag_idx
-    val s1_ebtb = ebtb.io.rdata
+    val s1_ebtb = ebtb.io.rdata.head
 
     val s1_tag = s1_tag_idx >> log2Ceil(nSets)
     val s1_hit_OHs = VecInit((0 until fetchWidth) map { i =>
@@ -196,7 +196,7 @@ class BTBPredictor extends Module with HasBtbParameters{
 
     ebtb.io.wen := s1_update_wbtb_mask =/= 0.U && need_extend
     ebtb.io.waddr := s1_update_idx
-    ebtb.io.wdata := s1_update.bits.target
+    ebtb.io.wdata.head := s1_update.bits.target
     ebtb.io.wstrobe := 1.U
 // ---------------------------------------------
 

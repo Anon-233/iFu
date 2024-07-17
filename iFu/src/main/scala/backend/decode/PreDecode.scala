@@ -62,11 +62,11 @@ class PreDecode extends CoreModule with PreDecodeTable {
     io.out.isCall := (isBl && io.instr(26)) || (isJirl && io.instr(4, 0) === 1.U)
 
     // target输出一个32位的地址
-    io.out.target := ((
+    io.out.target := (
         Mux(isBr,
-            Cat(Fill(14, io.instr(25)), io.instr(25,10), 0.U(2.W)),
-            Cat(Fill(4, io.instr(9)), io.instr(9,0), io.instr(25,10), 0.U(2.W))
-        ).asSInt + io.pc.asSInt).asSInt & (-4).S).asUInt
+            Cat(Fill(14, io.instr(25)), io.instr(25, 10), 0.U(2.W)),
+            Cat(Fill(4, io.instr(9)), io.instr(9, 0), io.instr(25, 10), 0.U(2.W))
+        ).asSInt + io.pc.asSInt).asUInt
 
     io.out.cfiType := Mux(isBr,   CFI_BR,
                       Mux(isBl,   CFI_BL,
