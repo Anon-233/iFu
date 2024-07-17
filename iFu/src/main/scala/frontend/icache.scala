@@ -51,7 +51,6 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val s_Normal :: s_Fetch :: Nil = Enum(2)
     val iCacheState = RegInit(s_Normal)
 
-    val s2_miss     = Wire(Bool())
     /* val replWay     = LFSR(16, s2_miss)(log2Ceil(iParams.nWays) - 1, 0) */
     val repls       = (0 until iParams.nSets) map { i =>
         val repl = Module(new PseudoLRU(iParams.nWays))
@@ -64,19 +63,11 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val dataArray   = Module(new SDPRam(iParams.nSets * fetchesPerLine, UInt(packetBits.W), iParams.nWays))
 //========== ----i$ body----- ==========
 /*---------------------------------------------------------------------*/
-//========== ----S0 Stage---- ==========
-    val s0_valid = io.req.fire
-    val s0_vaddr = io.req.bits.addr
-//========== ----S0 Stage---- ==========
-/*---------------------------------------------------------------------*/
-//========== S0 - S1 Register ==========
-    val s1_valid    = RegNext(s0_valid)
-    val s1_idx      = RegNext(getSet(s0_vaddr))
-    val s1_fetchIdx = RegNext(s0_vaddr(iParams.offsetBits - 1, log2Ceil(fetchBytes)))
-//========== S0 - S1 Register ==========
-/*---------------------------------------------------------------------*/
 //========== ----S1 Stage---- ==========
-    // do nothing for now
+    val s1_valid    = io.req.fire
+    val s1_vaddr    = io.req.bits.addr
+    val s1_idx      = getSet(s1_vaddr)
+    val s1_fetchIdx = s1_vaddr(iParams.offsetBits - 1, log2Ceil(fetchBytes))
 //========== ----S1 Stage---- ==========
 /*---------------------------------------------------------------------*/
 //========== S1 - S2 Register ==========
@@ -99,7 +90,7 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val s2_hit     = s2_tagHit.asUInt.orR
     val s2_hit_pos = OHToUInt(s2_tagHit)
     val s2_data    = Mux1H(s2_tagHit, dataArray.io.rdata)
-    s2_miss := s2_valid && !s2_hit && (iCacheState === s_Normal)
+    val s2_miss = s2_valid && !s2_hit && (iCacheState === s_Normal)
 
     repls.zipWithIndex.foreach { case (repl, i) =>
         repl.access.valid := (
