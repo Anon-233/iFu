@@ -60,11 +60,8 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val replWays    = VecInit(repls map { _.repl_way })
 
     val validArray  = RegInit(0.U((iParams.nSets * iParams.nWays).W))
-    val tagArray    = SyncReadMem(
-        iParams.nSets,
-        Vec(iParams.nWays, UInt(iParams.tagBits.W))
-    )
-    val dataArray   = Module(new SDPRam(iParams.nSets * iParams.nWays * fetchesPerLine, UInt(packetBits.W)))
+    val tagArray    = Module(new SDPRam(iParams.nSets, UInt(iParams.tagBits.W), iParams.nWays))
+    val dataArray   = Module(new SDPRam(iParams.nSets * fetchesPerLine, UInt(packetBits.W), iParams.nWays))
 //========== ----i$ body----- ==========
 /*---------------------------------------------------------------------*/
 //========== ----S0 Stage---- ==========
@@ -76,32 +73,32 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     val s1_valid    = RegNext(s0_valid)
     val s1_idx      = RegNext(getSet(s0_vaddr))
     val s1_fetchIdx = RegNext(s0_vaddr(iParams.offsetBits - 1, log2Ceil(fetchBytes)))
-    val tagReadData = tagArray.read(getSet(s0_vaddr))
 //========== S0 - S1 Register ==========
 /*---------------------------------------------------------------------*/
 //========== ----S1 Stage---- ==========
-    val s1_tagHit = Wire(Vec(iParams.nWays, Bool()))
-    for (i <- 0 until iParams.nWays) {
-        val s1_tag      = getTag(io.s1_paddr)
-        val s1_validBit = validArray(Cat(i.U(log2Ceil(iParams.nWays).W), s1_idx))
-        val tag         = tagReadData(i)
-
-        s1_tagHit(i) := s1_validBit && tag === s1_tag
-    }
-    val s1_hit     = s1_tagHit.asUInt.orR
-    val s1_hit_pos = OHToUInt(s1_tagHit)
+    // do nothing for now
 //========== ----S1 Stage---- ==========
 /*---------------------------------------------------------------------*/
 //========== S1 - S2 Register ==========
     val s2_valid   = RegNext(s1_valid && !io.s1_kill)
-    val s2_idx     = RegNext(s1_idx)
-    val s2_hit     = RegNext(s1_hit)
-    val s2_hit_pos = RegNext(s1_hit_pos)
-    dataArray.io.raddr := Cat(s1_idx, s1_hit_pos, s1_fetchIdx)
-    val s2_data    = dataArray.io.rdata
+    val s2_idx = RegNext(s1_idx)
+    tagArray.io.raddr := s1_idx
+    val tagReadData = tagArray.io.rdata
+    dataArray.io.raddr := Cat(s1_idx, s1_fetchIdx)
 //========== S1 - S2 Register ==========
 /*---------------------------------------------------------------------*/
 //========== ----S2 Stage---- ==========
+    val s2_tagHit = Wire(Vec(iParams.nWays, Bool()))
+    for (i <- 0 until iParams.nWays) {
+        val s2_tag      = RegNext(getTag(io.s1_paddr))
+        val s2_validBit = validArray(Cat(i.U(log2Ceil(iParams.nWays).W), s2_idx))
+        val tag         = tagReadData(i)
+
+        s2_tagHit(i) := s2_validBit && tag === s2_tag
+    }
+    val s2_hit     = s2_tagHit.asUInt.orR
+    val s2_hit_pos = OHToUInt(s2_tagHit)
+    val s2_data    = Mux1H(s2_tagHit, dataArray.io.rdata)
     s2_miss := s2_valid && !s2_hit && (iCacheState === s_Normal)
 
     repls.zipWithIndex.foreach { case (repl, i) =>
@@ -166,22 +163,21 @@ class ICache(val iParams : ICacheParameters) extends CoreModule {
     }
 
     val writeEn = refillEn
-    val writeIdx = Cat(refillIdx, replWays(refillIdx), refillCnt)
+    val writeIdx = Cat(refillIdx, refillCnt)
     dataArray.io.wen := writeEn
     dataArray.io.waddr := writeIdx
-    dataArray.io.wdata := refillData
-    dataArray.io.wstrobe := 1.U
+    dataArray.io.wdata := VecInit(Seq.fill(iParams.nWays)(refillData))
+    dataArray.io.wstrobe := VecInit(Seq.tabulate(iParams.nWays)(replWays(refillIdx) === _.U)).asUInt
 
     when (refillLast) {
-        tagArray.write(
-            refillIdx,
-            VecInit(Seq.fill(iParams.nWays)(refillTag)),
-            Seq.tabulate(iParams.nWays)(replWays(refillIdx) === _.U)
-        )
         validArray := validArray.bitSet(
             Cat(replWays(refillIdx), refillIdx), refillLast && !invalidated
         )
     }
+    tagArray.io.wen := refillLast
+    tagArray.io.waddr := refillIdx
+    tagArray.io.wdata := VecInit(Seq.fill(iParams.nWays)(refillTag))
+    tagArray.io.wstrobe := VecInit(Seq.tabulate(iParams.nWays)(replWays(refillIdx) === _.U)).asUInt
 
 //========== --Refill Logic-- ==========
 /*---------------------------------------------------------------------*/
