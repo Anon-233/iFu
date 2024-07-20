@@ -32,9 +32,6 @@ class BranchPredictionBundle extends Bundle with HasBPUParameters{
 }
 
 class BranchPredictionUpdate extends Bundle with HasBPUParameters {
-  val btbMispredicts = UInt(fetchWidth.W)
-  def isCommitUpdate = btbMispredicts === 0.U
-
   val pc            = UInt(vaddrBits.W)
   // Mask of instructions which are branches.
   // If these are not cfiIdx, then they were predicted not taken

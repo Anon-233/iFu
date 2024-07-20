@@ -93,10 +93,7 @@ class BimPredictor extends Module with HasBimParameters {
         val update_pc  = s1_update.bits.pc + (w << 2).U
         val update_idx = fetchIdx(update_pc)
 
-        when (
-            s1_update.bits.brMask(w) ||
-            (s1_update.bits.cfiIdx.valid && s1_update.bits.cfiIdx.bits === w.U)
-        ) {
+        when (s1_update.valid && (s1_update.bits.brMask(w) ||(s1_update.bits.cfiIdx.valid && s1_update.bits.cfiIdx.bits === w.U))) {
             val was_taken = (
                 (s1_update.bits.cfiIdx.valid) &&
                 (s1_update.bits.cfiIdx.bits === w.U) &&
@@ -122,7 +119,7 @@ class BimPredictor extends Module with HasBimParameters {
         Mux(reset_en, (~(0.U(fetchWidth.W))), s1_update_mask.asUInt).asBools
     )
 
-    when (s1_update_mask.reduce(_||_) && s1_update.valid && s1_update.bits.isCommitUpdate) {
+    when (s1_update_mask.reduce(_||_) && s1_update.valid) {
         when (wr_bypass_hit) {
             wr_bypass_regs(wr_bypass_hit_idx) := s1_update_data
         } .otherwise {

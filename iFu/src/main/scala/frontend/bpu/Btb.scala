@@ -144,11 +144,7 @@ class BTBPredictor extends Module with HasBtbParameters{
 
     val s1_update_wmeta = Wire(Vec(fetchWidth, new BTBMeta))
     for (w <- 0 until fetchWidth) {
-        s1_update_wmeta(w).tag   := Mux(
-            s1_update.bits.btbMispredicts(w),
-            0.U,
-            s1_update_idx >> log2Ceil(nSets)
-        )
+        s1_update_wmeta(w).tag   := s1_update_idx >> log2Ceil(nSets)
         s1_update_wmeta(w).is_br := s1_update.bits.brMask(w)
     }
 
@@ -156,16 +152,8 @@ class BTBPredictor extends Module with HasBtbParameters{
     s1_update_wbtb.offset   := new_offset
     s1_update_wbtb.extended := need_extend
 
-    val s1_update_wbtb_mask = (
-        UIntToOH(s1_update_cfi_idx) &
-        Fill(fetchWidth, s1_update.bits.cfiIdx.valid && s1_update.bits.cfiTaken && s1_update.bits.isCommitUpdate)
-    )
-    val s1_update_wmeta_mask = (
-        (s1_update_wbtb_mask | s1_update.bits.brMask) &
-        ( Fill(fetchWidth, s1_update.valid && s1_update.bits.isCommitUpdate) |  
-         (Fill(fetchWidth, s1_update.valid) & s1_update.bits.btbMispredicts)
-        )
-    )
+    val s1_update_wbtb_mask = UIntToOH(s1_update_cfi_idx) & Fill(fetchWidth, s1_update.valid && s1_update.bits.cfiIdx.valid && s1_update.bits.cfiTaken)
+    val s1_update_wmeta_mask = s1_update_wbtb_mask
 
     for (w <- 0 until nWays) {
         when (reset_en || s1_update_way === w.U){

@@ -360,7 +360,7 @@ class TagePredictor(params: TageParams = TageParams())extends Module with HasTag
         )
 
     // 对包里面的跳转指令并且是发生了commit的指令进行有关信息更新
-        when (io.f1update.bits.brMask(w) && io.f1update.valid && io.f1update.bits.isCommitUpdate){
+        when (io.f1update.bits.brMask(w) && io.f1update.valid){
 
             // 如果当时确实找到了一个provider表,那么就更新这个表对应的信息
             when (s1updateMeta(w).provider.valid){
@@ -385,7 +385,7 @@ class TagePredictor(params: TageParams = TageParams())extends Module with HasTag
 
     val s1update = io.f1update
     // commit的有效更新
-    when (s1update.valid && s1update.bits.isCommitUpdate && s1update.bits.cfiIdx.valid){
+    when (s1update.valid && s1update.bits.cfiIdx.valid){
 
 
         val idx = s1update.bits.cfiIdx.bits

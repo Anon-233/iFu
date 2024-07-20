@@ -170,7 +170,6 @@ class FetchTargetQueue extends CoreModule {
             (bpdEntry.cfiIdx.valid || bpdEntry.brMask =/= 0.U)
         )
         io.bpdUpdate.bits.pc              := bpdpc
-        io.bpdUpdate.bits.btbMispredicts  := 0.U
         io.bpdUpdate.bits.brMask          := Mux(
             bpdEntry.cfiIdx.valid,
                 MaskLower(UIntToOH(cfiIdx)) & bpdEntry.brMask,

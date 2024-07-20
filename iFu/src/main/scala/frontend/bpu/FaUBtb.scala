@@ -125,10 +125,7 @@ class FaUBtbPredictior extends Module with HasUbtbParameters {
     (fetchAlign(s1_update.bits.pc) | (s1_update_cfi_idx << 2).asUInt).asSInt
 
     // update target offset
-    val wen = (
-        s1_update.valid && s1_update.bits.isCommitUpdate &&
-        s1_update.bits.cfiTaken && s1_update.bits.cfiIdx.valid
-    )
+    val wen = s1_update.valid && s1_update.bits.cfiTaken && s1_update.bits.cfiIdx.valid
     
     // for (w <- 0 until fetchWidth) {
     //     when (wen) {
@@ -145,7 +142,7 @@ class FaUBtbPredictior extends Module with HasUbtbParameters {
     val wastaken = WireInit(VecInit(Seq.fill(fetchWidth)(false.B)))
     for (w <- 0 until fetchWidth) {
         val branch_taken = (
-            s1_update.valid && s1_update.bits.isCommitUpdate && (
+            s1_update.valid && (
                 s1_update.bits.brMask(w) ||
                 (
                     s1_update.bits.cfiIdx.valid &&

@@ -332,7 +332,6 @@ class Frontend extends CoreModule {
     val f3_br_mask               = Wire(Vec(fetchWidth, Bool()))
     val f3_call_mask             = Wire(Vec(fetchWidth, Bool()))
     val f3_ret_mask              = Wire(Vec(fetchWidth, Bool()))
-    val f3_btb_mispredicts       = Wire(Vec(fetchWidth, Bool()))
 
     var redirect_found = false.B
     for (i <- 0 until fetchWidth) {
@@ -350,11 +349,6 @@ class Frontend extends CoreModule {
             brsigs.cfiType === CFI_JIRL,
             f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits, // maybe wrong
             brsigs.target   // surely right
-        )
-        f3_btb_mispredicts(i) := (
-            brsigs.cfiType === CFI_BL &&   // predecode can only correct BL
-            f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.valid &&
-            !IsEqual(f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits, brsigs.target)
         )
 
         /**
@@ -449,16 +443,7 @@ class Frontend extends CoreModule {
     val f4 = withReset(reset.asBool || f4_clear) {
         Module(new Queue(new FetchBundle, 1, pipe = true, flow = false))
     }
-
-    val f4_btb_corrections = Module(new Queue(new BranchPredictionUpdate, 2))
 // -------------------------------------------------------
-    f4_btb_corrections.io.enq.valid                   := f3_ifu_resp.io.deq.fire && f3_btb_mispredicts.reduce(_||_)
-    f4_btb_corrections.io.enq.bits                    := DontCare
-    f4_btb_corrections.io.enq.bits.btbMispredicts     := f3_btb_mispredicts.asUInt
-    f4_btb_corrections.io.enq.bits.pc                 := f3_fetch_bundle.pc
-    f4_btb_corrections.io.enq.bits.gHist              := f3_fetch_bundle.gHist
-    f4_btb_corrections.io.enq.bits.meta               := f3_fetch_bundle.bpdMeta
-
     f4_ready        := f4.io.enq.ready
     f4.io.enq.valid := f3_ifu_resp.io.deq.valid && !f3_clear
     f4.io.enq.bits  := f3_fetch_bundle
@@ -471,17 +456,8 @@ class Frontend extends CoreModule {
     ftq.io.enq.valid := f4.io.deq.valid && fetch_buffer.io.enq.ready
     ftq.io.enq.bits  := f4.io.deq.bits
 
-    // bpd update infomation select
-    val bpd_update_arb = Module(new Arbiter(new BranchPredictionUpdate, 2))
-    bpd_update_arb.io.out.ready := true.B
-    // from ftq
-    bpd_update_arb.io.in(0).valid := ftq.io.bpdUpdate.valid
-    bpd_update_arb.io.in(0).bits  := ftq.io.bpdUpdate.bits
-    assert(bpd_update_arb.io.in(0).ready === true.B)
-    // from f4
-    bpd_update_arb.io.in(1) <> f4_btb_corrections.io.deq
-    // to bpd
-    bpd.io.update := bpd_update_arb.io.out
+    // bpd update information
+    bpd.io.update := ftq.io.bpdUpdate
 
     // ras update(from ftq, redirect happened, will override the ras update in stage 3)
     when (ftq.io.rasUpdate) {
