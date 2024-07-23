@@ -42,12 +42,8 @@ class BTBIO extends Bundle with HasBtbParameters {
 class BTBPredictor extends Module with HasBtbParameters{
     val io = IO(new BTBIO)
 
-    val meta = Seq.fill(nWays) {
-        SyncReadMem(nSets, Vec(fetchWidth, UInt(BTBMetaSz.W)))
-    }
-    val btb  = Seq.fill(nWays) {
-        SyncReadMem(nSets, Vec(fetchWidth, UInt(BTBEntrySz.W)))
-    }
+    val meta = Seq.fill(nWays) { Module(new SDPRam(nSets, new BTBMeta, fetchWidth)) }
+    val btb  = Seq.fill(nWays) { Module(new SDPRam(nSets, new BTBEntry, fetchWidth)) }
     val ebtb = Module(new SDPRam(extendedNSets, UInt(vaddrBits.W)))
 
 // ---------------------------------------------
@@ -72,12 +68,11 @@ class BTBPredictor extends Module with HasBtbParameters{
     val s1_tag_idx = fetchIdx(s1_pc)
 
     // stage 1: read btb, meta, ebtb, and prepare hit signals
-    val s1_btb = VecInit(btb.map(b => VecInit(
-        b.read(s0_tag_idx.asUInt, s0_valid).map(_.asTypeOf(new BTBEntry))
-    )))
-    val s1_meta = VecInit(meta.map(m => VecInit(
-        m.read(s0_tag_idx.asUInt, s0_valid).map(_.asTypeOf(new BTBMeta))
-    )))
+    val s1_btb = VecInit(btb.map(b => {b.io.raddr := s0_tag_idx
+        b.io.rdata}))
+    val s1_meta = VecInit(meta.map(m => {m.io.raddr := s0_tag_idx
+        m.io.rdata
+    }))
     ebtb.io.raddr := s0_tag_idx
     val s1_ebtb = ebtb.io.rdata.head
 
@@ -156,30 +151,14 @@ class BTBPredictor extends Module with HasBtbParameters{
     val s1_update_wmeta_mask = s1_update_wbtb_mask
 
     for (w <- 0 until nWays) {
-        when (reset_en || s1_update_way === w.U){
-            meta(w).write(
-                Mux(reset_en, reset_idx, s1_update_idx),
-                Mux(reset_en,
-                    VecInit(Seq.fill(fetchWidth) { 0.U(BTBMetaSz.W) }),
-                    VecInit(s1_update_wmeta.map(_.asUInt))
-                ),
-                Mux(reset_en,
-                    ~(0.U(fetchWidth.W)),
-                    (s1_update_wmeta_mask).asUInt
-                ).asBools
-            )
-            btb(w).write(
-                Mux(reset_en, reset_idx, s1_update_idx),
-                Mux(reset_en, 
-                    VecInit(Seq.fill(fetchWidth) { 0.U(BTBEntrySz.W) }),
-                    VecInit(Seq.fill(fetchWidth) { s1_update_wbtb.asUInt })
-                ),
-                Mux(reset_en,
-                    ~(0.U(fetchWidth.W)),
-                    s1_update_wbtb_mask.asUInt
-                ).asBools
-            )
-        }
+        meta(w).io.wen := reset_en || s1_update_way === w.U
+        meta(w).io.waddr := Mux(reset_en, reset_idx, s1_update_idx)
+        meta(w).io.wdata := Mux(reset_en, VecInit(Seq.fill(fetchWidth) {0.U.asTypeOf(new BTBMeta)}), s1_update_wmeta)
+        meta(w).io.wstrobe := Mux(reset_en, ~0.U(fetchWidth.W), s1_update_wmeta_mask.asUInt)
+        btb(w).io.wen := reset_en || s1_update_way === w.U
+        btb(w).io.waddr := Mux(reset_en, reset_idx, s1_update_idx)
+        btb(w).io.wdata := VecInit(Seq.fill(fetchWidth) {Mux(reset_en, 0.U.asTypeOf(new BTBEntry), s1_update_wbtb)})
+        btb(w).io.wstrobe := Mux(reset_en, ~0.U(fetchWidth.W), s1_update_wbtb_mask.asUInt)
     }
 
     ebtb.io.wen := s1_update_wbtb_mask =/= 0.U && need_extend
