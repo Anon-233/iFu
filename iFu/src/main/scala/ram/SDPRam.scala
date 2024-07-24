@@ -39,7 +39,10 @@ class SDPRam[T <: Data](size: Int, t: T, lineSize: Int = 1, useXpm: Boolean = tr
         val mem = SyncReadMem(size, Vec(lineSize, t))
         io.rdata := mem.read(io.raddr)
         when (io.wen) {
-            mem.write(io.waddr, io.wdata, io.wstrobe.asBools)
+            if (lineSize == 1)
+                mem.write(io.waddr, io.wdata)
+            else
+                mem.write(io.waddr, io.wdata, io.wstrobe.asBools)
         }
     }
 }
