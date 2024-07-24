@@ -41,8 +41,7 @@ trait HasBtbParameters extends HasBPUParameters {
     val nWays        = 2
     def tagSz        = vaddrBits - log2Ceil(nSets) - log2Ceil(fetchBytes)
     val nSets = 64
-    val extendedNSets = 64
-    val offsetSz = 13
+    val lowBitSz = 16
 }
 
 trait HasLocalHistoryParameters extends HasBPUParameters {

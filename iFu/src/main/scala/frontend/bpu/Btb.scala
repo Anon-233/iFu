@@ -2,17 +2,14 @@ package iFu.frontend
 
 import chisel3._
 import chisel3.util._
-import iFu.frontend.FrontendUtils._
-
-import scala.math.min
-import iFu.common.Consts._
 import chisel3.util.random.LFSR
+import iFu.common.Consts._
 import iFu.frontend.FrontendUtils._
+import iFu.util.IsEqual
 import ram.SDPRam
 
 class BTBEntry extends Bundle with HasBtbParameters {
-    val offset   = SInt(offsetSz.W)
-    val extended = Bool()
+    val lowBits   = UInt(lowBitSz.W)
 }
 
 class BTBMeta extends Bundle with HasBtbParameters {
@@ -42,9 +39,12 @@ class BTBIO extends Bundle with HasBtbParameters {
 class BTBPredictor extends Module with HasBtbParameters{
     val io = IO(new BTBIO)
 
+    def getLowBits(pc: UInt): UInt = pc(lowBitSz + 1, 2)
+    def getHighBits(pc: UInt): UInt = pc(vaddrBits - 1, lowBitSz + 2)
+    def getTarget(pc: UInt, lowBits: UInt): UInt = Cat(getHighBits(pc), lowBits, 0.U(2.W))
+
     val meta = Seq.fill(nWays) { Module(new SDPRam(nSets, new BTBMeta, fetchWidth)) }
     val btb  = Seq.fill(nWays) { Module(new SDPRam(nSets, new BTBEntry, fetchWidth)) }
-    val ebtb = Module(new SDPRam(extendedNSets, UInt(vaddrBits.W)))
 
 // ---------------------------------------------
 //      Reset Logic
@@ -73,8 +73,6 @@ class BTBPredictor extends Module with HasBtbParameters{
     val s1_meta = VecInit(meta.map(m => {m.io.raddr := s0_tag_idx
         m.io.rdata
     }))
-    ebtb.io.raddr := s0_tag_idx
-    val s1_ebtb = ebtb.io.rdata.head
 
     val s1_tag = s1_tag_idx >> log2Ceil(nSets)
     val s1_hit_OHs = VecInit((0 until fetchWidth) map { i =>
@@ -97,10 +95,7 @@ class BTBPredictor extends Module with HasBtbParameters{
         io.s2jal(w)         := is_jal
         io.s2taken(w)       := is_jal
         io.s2targs(w).valid := RegNext(resp_valid)
-        io.s2targs(w).bits  := RegNext(Mux(entry_btb.extended,
-                s1_ebtb,
-                ((fetchAlign(s1_pc) | (w << 2).asUInt).asSInt + entry_btb.offset.asSInt).asUInt
-        ))
+        io.s2targs(w).bits  := RegNext(getTarget(getPc(s1_pc, w.U), entry_btb.lowBits))
     }
 // ---------------------------------------------
 
@@ -130,12 +125,8 @@ class BTBPredictor extends Module with HasBtbParameters{
     val s1_update_way     = s1_update_ways(s1_update_cfi_idx)
     val s1_update_idx     = fetchIdx(s1_update.bits.pc)
 
-    val max_offset = Cat(0.B, ~0.U((offsetSz - 1).W)).asSInt
-    val min_offset = Cat(1.B,  0.U((offsetSz - 1).W)).asSInt
-    val new_offset = s1_update.bits.target.asSInt -
-    (fetchAlign(s1_update.bits.pc) | (s1_update.bits.cfiIdx.bits << 2).asUInt).asSInt
-
-    val need_extend = new_offset > max_offset || new_offset < min_offset
+    val target_overflow   = !IsEqual(getHighBits(getPc(s1_update.bits.pc, s1_update.bits.cfiIdx.bits)), getHighBits(s1_update.bits.target))
+    if (!FPGAPlatform) dontTouch(target_overflow)
 
     val s1_update_wmeta = Wire(Vec(fetchWidth, new BTBMeta))
     for (w <- 0 until fetchWidth) {
@@ -144,27 +135,22 @@ class BTBPredictor extends Module with HasBtbParameters{
     }
 
     val s1_update_wbtb = Wire(new BTBEntry)
-    s1_update_wbtb.offset   := new_offset
-    s1_update_wbtb.extended := need_extend
+    s1_update_wbtb.lowBits   := getLowBits(s1_update.bits.target)
 
     val s1_update_wbtb_mask = UIntToOH(s1_update_cfi_idx) & Fill(fetchWidth, s1_update.valid && s1_update.bits.cfiIdx.valid && s1_update.bits.cfiTaken)
     val s1_update_wmeta_mask = s1_update_wbtb_mask
 
     for (w <- 0 until nWays) {
-        meta(w).io.wen := reset_en || s1_update_way === w.U
+        val update_en = s1_update_way === w.U && !target_overflow
+        meta(w).io.wen := reset_en || update_en
         meta(w).io.waddr := Mux(reset_en, reset_idx, s1_update_idx)
         meta(w).io.wdata := Mux(reset_en, VecInit(Seq.fill(fetchWidth) {0.U.asTypeOf(new BTBMeta)}), s1_update_wmeta)
         meta(w).io.wstrobe := Mux(reset_en, ~0.U(fetchWidth.W), s1_update_wmeta_mask.asUInt)
-        btb(w).io.wen := reset_en || s1_update_way === w.U
+        btb(w).io.wen := reset_en || update_en
         btb(w).io.waddr := Mux(reset_en, reset_idx, s1_update_idx)
         btb(w).io.wdata := VecInit(Seq.fill(fetchWidth) {Mux(reset_en, 0.U.asTypeOf(new BTBEntry), s1_update_wbtb)})
         btb(w).io.wstrobe := Mux(reset_en, ~0.U(fetchWidth.W), s1_update_wbtb_mask.asUInt)
     }
-
-    ebtb.io.wen := s1_update_wbtb_mask =/= 0.U && need_extend
-    ebtb.io.waddr := s1_update_idx
-    ebtb.io.wdata.head := s1_update.bits.target
-    ebtb.io.wstrobe := 1.U
 // ---------------------------------------------
 
 // ---------------------------------------------
