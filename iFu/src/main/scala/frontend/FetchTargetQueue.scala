@@ -87,7 +87,7 @@ class FetchTargetQueue extends CoreModule {
     val pcs   = Reg(Vec(numFTQEntries, UInt(vaddrBits.W)))
     val meta  = SyncReadMem(numFTQEntries, Vec(fetchWidth ,new PredictionMeta))
     val ram   = Reg(Vec(numFTQEntries, new FTQBundle))
-    val gHist = Module(new SDPRam(numFTQEntries, new GlobalHistory))
+    val gHist = SyncReadMem(numFTQEntries, new GlobalHistory)
 
     val previousgHist = RegInit((0.U).asTypeOf(new GlobalHistory))
     val previousEntry = RegInit((0.U).asTypeOf(new FTQBundle))
@@ -126,6 +126,7 @@ class FetchTargetQueue extends CoreModule {
         // 进行写入操作
         meta.write(bpu_ptr, io.enq.bits.bpdMeta)
         ram(bpu_ptr) := newEntry
+        gHist.write(bpu_ptr, newgHist)
 
         // 每次入队更新previous的保存内容
         previouspc    := io.enq.bits.pc
@@ -134,10 +135,7 @@ class FetchTargetQueue extends CoreModule {
 
         bpu_ptr := WrapInc(bpu_ptr, numFTQEntries)
     }
-    gHist.io.wen := io.enq.fire
-    gHist.io.waddr := bpu_ptr
-    gHist.io.wdata.head := newgHist
-    gHist.io.wstrobe := 1.U
+
     io.enqIdx := bpu_ptr
 
     when (io.deq.valid) {
@@ -147,6 +145,7 @@ class FetchTargetQueue extends CoreModule {
     val bpdIdx    = Mux(io.redirect.valid, io.redirect.bits,
                                            train_ptr)
     val bpdEntry  = RegNext(ram(bpdIdx))
+    val bpdgHist  = gHist.read(bpdIdx)
     val bpdMeta   = meta.read(bpdIdx, true.B)
     val bpdpc     = RegNext(pcs(bpdIdx))
     val bpdTarget = RegNext(pcs(WrapInc(bpdIdx, numFTQEntries)))
@@ -220,6 +219,7 @@ class FetchTargetQueue extends CoreModule {
         rasUpdateIdx := old_entry.rasIdx
     } .elsewhen (RegNext(io.redirect.valid)) {
         previousEntry := RegNext(new_entry)
+        previousgHist := bpdgHist
         previouspc    := bpdpc
 
         ram(RegNext(io.redirect.bits)) := RegNext(new_entry)
@@ -234,8 +234,7 @@ class FetchTargetQueue extends CoreModule {
         val getEntry = ram(idx)
         io.getFtqpc(i).entry       := RegNext(getEntry)
         if (i == 1) {
-            gHist.io.raddr         := idx
-            io.getFtqpc(i).gHist   := gHist.io.rdata.head
+            io.getFtqpc(i).gHist   := gHist.read(idx)
         } else {
             io.getFtqpc(i).gHist   := DontCare
         }

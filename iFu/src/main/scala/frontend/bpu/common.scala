@@ -45,7 +45,7 @@ trait HasBtbParameters extends HasBPUParameters {
 }
 
 trait HasLocalHistoryParameters extends HasBPUParameters {
-    val localHistoryLength = 15
+    val localHistoryLength = 13
     val nLHRs = 64
     val nCounters = 8192
     val nLHRBits = log2Ceil(nLHRs)
