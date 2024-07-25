@@ -87,7 +87,7 @@ class FetchTargetQueue extends CoreModule {
     val pcs   = Reg(Vec(numFTQEntries, UInt(vaddrBits.W)))
     val meta  = SyncReadMem(numFTQEntries, Vec(fetchWidth ,new PredictionMeta))
     val ram   = Reg(Vec(numFTQEntries, new FTQBundle))
-    val gHist = Seq.fill(2) { Module(new SDPRam(numFTQEntries, new GlobalHistory)) }
+    val gHist = Module(new SDPRam(numFTQEntries, new GlobalHistory))
 
     val previousgHist = RegInit((0.U).asTypeOf(new GlobalHistory))
     val previousEntry = RegInit((0.U).asTypeOf(new FTQBundle))
@@ -134,12 +134,10 @@ class FetchTargetQueue extends CoreModule {
 
         bpu_ptr := WrapInc(bpu_ptr, numFTQEntries)
     }
-    gHist.foreach(g => {
-        g.io.wen := io.enq.fire
-        g.io.waddr := bpu_ptr
-        g.io.wdata.head := newgHist
-        g.io.wstrobe := 1.U
-    })
+    gHist.io.wen := io.enq.fire
+    gHist.io.waddr := bpu_ptr
+    gHist.io.wdata.head := newgHist
+    gHist.io.wstrobe := 1.U
     io.enqIdx := bpu_ptr
 
     when (io.deq.valid) {
@@ -149,8 +147,6 @@ class FetchTargetQueue extends CoreModule {
     val bpdIdx    = Mux(io.redirect.valid, io.redirect.bits,
                                            train_ptr)
     val bpdEntry  = RegNext(ram(bpdIdx))
-    gHist(0).io.raddr := bpdIdx
-    val bpdgHist  = gHist(0).io.rdata.head
     val bpdMeta   = meta.read(bpdIdx, true.B)
     val bpdpc     = RegNext(pcs(bpdIdx))
     val bpdTarget = RegNext(pcs(WrapInc(bpdIdx, numFTQEntries)))
@@ -181,7 +177,6 @@ class FetchTargetQueue extends CoreModule {
         io.bpdUpdate.bits.target          := bpdTarget
         io.bpdUpdate.bits.cfiIsBr         := bpdEntry.brMask(cfiIdx)
         io.bpdUpdate.bits.cfiIsJal        := bpdEntry.cfiType === CFI_BL || bpdEntry.cfiType === CFI_JIRL
-        io.bpdUpdate.bits.gHist           := bpdgHist
         io.bpdUpdate.bits.meta            := bpdMeta
     }
 
@@ -225,7 +220,6 @@ class FetchTargetQueue extends CoreModule {
         rasUpdateIdx := old_entry.rasIdx
     } .elsewhen (RegNext(io.redirect.valid)) {
         previousEntry := RegNext(new_entry)
-        previousgHist := bpdgHist
         previouspc    := bpdpc
 
         ram(RegNext(io.redirect.bits)) := RegNext(new_entry)
@@ -240,8 +234,8 @@ class FetchTargetQueue extends CoreModule {
         val getEntry = ram(idx)
         io.getFtqpc(i).entry       := RegNext(getEntry)
         if (i == 1) {
-            gHist(1).io.raddr      := idx
-            io.getFtqpc(i).gHist   := gHist(1).io.rdata.head
+            gHist.io.raddr         := idx
+            io.getFtqpc(i).gHist   := gHist.io.rdata.head
         } else {
             io.getFtqpc(i).gHist   := DontCare
         }

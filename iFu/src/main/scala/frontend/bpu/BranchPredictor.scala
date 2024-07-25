@@ -20,7 +20,6 @@ class PredictionInfo extends Bundle with HasBPUParameters{
 class PredictionMeta extends Bundle with HasBPUParameters{
   val bimMeta  = Output(new BIMPredictMeta)
   val BTBMeta  = Output(new BTBPredictMeta)
-  val tageMeta = Output(new TagePredictMeta)
   val uBTBMeta = Output(new UBTBPredictMeta)
   val localHistoryMeta = Output(new LocalHistoryPredictMeta)
 }
@@ -49,8 +48,6 @@ class BranchPredictionUpdate extends Bundle with HasBPUParameters {
   // Was the cfi a jalr
   val cfiIsJalr = Bool()
   //val cfi_is_ret  = Bool()
-
-  val gHist = new GlobalHistory
 
   // What did this CFI jump to?
   val target        = UInt(vaddrBits.W)
@@ -104,13 +101,11 @@ class BranchPredictor extends Module with HasBPUParameters
     val lh = Module(new LocalHistoryPredictor)
     val bim = Module(new BimPredictor)
     val btb = Module(new BTBPredictor)
-//    val tage = Module(new TagePredictor)
 
     faubtb.io.s1update := s1update
     btb.io.s1update := s1update
     lh.io.s1update := s1update
     bim.io.s1update := s1update
-//    tage.io.f1update := s1update
 
     // 基本的pc和使能位
     faubtb.io.s1valid := s1valid
@@ -123,9 +118,6 @@ class BranchPredictor extends Module with HasBPUParameters
 
     bim.io.s0valid := s0valid
     bim.io.s0pc := s0pc
-
-//    tage.io.f1valid := s1valid
-//    tage.io.f1pc := s1pc
 
     // f1接收faubtb输出结果
     for (w <- 0 until fetchWidth) {
@@ -158,27 +150,13 @@ class BranchPredictor extends Module with HasBPUParameters
         }
     }
 
-    // f3以f2为基础，接收tage的输出结果
     io.resp.f3.predInfos := RegNext(io.resp.f2.predInfos)
 
-    // 对于tage，还需要全局历史，以及前面f3taken传入之前的预测值作为参考，一并传入
-//     tage.io.f1gHist := RegNext(io.f0req.bits.gHist)
-//     tage.io.previousf3Taken := RegNext(VecInit(io.resp.f2.predInfos.map(_.taken)))
-
-
-    // tage可以根据传入的初值，在内部判断命中与否，在内部自行选择好是否覆盖f3的初值
-    // 传出来的值不需要像btb一样再次判断，直接覆盖初值即可
-//     for(w <- 0 until bankWidth){
-//         io.resp.f3.predInfos(w).taken := tage.io.f3taken(w)
-//     }
-
-    // 最后收集五个计数器预测过程中产生的meta信息
     for (w <- 0 until fetchWidth) {
         io.resp.f3.meta(w).uBTBMeta := faubtb.io.s3meta(w)
         io.resp.f3.meta(w).localHistoryMeta := lh.io.s3meta(w)
         io.resp.f3.meta(w).bimMeta := bim.io.s3meta(w)
         io.resp.f3.meta(w).BTBMeta := btb.io.s3meta(w)
-        io.resp.f3.meta(w).tageMeta := DontCare
     }
 
     io.resp.f1.pc := RegNext(io.f0req.bits.pc)
@@ -189,8 +167,6 @@ class BranchPredictor extends Module with HasBPUParameters
     // Use the meta from the latest resp
     io.resp.f1.meta := DontCare
     io.resp.f2.meta := DontCare
-
-
 
     when (io.update.valid) {
         when (io.update.bits.cfiIsBr && io.update.bits.cfiIdx.valid) {
