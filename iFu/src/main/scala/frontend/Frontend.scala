@@ -249,9 +249,6 @@ class Frontend extends CoreModule {
         false.B
     )
 
-    // check if bpd.f2 agree with bpd.f1
-    val f2_correct_f1_ghist = s1_ghist =/= f2_predicted_ghist
-
     // note: s0 is not a real stage
     val f3_ready = Wire(Bool())
     when (
@@ -263,11 +260,11 @@ class Frontend extends CoreModule {
         s0_ghist     := s2_ghist
         f1_clear     := true.B
     } .elsewhen (s2_valid && f3_ready) {
-        when (s1_valid && IsEqual(s1_vpc, f2_predicted_target) && !f2_correct_f1_ghist) {
+        when (s1_valid && IsEqual(s1_vpc, f2_predicted_target)) {
             // all right, use the predicted information to update the global history
             s2_ghist := f2_predicted_ghist
         }
-        when ((s1_valid && (!IsEqual(s1_vpc, f2_predicted_target) || f2_correct_f1_ghist)) || !s1_valid) {
+        when ((s1_valid && !IsEqual(s1_vpc, f2_predicted_target)) || !s1_valid) {
             // redirect, next cycle, s2_ghist is meaningless, so we don't care
             s0_valid := !s2_tlb_resp.exception.valid
             s0_vpc   := f2_predicted_target
@@ -403,21 +400,18 @@ class Frontend extends CoreModule {
     ras.io.write_addr  := getPc(f3_aligned_pc, f3_fetch_bundle.cfiIdx.bits) + 4.U
     ras.io.write_idx   := WrapInc(f3_fetch_bundle.gHist.rasIdx, numRasEntries)
 
-    val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist
-    val f3_correct_f2_ghist = s2_ghist =/= f3_predicted_ghist
-
     when (f3_ifu_resp.io.deq.valid && f4_ready) {
         when(f3_fetch_bundle.cfiIsCall && f3_fetch_bundle.cfiIdx.valid){
             ras.io.write_valid := true.B
         }
 
-        when (s2_valid && IsEqual(s2_vpc, f3_predicted_target) && !f3_correct_f2_ghist) {
+        when (s2_valid && IsEqual(s2_vpc, f3_predicted_target)) {
             f3_ifu_resp.io.enq.bits.gHist := f3_predicted_ghist
-        } .elsewhen (!s2_valid && s1_valid && IsEqual(s1_vpc, f3_predicted_target) && !f3_correct_f1_ghist) {
+        } .elsewhen (!s2_valid && s1_valid && IsEqual(s1_vpc, f3_predicted_target)) {
             s2_ghist := f3_predicted_ghist
         } .elsewhen (
-            (s2_valid && (!IsEqual(s2_vpc, f3_predicted_target) || f3_correct_f2_ghist)) ||
-            (!s2_valid && s1_valid && (!IsEqual(s1_vpc, f3_predicted_target) || f3_correct_f1_ghist)) ||
+            (s2_valid && !IsEqual(s2_vpc, f3_predicted_target)) ||
+            (!s2_valid && s1_valid && !IsEqual(s1_vpc, f3_predicted_target)) ||
             (!s2_valid && !s1_valid)
         ) {
             f2_clear     := true.B
@@ -428,9 +422,6 @@ class Frontend extends CoreModule {
         }
     }
 
-    if(!FPGAPlatform)dontTouch(f2_correct_f1_ghist)
-    if(!FPGAPlatform)dontTouch(f3_correct_f1_ghist)
-    if(!FPGAPlatform)dontTouch(f3_correct_f2_ghist)
     if(!FPGAPlatform)dontTouch(f1_predicted_ghist)
     if(!FPGAPlatform)dontTouch(f2_predicted_ghist)
     if(!FPGAPlatform)dontTouch(f3_predicted_ghist)
