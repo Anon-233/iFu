@@ -168,9 +168,8 @@ class iFuCore extends CoreModule {
         ifu.io.core.redirect_flush := true.B
         val flush_type = RegNext(rob.io.flush.bits.flush_typ)
         // Clear the global history when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
-        val new_ghist = WireInit((0.U).asTypeOf(new GlobalHistory))
-        new_ghist.currentSawBranchNotTaken := true.B
-        new_ghist.rasIdx := ifu.io.core.getFtqPc(0).entry.rasIdx
+        val new_ghist = WireInit((0.U).asTypeOf(new RASPtr))
+        new_ghist.bits := ifu.io.core.getFtqPc(0).entry.rasIdx
         ifu.io.core.redirect_ghist := new_ghist
         when (FlushTypes.useCsrEvec(flush_type)) {
             ifu.io.core.redirect_pc := csr.io.redirect_pc
@@ -204,26 +203,16 @@ class iFuCore extends CoreModule {
         ifu.io.core.redirect_pc := mispredict_target
         ifu.io.core.redirect_ftq_idx := brUpdate.b2.uop.ftqIdx
 
-        val use_same_ghist =
-            brUpdate.b2.cfiType === CFI_BR &&
-            !brUpdate.b2.taken &&
-            fetchAlign(block_pc) === fetchAlign(npc)
         val ftq_entry = ifu.io.core.getFtqPc(1).entry
         val cfi_idx = brUpdate.b2.uop.pcLowBits(log2Ceil(fetchWidth) + 1, 2)
         val ftq_ghist = ifu.io.core.getFtqPc(1).gHist
         val next_ghist = ftq_ghist.update(
-            ftq_entry.brMask.asUInt,
-            brUpdate.b2.taken,
-            brUpdate.b2.cfiType === CFI_BR,
-            cfi_idx,
             true.B,
-            ifu.io.core.getFtqPc(1).pc,
             ftq_entry.cfiIsCall && ftq_entry.cfiIdx.bits === cfi_idx,
             ftq_entry.cfiIsRet && ftq_entry.cfiIdx.bits === cfi_idx
         )
 
-        ifu.io.core.redirect_ghist := Mux(use_same_ghist, ftq_ghist, next_ghist)
-        ifu.io.core.redirect_ghist.currentSawBranchNotTaken := use_same_ghist
+        ifu.io.core.redirect_ghist := next_ghist
     } .elsewhen (rob.io.flush_frontend || b1_mispredict_val) {
         ifu.io.core.redirect_flush   := true.B
         ifu.io.core.redirect_pc      := DontCare

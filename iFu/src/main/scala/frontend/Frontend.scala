@@ -12,8 +12,6 @@ import iFu.tlb._
 import iFu.backend.PreDecode
 import iFu.frontend.FrontendUtils._
 
-//TODO 重命名GlobalHistory,如果之后RAS增加计数器，Histories的update函数需要更改，
-
 class FetchResp extends CoreBundle {
     // parameters
     val fetchWidth = frontendParams.fetchWidth
@@ -22,7 +20,7 @@ class FetchResp extends CoreBundle {
     val instrs     = UInt((fetchWidth * coreInstrBits).W)
     val mask       = UInt(fetchWidth.W)
     val exception  = Valid(new ITLBException)
-    val gHist      = new GlobalHistory
+    val gHist      = new RASPtr
 }
 
 class FetchBundle extends CoreBundle {
@@ -42,7 +40,7 @@ class FetchBundle extends CoreBundle {
     val ftqIdx    = UInt(log2Ceil(numFTQEntries).W)
     val mask      = UInt(fetchWidth.W)    // the purpose and specific details of the mask need more information, check later
     val brMask    = UInt(fetchWidth.W)
-    val gHist     = new GlobalHistory
+    val gHist     = new RASPtr
     val exception = Valid(new ITLBException)
     val bpdMeta   = Vec(fetchWidth, new PredictionMeta)
 }
@@ -74,7 +72,7 @@ class FrontendToCoreIO extends CoreBundle {
     val redirect_val    = Input(Bool())
     val redirect_pc     = Input(UInt())    //分支指令的结果
     val redirect_ftq_idx= Input(UInt())
-    val redirect_ghist  = Input(new GlobalHistory)
+    val redirect_ghist  = Input(new RASPtr)
 
     val commit          = Flipped(Valid(UInt(numFTQEntries.W)))
     val flush_icache    = Input(Bool())
@@ -118,7 +116,7 @@ class Frontend extends CoreModule {
     // s0 is not a real stage, it is hidden in s1, so below variables are wire
     val s0_valid           = WireInit(false.B)
     val s0_vpc             = WireInit(0.U(vaddrBits.W))
-    val s0_ghist           = WireInit(0.U.asTypeOf(new GlobalHistory))
+    val s0_ghist           = WireInit(0.U.asTypeOf(new RASPtr))
 
     if(!FPGAPlatform)dontTouch(s0_valid)
     if(!FPGAPlatform)dontTouch(s0_vpc)
@@ -128,12 +126,11 @@ class Frontend extends CoreModule {
     when (RegNext(reset.asBool) && !reset.asBool) {
         s0_valid := true.B
         s0_vpc   := resetPC.U(vaddrBits.W)
-        s0_ghist := 0.U.asTypeOf(new GlobalHistory)
+        s0_ghist := 0.U.asTypeOf(new RASPtr)
     }
 
-    bpd.io.f0req.valid      := s0_valid
-    bpd.io.f0req.bits.pc    := s0_vpc
-    bpd.io.f0req.bits.gHist := s0_ghist
+    bpd.io.f0req.valid   := s0_valid
+    bpd.io.f0req.bits.pc := s0_vpc
 // --------------------------------------------------------
     val f1_clear     = WireInit(false.B)
     val s1_valid     = RegNext(s0_valid, false.B)
@@ -176,18 +173,7 @@ class Frontend extends CoreModule {
         nextFetch(s1_vpc)
     )
     // use the predicted information to update the global history
-    val f1_predicted_ghist = s1_ghist.update(
-        VecInit(f1_bpd_resp.predInfos.map(p =>
-            p.isBranch && p.predictedpc.valid
-        )).asUInt & f1_valid_instr_mask,
-        f1_bpd_resp.predInfos(f1_redirect_instr_idx).taken && f1_do_redirect,
-        f1_bpd_resp.predInfos(f1_redirect_instr_idx).isBranch,
-        f1_redirect_instr_idx,
-        f1_do_redirect,
-        s1_vpc,
-        false.B,
-        false.B
-    )
+    val f1_predicted_ghist = s1_ghist.update(f1_do_redirect, false.B, false.B)
 
     // if current cycle is valid, use the predicted target as the next fetch pc
     when (s1_valid) {
@@ -199,7 +185,7 @@ class Frontend extends CoreModule {
     val f2_clear     = WireInit(false.B)
     val s2_valid     = RegNext(s1_valid && !f1_clear, false.B)
     val s2_vpc       = RegNext(s1_vpc)
-    val s2_ghist     = Reg(new GlobalHistory)
+    val s2_ghist     = Reg(new RASPtr)
     val s2_tlb_resp  = RegNext(f1_tlb_resp)
 
     if(!FPGAPlatform)dontTouch(f2_clear)
@@ -236,18 +222,7 @@ class Frontend extends CoreModule {
         nextFetch(s2_vpc)
     )
     // use the predicted information to update the global history
-    val f2_predicted_ghist = s2_ghist.update(
-        VecInit(f2_bpd_resp.predInfos.map(p =>
-            p.isBranch && p.predictedpc.valid
-        )).asUInt & f2_valid_instr_mask,
-        f2_bpd_resp.predInfos(f2_redirect_instr_idx).taken && f2_do_redirect,
-        f2_bpd_resp.predInfos(f2_redirect_instr_idx).isBranch,
-        f2_redirect_instr_idx,
-        f2_do_redirect,
-        s2_vpc,
-        false.B,
-        false.B
-    )
+    val f2_predicted_ghist = s2_ghist.update(f2_do_redirect, false.B, false.B)
 
     // note: s0 is not a real stage
     val f3_ready = Wire(Bool())
@@ -301,8 +276,8 @@ class Frontend extends CoreModule {
     // send request to ras, use ras_read_idx for replay(when f3 is full)
     ras.io.read_idx := ras_read_idx
     when (f3_ifu_resp.io.enq.fire) {
-        ras_read_idx    := f3_ifu_resp.io.enq.bits.gHist.rasIdx
-        ras.io.read_idx := f3_ifu_resp.io.enq.bits.gHist.rasIdx
+        ras_read_idx    := f3_ifu_resp.io.enq.bits.gHist.bits
+        ras.io.read_idx := f3_ifu_resp.io.enq.bits.gHist.bits
     }
 
     f3_bpd_resp.io.enq.valid := (
@@ -386,19 +361,14 @@ class Frontend extends CoreModule {
     )
 
     val f3_predicted_ghist = f3_fetch_bundle.gHist.update(
-        f3_fetch_bundle.brMask,
         f3_fetch_bundle.cfiIdx.valid,
-        f3_fetch_bundle.brMask(f3_fetch_bundle.cfiIdx.bits),
-        f3_fetch_bundle.cfiIdx.bits,
-        f3_fetch_bundle.cfiIdx.valid,
-        f3_fetch_bundle.pc,
         f3_fetch_bundle.cfiIsCall,
         f3_fetch_bundle.cfiIsRet
     )
 
     ras.io.write_valid := false.B
     ras.io.write_addr  := getPc(f3_aligned_pc, f3_fetch_bundle.cfiIdx.bits) + 4.U
-    ras.io.write_idx   := WrapInc(f3_fetch_bundle.gHist.rasIdx, numRasEntries)
+    ras.io.write_idx   := WrapInc(f3_fetch_bundle.gHist.bits, numRasEntries)
 
     when (f3_ifu_resp.io.deq.valid && f4_ready) {
         when(f3_fetch_bundle.cfiIsCall && f3_fetch_bundle.cfiIdx.valid){

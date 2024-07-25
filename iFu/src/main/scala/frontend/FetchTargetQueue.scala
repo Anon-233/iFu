@@ -2,6 +2,7 @@ package iFu.frontend
 
 import chisel3._
 import chisel3.util._
+
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
@@ -32,7 +33,7 @@ class GetPCFromFtqIO extends CoreBundle {
     val ftqIdx  = Input(UInt(log2Ceil(numFTQEntries).W))
 
     val entry   = Output(new FTQBundle)
-    val gHist   = Output(new GlobalHistory)
+    val gHist   = Output(new RASPtr)
 
     val pc      = Output(UInt(vaddrBits.W))
     val compc   = Output(UInt(vaddrBits.W))
@@ -87,9 +88,9 @@ class FetchTargetQueue extends CoreModule {
     val pcs   = Reg(Vec(numFTQEntries, UInt(vaddrBits.W)))
     val meta  = SyncReadMem(numFTQEntries, Vec(fetchWidth ,new PredictionMeta))
     val ram   = Reg(Vec(numFTQEntries, new FTQBundle))
-    val gHist = SyncReadMem(numFTQEntries, new GlobalHistory)
+    val gHist = SyncReadMem(numFTQEntries, new RASPtr)
 
-    val previousgHist = RegInit((0.U).asTypeOf(new GlobalHistory))
+    val previousgHist = RegInit((0.U).asTypeOf(new RASPtr))
     val previousEntry = RegInit((0.U).asTypeOf(new FTQBundle))
     val previouspc    = RegInit(0.U(vaddrBits.W))
 
@@ -102,25 +103,16 @@ class FetchTargetQueue extends CoreModule {
     newEntry.cfiIsCall       := io.enq.bits.cfiIsCall
     newEntry.cfiIsRet        := io.enq.bits.cfiIsRet
     newEntry.rasTop          := io.enq.bits.rasTop
-    newEntry.rasIdx          := io.enq.bits.gHist.rasIdx
+    newEntry.rasIdx          := io.enq.bits.gHist.bits
     newEntry.brMask          := io.enq.bits.brMask & io.enq.bits.mask
 
-    // 全局历史，如果currentSawBranchNotTaken为true，那么就用这个历史，否则用根据上一个表项更新的历史
-    val newgHist = Mux(io.enq.bits.gHist.currentSawBranchNotTaken,
-        io.enq.bits.gHist,
-        previousgHist.update(
-            previousEntry.brMask,
-            previousEntry.cfiTaken,
-            previousEntry.brMask(previousEntry.cfiIdx.bits),
-            previousEntry.cfiIdx.bits,
-            previousEntry.cfiIdx.valid,
-            previouspc,
-            previousEntry.cfiIsCall,
-            previousEntry.cfiIsRet
-        )
+    val newgHist = previousgHist.update(
+        previousEntry.cfiIdx.valid,
+        previousEntry.cfiIsCall,
+        previousEntry.cfiIsRet
     )
 
-    when(io.enq.fire) {
+    when (io.enq.fire) {
         pcs(bpu_ptr) := io.enq.bits.pc
 
         // 进行写入操作

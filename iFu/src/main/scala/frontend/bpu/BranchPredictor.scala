@@ -55,14 +55,11 @@ class BranchPredictionUpdate extends Bundle with HasBPUParameters {
   val meta          = Vec(fetchWidth , new PredictionMeta)
 }
 
-class BranchPredictionRequest extends CoreBundle
-{
-  val pc    = UInt(vaddrBits.W)
-  val gHist = new GlobalHistory
+class BranchPredictionRequest extends CoreBundle {
+  val pc = UInt(vaddrBits.W)
 }
 
-class BranchPredictor extends Module with HasBPUParameters
-{
+class BranchPredictor extends Module with HasBPUParameters {
     val io = IO(new Bundle {
         val f0req = Flipped(Valid(new BranchPredictionRequest))
 
@@ -75,9 +72,7 @@ class BranchPredictor extends Module with HasBPUParameters
         val f3fire = Input(Bool())
 
         val update = Input(Valid(new BranchPredictionUpdate))
-
     })
-
 
     val s0valid = io.f0req.valid
     val s1valid = RegNext(s0valid)
@@ -127,11 +122,8 @@ class BranchPredictor extends Module with HasBPUParameters
       io.resp.f1.predInfos(w).predictedpc := faubtb.io.s1targs(w)
     }
 
-
-
     // f2以f1为基础，接收btb，bim的输出结果
     io.resp.f2.predInfos := RegNext(io.resp.f1.predInfos)
-
 
     for (w <- 0 until fetchWidth) {
         // bim预测taken（不存在命不命中的说法）覆盖f2的初值
@@ -174,4 +166,3 @@ class BranchPredictor extends Module with HasBPUParameters
         }
     }
 }
-
