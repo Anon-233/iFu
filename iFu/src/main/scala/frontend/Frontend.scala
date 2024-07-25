@@ -250,7 +250,7 @@ class Frontend extends CoreModule {
     )
 
     // check if bpd.f2 agree with bpd.f1
-    val f2_correct_f1_ghist = s1_ghist =/= f2_predicted_ghist
+    val f2_correct_f1_ghist = WireInit(false.B) // s1_ghist =/= f2_predicted_ghist
 
     // note: s0 is not a real stage
     val f3_ready = Wire(Bool())
@@ -403,8 +403,8 @@ class Frontend extends CoreModule {
     ras.io.write_addr  := getPc(f3_aligned_pc, f3_fetch_bundle.cfiIdx.bits) + 4.U
     ras.io.write_idx   := WrapInc(f3_fetch_bundle.gHist.rasIdx, numRasEntries)
 
-    val f3_correct_f1_ghist = s1_ghist =/= f3_predicted_ghist
-    val f3_correct_f2_ghist = s2_ghist =/= f3_predicted_ghist
+    val f3_correct_f1_ghist = WireInit(false.B) // s1_ghist =/= f3_predicted_ghist
+    val f3_correct_f2_ghist = WireInit(false.B) // s2_ghist =/= f3_predicted_ghist
 
     when (f3_ifu_resp.io.deq.valid && f4_ready) {
         when(f3_fetch_bundle.cfiIsCall && f3_fetch_bundle.cfiIdx.valid){

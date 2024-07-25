@@ -45,9 +45,9 @@ trait HasBtbParameters extends HasBPUParameters {
 }
 
 trait HasLocalHistoryParameters extends HasBPUParameters {
-    val localHistoryLength = 16
-    val nLHRs = 64
-    val nCounters = 512
+    val localHistoryLength = 11
+    val nLHRs = 32
+    val nCounters = 2048
     val nLHRBits = log2Ceil(nLHRs)
     val nCounterBits = log2Ceil(nCounters)
 
@@ -58,10 +58,11 @@ trait HasLocalHistoryParameters extends HasBPUParameters {
     }
 
     def hash(pc: UInt, hist: UInt): UInt = {
-        val nChunks = (localHistoryLength + nCounterBits - 1) / nCounterBits
-        val hist_chunks = (0 until nChunks) map { i =>
-            hist(math.min((i + 1) * nCounterBits, localHistoryLength) - 1, i * nCounterBits)
-        }
-        hist_chunks.reduce(_ ^ _) ^ pc(nCounterBits + log2Ceil(fetchBytes) - 1, log2Ceil(fetchBytes))
+        // val nChunks = (localHistoryLength + nCounterBits - 1) / nCounterBits
+        // val hist_chunks = (0 until nChunks) map { i =>
+        //     hist(math.min((i + 1) * nCounterBits, localHistoryLength) - 1, i * nCounterBits)
+        // }
+        // hist_chunks.reduce(_ ^ _) ^ pc(nCounterBits + log2Ceil(fetchBytes) - 1, log2Ceil(fetchBytes))
+        hist
     }
 }
