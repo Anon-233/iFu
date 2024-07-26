@@ -4,8 +4,9 @@ import chisel3._
 import chisel3.util._
 
 import iFu.common._
+import iFu.util._
 
-class Ras extends CoreModule {
+class RAS extends CoreModule {
     val numRasEntries = frontendParams.bpdParams.numRasEntries
 
     val io = IO(new Bundle {
@@ -26,5 +27,22 @@ class Ras extends CoreModule {
 
     when (io.write_valid) {
         ras(io.write_idx) := io.write_addr
+    }
+}
+
+class RASPtr extends CoreBundle {
+    /*--------------------------*/
+    val numRasEntries = frontendParams.bpdParams.numRasEntries
+    /*--------------------------*/
+    val bits = UInt(log2Ceil(numRasEntries).W)
+
+    def update(
+        en: Bool, is_call: Bool, is_ret: Bool
+    ): RASPtr = {
+        val new_ptr = Wire(new RASPtr)
+        new_ptr.bits := Mux(en && is_call, WrapInc(bits, numRasEntries),
+                        Mux(en && is_ret , WrapDec(bits, numRasEntries),
+                                           bits))
+        new_ptr
     }
 }

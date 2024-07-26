@@ -97,7 +97,7 @@ class Frontend extends CoreModule {
 
     // Module definition
     val bpd          = Module(new BranchPredictor)
-    val ras          = Module(new Ras)  // TODO: should ras be a part of bpd?
+    val ras          = Module(new RAS)  // TODO: should ras be a part of bpd?
     val icache       = Module(new ICache(frontendParams.iCacheParams))
     val itlb          = Module(new ITLB)
     val fetch_buffer = Module(new FetchBuffer)
