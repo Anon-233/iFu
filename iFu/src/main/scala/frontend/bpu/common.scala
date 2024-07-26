@@ -43,6 +43,8 @@ trait HasLocalHistoryParameters extends HasBPUParameters {
     val nCounters = 8192
     val nLHRBits = log2Ceil(nLHRs)
     val nCounterBits = log2Ceil(nCounters)
+    val nCacheCounters = 64
+    val nCacheCounterBits = log2Ceil(nCacheCounters)
 
     def update(v: UInt, taken: Bool): UInt = {
         val extended = Cat(0.U(1.W), v)
@@ -50,7 +52,11 @@ trait HasLocalHistoryParameters extends HasBPUParameters {
         Mux(newCnt(2), v, newCnt(1, 0))
     }
 
-    def hash(pc: UInt, hist: UInt): UInt = {
+    def idxHash(pc: UInt, hist: UInt): UInt = {
         hist
+    }
+
+    def cacheIdxHash(hist: UInt): UInt = {
+        hist(nCacheCounterBits - 1, 0)
     }
 }
