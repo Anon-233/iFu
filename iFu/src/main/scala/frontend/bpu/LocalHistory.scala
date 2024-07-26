@@ -1,4 +1,4 @@
-package frontend.bpu
+package iFu.frontend
 
 import chisel3._
 import chisel3.util.{Cat, Valid}
@@ -57,7 +57,7 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
 
     io.s3taken := RegNext(VecInit(s2cnt.map(cnt => {
         val taken = Wire(Valid(Bool()))
-        taken.valid := !(cnt(0) ^ cnt(1))
+        taken.valid := !(cnt(0) ^ cnt(1)) && !reset_en
         taken.bits := cnt(1)
         taken
     })))
