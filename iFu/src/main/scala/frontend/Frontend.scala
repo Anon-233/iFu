@@ -158,10 +158,7 @@ class Frontend extends CoreModule {
     val f1_valid_instr_mask = fetchMask(s1_vpc)
     val f1_redirect_instrs = (0 until fetchWidth).map{ i=>
         s1_valid && f1_valid_instr_mask(i) &&
-        f1_bpd_resp.predInfos(i).predictedpc.valid && (
-            f1_bpd_resp.predInfos(i).isJal ||
-            (f1_bpd_resp.predInfos(i).isBranch && f1_bpd_resp.predInfos(i).taken)
-        )
+        f1_bpd_resp.predInfos(i).predictedpc.valid && f1_bpd_resp.predInfos(i).taken
     }
     val f1_do_redirect = f1_redirect_instrs.reduce(_||_)
     val f1_redirect_instr_idx = PriorityEncoder(f1_redirect_instrs)
@@ -344,7 +341,7 @@ class Frontend extends CoreModule {
     f3_fetch_bundle.cfiType       := f3_cfi_types(f3_fetch_bundle.cfiIdx.bits)
     f3_fetch_bundle.cfiIsCall     := f3_call_mask(f3_fetch_bundle.cfiIdx.bits)
     f3_fetch_bundle.cfiIsRet      := f3_ret_mask(f3_fetch_bundle.cfiIdx.bits)
-    f3_fetch_bundle.rasPtr         := f3_ifu_resp.io.deq.bits.rasPtr
+    f3_fetch_bundle.rasPtr        := f3_ifu_resp.io.deq.bits.rasPtr
     f3_fetch_bundle.bpdMeta       := f3_bpd_resp.io.deq.bits.meta
     f3_fetch_bundle.rasTop        := ras.io.read_addr
 

@@ -116,10 +116,10 @@ class BranchPredictor extends Module with HasBPUParameters {
 
     // f1接收faubtb输出结果
     for (w <- 0 until fetchWidth) {
-      io.resp.f1.predInfos(w).taken := faubtb.io.s1taken(w)
-      io.resp.f1.predInfos(w).isBranch := faubtb.io.s1br(w)
-      io.resp.f1.predInfos(w).isJal := faubtb.io.s1jal(w)
-      io.resp.f1.predInfos(w).predictedpc := faubtb.io.s1targs(w)
+        io.resp.f1.predInfos(w).taken := faubtb.io.s1taken(w)
+        io.resp.f1.predInfos(w).isBranch := faubtb.io.s1br(w)
+        io.resp.f1.predInfos(w).isJal := faubtb.io.s1jal(w)
+        io.resp.f1.predInfos(w).predictedpc := faubtb.io.s1targs(w)
     }
 
     // f2以f1为基础，接收btb，bim的输出结果
