@@ -4,16 +4,9 @@ import chisel3._
 import chisel3.util._
 
 trait HasBPUParameters {
-    val globalHistoryLength: Int = 8
     val vaddrBits = 32
     val fetchWidth = 4
     val fetchBytes = fetchWidth * 4
-}
-
-trait HasTageParameters extends HasBPUParameters {
-    val nWrBypassEntries = 2
-    val tageNTables = 6
-    val tageUBitPeriod = 2048
 }
 
 trait HasUbtbParameters extends HasBPUParameters {

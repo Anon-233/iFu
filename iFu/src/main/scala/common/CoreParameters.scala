@@ -6,7 +6,6 @@ import chisel3.util._
 import iFu.common.Consts._
 
 class BPUParameters {
-    val globalHistoryLength: Int = 8
     val numRasEntries: Int       = 16
 }
 

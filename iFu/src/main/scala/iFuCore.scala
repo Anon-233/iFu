@@ -167,10 +167,10 @@ class iFuCore extends CoreModule {
         ifu.io.core.redirect_val := true.B
         ifu.io.core.redirect_flush := true.B
         val flush_type = RegNext(rob.io.flush.bits.flush_typ)
-        // Clear the global history when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
-        val new_ghist = WireInit((0.U).asTypeOf(new RASPtr))
-        new_ghist.bits := ifu.io.core.getFtqPc(0).entry.rasIdx
-        ifu.io.core.redirect_ghist := new_ghist
+        // Reset ras when we flush the ROB (exceptions, AMOs, unique instructions, etc.)
+        val new_ras_ptr = WireInit(0.U.asTypeOf(new RASPtr))
+        new_ras_ptr.bits := ifu.io.core.getFtqPc(0).entry.rasIdx
+        ifu.io.core.redirect_ras_ptr := new_ras_ptr
         when (FlushTypes.useCsrEvec(flush_type)) {
             ifu.io.core.redirect_pc := csr.io.redirect_pc
         } .otherwise {
@@ -205,22 +205,22 @@ class iFuCore extends CoreModule {
 
         val ftq_entry = ifu.io.core.getFtqPc(1).entry
         val cfi_idx = brUpdate.b2.uop.pcLowBits(log2Ceil(fetchWidth) + 1, 2)
-        val ftq_ghist = ifu.io.core.getFtqPc(1).gHist
-        val next_ghist = ftq_ghist.update(
+        val ftq_ras_ptr = ifu.io.core.getFtqPc(1).rasPtr
+        val next_ras_ptr = ftq_ras_ptr.update(
             true.B,
             ftq_entry.cfiIsCall && ftq_entry.cfiIdx.bits === cfi_idx,
             ftq_entry.cfiIsRet && ftq_entry.cfiIdx.bits === cfi_idx
         )
 
-        ifu.io.core.redirect_ghist := next_ghist
+        ifu.io.core.redirect_ras_ptr := next_ras_ptr
     } .elsewhen (rob.io.flush_frontend || b1_mispredict_val) {
         ifu.io.core.redirect_flush   := true.B
         ifu.io.core.redirect_pc      := DontCare
-        ifu.io.core.redirect_ghist   := DontCare
+        ifu.io.core.redirect_ras_ptr   := DontCare
         ifu.io.core.redirect_ftq_idx := DontCare
     } .otherwise {
         ifu.io.core.redirect_pc      := DontCare
-        ifu.io.core.redirect_ghist   := DontCare
+        ifu.io.core.redirect_ras_ptr   := DontCare
         ifu.io.core.redirect_ftq_idx := DontCare
     }
 

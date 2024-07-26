@@ -33,7 +33,7 @@ class GetPCFromFtqIO extends CoreBundle {
     val ftqIdx  = Input(UInt(log2Ceil(numFTQEntries).W))
 
     val entry   = Output(new FTQBundle)
-    val gHist   = Output(new RASPtr)
+    val rasPtr  = Output(new RASPtr)
 
     val pc      = Output(UInt(vaddrBits.W))
     val compc   = Output(UInt(vaddrBits.W))
@@ -85,14 +85,14 @@ class FetchTargetQueue extends CoreModule {
         (WrapInc(WrapInc(bpu_ptr, numFTQEntries), numFTQEntries) === train_ptr)
     ) // why need at least 2 empty entries?
 
-    val pcs   = Reg(Vec(numFTQEntries, UInt(vaddrBits.W)))
-    val meta  = SyncReadMem(numFTQEntries, Vec(fetchWidth ,new PredictionMeta))
-    val ram   = Reg(Vec(numFTQEntries, new FTQBundle))
-    val gHist = SyncReadMem(numFTQEntries, new RASPtr)
+    val pcs    = Reg(Vec(numFTQEntries, UInt(vaddrBits.W)))
+    val meta   = SyncReadMem(numFTQEntries, Vec(fetchWidth ,new PredictionMeta))
+    val ram    = Reg(Vec(numFTQEntries, new FTQBundle))
+    val rasPtr = SyncReadMem(numFTQEntries, new RASPtr)
 
-    val previousgHist = RegInit((0.U).asTypeOf(new RASPtr))
-    val previousEntry = RegInit((0.U).asTypeOf(new FTQBundle))
-    val previouspc    = RegInit(0.U(vaddrBits.W))
+    val previousRasPtr = RegInit(0.U.asTypeOf(new RASPtr))
+    val previousEntry  = RegInit(0.U.asTypeOf(new FTQBundle))
+    val previouspc     = RegInit(0.U(vaddrBits.W))
 
     // 入队操作
     val newEntry = Wire(new FTQBundle)
@@ -103,10 +103,10 @@ class FetchTargetQueue extends CoreModule {
     newEntry.cfiIsCall       := io.enq.bits.cfiIsCall
     newEntry.cfiIsRet        := io.enq.bits.cfiIsRet
     newEntry.rasTop          := io.enq.bits.rasTop
-    newEntry.rasIdx          := io.enq.bits.gHist.bits
+    newEntry.rasIdx          := io.enq.bits.rasPtr.bits
     newEntry.brMask          := io.enq.bits.brMask & io.enq.bits.mask
 
-    val newgHist = previousgHist.update(
+    val newRasPtr = previousRasPtr.update(
         previousEntry.cfiIdx.valid,
         previousEntry.cfiIsCall,
         previousEntry.cfiIsRet
@@ -118,12 +118,12 @@ class FetchTargetQueue extends CoreModule {
         // 进行写入操作
         meta.write(bpu_ptr, io.enq.bits.bpdMeta)
         ram(bpu_ptr) := newEntry
-        gHist.write(bpu_ptr, newgHist)
+        rasPtr.write(bpu_ptr, newRasPtr)
 
         // 每次入队更新previous的保存内容
         previouspc    := io.enq.bits.pc
         previousEntry := newEntry
-        previousgHist := newgHist
+        previousRasPtr := newRasPtr
 
         bpu_ptr := WrapInc(bpu_ptr, numFTQEntries)
     }
@@ -137,7 +137,7 @@ class FetchTargetQueue extends CoreModule {
     val bpdIdx    = Mux(io.redirect.valid, io.redirect.bits,
                                            train_ptr)
     val bpdEntry  = RegNext(ram(bpdIdx))
-    val bpdgHist  = gHist.read(bpdIdx)
+    val bpdRasPtr = rasPtr.read(bpdIdx)
     val bpdMeta   = meta.read(bpdIdx, true.B)
     val bpdpc     = RegNext(pcs(bpdIdx))
     val bpdTarget = RegNext(pcs(WrapInc(bpdIdx, numFTQEntries)))
@@ -183,7 +183,7 @@ class FetchTargetQueue extends CoreModule {
         bpu_ptr := WrapInc(io.redirect.bits, numFTQEntries)
     }
 //-------------------------------------------------------------
-// fix ras in global history
+// fix ras
     val rasUpdate    = WireInit(false.B)
     val rasUpdatepc  = WireInit(0.U(vaddrBits.W))
     val rasUpdateIdx = WireInit(0.U(log2Ceil(numRasEntries).W))
@@ -211,7 +211,7 @@ class FetchTargetQueue extends CoreModule {
         rasUpdateIdx := old_entry.rasIdx
     } .elsewhen (RegNext(io.redirect.valid)) {
         previousEntry := RegNext(new_entry)
-        previousgHist := bpdgHist
+        previousRasPtr := bpdRasPtr
         previouspc    := bpdpc
 
         ram(RegNext(io.redirect.bits)) := RegNext(new_entry)
@@ -226,9 +226,9 @@ class FetchTargetQueue extends CoreModule {
         val getEntry = ram(idx)
         io.getFtqpc(i).entry       := RegNext(getEntry)
         if (i == 1) {
-            io.getFtqpc(i).gHist   := gHist.read(idx)
+            io.getFtqpc(i).rasPtr   := rasPtr.read(idx)
         } else {
-            io.getFtqpc(i).gHist   := DontCare
+            io.getFtqpc(i).rasPtr   := DontCare
         }
 
         io.getFtqpc(i).pc      := RegNext(pcs(idx))
