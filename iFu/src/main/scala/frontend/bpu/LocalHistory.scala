@@ -44,7 +44,7 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
     val s2cnt = VecInit(counters.zip(s1idx).map({case (ram, idx) => ram.read(idx)}))
     io.s2taken := s2cnt.map(cnt => {
         val taken = Wire(Valid(Bool()))
-        taken.valid := !(cnt(0) ^ cnt(1))
+        taken.valid := !(cnt(0) ^ cnt(1)) && !reset_en
         taken.bits := cnt(1)
         taken
     })

@@ -5,15 +5,14 @@ import chisel3.util._
 import frontend.bpu.{LocalHistoryPredictMeta, LocalHistoryPredictor}
 import iFu.common._
 import iFu.frontend.FrontendUtils._
+import javax.management.ValueExp
 
 class PredictionInfo extends Bundle with HasBPUParameters{
-  val taken = Output(Bool())
+  val takens = Output(Vec(fetchWidth, Bool()))
 
-  val isBranch = Output(Bool())
-
-  val isJal = Output(Bool())
-
-  val predictedpc = Valid(UInt(vaddrBits.W))
+  val predicted_target = Valid(UInt(targetSz.W))
+  //  给f3用的
+  val tgts = Vec(fetchWidth, Valid(UInt(targetSz.W)))
 
 }
 
@@ -27,7 +26,7 @@ class PredictionMeta extends Bundle with HasBPUParameters{
 
 class BranchPredictionBundle extends Bundle with HasBPUParameters{
   val pc = UInt(vaddrBits.W)
-  val predInfos = Vec(fetchWidth, new PredictionInfo)
+  val predInfos = new PredictionInfo
   val meta = Vec(fetchWidth,new PredictionMeta)
 }
 
@@ -128,35 +127,44 @@ class BranchPredictor extends Module with HasBPUParameters
 //    tage.io.f1pc := s1pc
 
     // f1接收faubtb输出结果
-    for (w <- 0 until fetchWidth) {
-      io.resp.f1.predInfos(w).taken := faubtb.io.s1taken(w)
-      io.resp.f1.predInfos(w).isBranch := faubtb.io.s1br(w)
-      io.resp.f1.predInfos(w).isJal := faubtb.io.s1jal(w)
-      io.resp.f1.predInfos(w).predictedpc := faubtb.io.s1targs(w)
+    val f1_valid_instr_mask = fetchMask(s1pc)
+    val s1jumpvalid = WireInit(VecInit(Seq.fill(fetchWidth)(false.B)))
+    io.resp.f1.predInfos := 0.U.asTypeOf(new PredictionInfo)
+    // 覆盖顺序是倒着，从高位到低位
+    for (w <- (0 until fetchWidth).reverse) {
+      s1jumpvalid(w) := s1valid && f1_valid_instr_mask(w) && faubtb.io.s1targs(w).valid && ( (faubtb.io.s1br(w) && faubtb.io.s1taken(w))  || faubtb.io.s1jal(w))
+      when(s1jumpvalid(w)){
+        io.resp.f1.predInfos.predicted_target := faubtb.io.s1targs(w)
+      }
     }
+    io.resp.f1.predInfos.takens := s1jumpvalid
 
-
+    io.resp.f1.predInfos.tgts := faubtb.io.s1targs
 
     // f2以f1为基础，接收btb，bim的输出结果
     io.resp.f2.predInfos := RegNext(io.resp.f1.predInfos)
 
-
-    for (w <- 0 until fetchWidth) {
+    val f2_valid_instr_mask = fetchMask(s2pc)
+    
+    val s2jumpvalid = WireInit(VecInit(Seq.fill(fetchWidth)(false.B)))
+    // 覆盖顺序是倒着，从高位到低位
+    for (w <- (0 until fetchWidth).reverse) {
         // bim预测taken（不存在命不命中的说法）覆盖f2的初值
-        io.resp.f2.predInfos(w).taken := Mux(lh.io.s2taken(w).valid, lh.io.s2taken(w).bits, bim.io.s2taken(w))
+        val pred_taken = Mux(lh.io.s2taken(w).valid, lh.io.s2taken(w).bits, bim.io.s2taken(w)) || btb.io.s2taken(w)
+        s2jumpvalid(w) := f2_valid_instr_mask(w) && s2valid && btb.io.s2targs(w).valid && (btb.io.s2br(w) && pred_taken || btb.io.s2jal(w))
         // io.resp.f2.predInfos(w).taken := bim.io.s2taken(w)
         // 对于btb，当且仅当命中，结果的valid有效，才会把对应的结果覆盖f2的初值
-        when(btb.io.s2targs(w).valid) {
-            io.resp.f2.predInfos(w).isBranch := btb.io.s2br(w)
-            io.resp.f2.predInfos(w).isJal := btb.io.s2jal(w)
-            io.resp.f2.predInfos(w).predictedpc := btb.io.s2targs(w)
-
+        when(s2jumpvalid(w)) {
+            io.resp.f2.predInfos.predicted_target := btb.io.s2targs(w)
             // btb推测为taken为真当且仅当检测到jal指令，这时bim置信度显然没有必然跳转的jal高，取btb的taken
-            when(btb.io.s2taken(w)) {
-              io.resp.f2.predInfos(w).taken := true.B
-            }
+            // when(btb.io.s2taken(w)) {
+            //   io.resp.f2.predInfos(w).taken := true.B
+            // }
         }
     }
+    io.resp.f2.predInfos.takens := s2jumpvalid
+
+    io.resp.f2.predInfos.tgts := btb.io.s2targs
 
     // f3以f2为基础，接收tage的输出结果
     io.resp.f3.predInfos := RegNext(io.resp.f2.predInfos)

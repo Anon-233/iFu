@@ -94,6 +94,13 @@ class Frontend extends CoreModule {
     val lineBytes     = frontendParams.iCacheParams.lineBytes
     val fetchBytes    = frontendParams.fetchBytes
     val instrBytes    = frontendParams.instrBytes
+
+    val bpuParams = new HasBPUParameters {}
+    val targetSz = bpuParams.targetSz
+    def getTargetPC(pc: UInt , target : UInt): UInt = {
+        bpuParams.getTargetPC(pc, target)
+    }
+    def getTarget(tgtpc : UInt): UInt = bpuParams.getTarget(tgtpc)
 // --------------------------------------------------------
     val io = IO(new FrontendIO)
 
@@ -104,6 +111,8 @@ class Frontend extends CoreModule {
     val itlb          = Module(new ITLB)
     val fetch_buffer = Module(new FetchBuffer)
     val ftq          = Module(new FetchTargetQueue)
+
+
 
     io.core.tlb_data.r_req := itlb.io.r_req
     itlb.io.r_resp         := io.core.tlb_data.r_resp
@@ -159,40 +168,21 @@ class Frontend extends CoreModule {
 
     // branch prediction
     val f1_bpd_resp = bpd.io.resp.f1
-    val f1_valid_instr_mask = fetchMask(s1_vpc)
-    val f1_redirect_instrs = (0 until fetchWidth).map{ i=>
-        s1_valid && f1_valid_instr_mask(i) &&
-        f1_bpd_resp.predInfos(i).predictedpc.valid && (
-            f1_bpd_resp.predInfos(i).isJal ||
-            (f1_bpd_resp.predInfos(i).isBranch && f1_bpd_resp.predInfos(i).taken)
-        )
-    }
-    val f1_do_redirect = f1_redirect_instrs.reduce(_||_)
-    val f1_redirect_instr_idx = PriorityEncoder(f1_redirect_instrs)
-    val f1_tgts = VecInit(f1_bpd_resp.predInfos.map(_.predictedpc.bits))
-    val f1_predicted_target = Mux(
-        f1_do_redirect,
-        f1_tgts(f1_redirect_instr_idx),
-        nextFetch(s1_vpc)
-    )
+    val f1_do_redirect = f1_bpd_resp.predInfos.takens.asUInt.orR
+    val f1_tgt = f1_bpd_resp.predInfos.predicted_target.bits
     // use the predicted information to update the global history
-    val f1_predicted_ghist = s1_ghist.update(
-        VecInit(f1_bpd_resp.predInfos.map(p =>
-            p.isBranch && p.predictedpc.valid
-        )).asUInt & f1_valid_instr_mask,
-        f1_bpd_resp.predInfos(f1_redirect_instr_idx).taken && f1_do_redirect,
-        f1_bpd_resp.predInfos(f1_redirect_instr_idx).isBranch,
-        f1_redirect_instr_idx,
-        f1_do_redirect,
-        s1_vpc,
-        false.B,
-        false.B
-    )
+    val f1_predicted_ghist = s1_ghist
+
+    dontTouch(f1_tgt)
 
     // if current cycle is valid, use the predicted target as the next fetch pc
     when (s1_valid) {
         s0_valid := !f1_tlb_resp.exception.valid
-        s0_vpc   := f1_predicted_target
+        s0_vpc   :=  Mux(
+                    f1_do_redirect,
+                    getTargetPC(s1_vpc, f1_tgt),
+                    nextFetch(s1_vpc)
+                    )
         s0_ghist := f1_predicted_ghist
     }
 // --------------------------------------------------------
@@ -219,39 +209,22 @@ class Frontend extends CoreModule {
 
     // branch prediction
     val f2_bpd_resp = bpd.io.resp.f2
-    val f2_valid_instr_mask = fetchMask(s2_vpc)
-    val f2_redirect_instrs = (0 until fetchWidth).map{ i =>
-        s2_valid && f2_valid_instr_mask(i) &&
-        f2_bpd_resp.predInfos(i).predictedpc.valid && (
-            f2_bpd_resp.predInfos(i).isJal ||
-            (f2_bpd_resp.predInfos(i).isBranch && f2_bpd_resp.predInfos(i).taken)
-        )
-    }
-    val f2_do_redirect = f2_redirect_instrs.reduce(_||_)
-    val f2_redirect_instr_idx = PriorityEncoder(f2_redirect_instrs)
-    val f2_tgts = VecInit(f2_bpd_resp.predInfos.map(_.predictedpc.bits))
-    val f2_predicted_target = Mux(
-        f2_do_redirect,
-        f2_tgts(f2_redirect_instr_idx),
-        nextFetch(s2_vpc)
-    )
+    val f2_do_redirect = f2_bpd_resp.predInfos.takens.asUInt.orR
+    val f2_tgt = f2_bpd_resp.predInfos.predicted_target.bits
     // use the predicted information to update the global history
-    val f2_predicted_ghist = s2_ghist.update(
-        VecInit(f2_bpd_resp.predInfos.map(p =>
-            p.isBranch && p.predictedpc.valid
-        )).asUInt & f2_valid_instr_mask,
-        f2_bpd_resp.predInfos(f2_redirect_instr_idx).taken && f2_do_redirect,
-        f2_bpd_resp.predInfos(f2_redirect_instr_idx).isBranch,
-        f2_redirect_instr_idx,
-        f2_do_redirect,
-        s2_vpc,
-        false.B,
-        false.B
-    )
+    val f2_predicted_ghist = s2_ghist
+    // f2综合得出的预测目标地址
+    val f2_predicted_target_pc = Mux(
+                                        f2_do_redirect,
+                                        getTargetPC(s2_vpc, f2_tgt),
+                                        nextFetch(s2_vpc)
+                                    )
+    dontTouch(f2_tgt)
+    
 
     // check if bpd.f2 agree with bpd.f1
     val f2_correct_f1_ghist = WireInit(false.B) // s1_ghist =/= f2_predicted_ghist
-
+    val f2_correct_f1_tgt = !IsEqual(getTarget(s1_vpc), getTarget(f2_predicted_target_pc))
     // note: s0 is not a real stage
     val f3_ready = Wire(Bool())
     when (
@@ -263,14 +236,14 @@ class Frontend extends CoreModule {
         s0_ghist     := s2_ghist
         f1_clear     := true.B
     } .elsewhen (s2_valid && f3_ready) {
-        when (s1_valid && IsEqual(s1_vpc, f2_predicted_target) && !f2_correct_f1_ghist) {
+        when (s1_valid && !f2_correct_f1_tgt && !f2_correct_f1_ghist) {
             // all right, use the predicted information to update the global history
             s2_ghist := f2_predicted_ghist
         }
-        when ((s1_valid && (!IsEqual(s1_vpc, f2_predicted_target) || f2_correct_f1_ghist)) || !s1_valid) {
+        when ((s1_valid && (f2_correct_f1_tgt || f2_correct_f1_ghist)) || !s1_valid) {
             // redirect, next cycle, s2_ghist is meaningless, so we don't care
             s0_valid := !s2_tlb_resp.exception.valid
-            s0_vpc   := f2_predicted_target
+            s0_vpc   := f2_predicted_target_pc
             s0_ghist := f2_predicted_ghist
             f1_clear := true.B
         }
@@ -325,13 +298,15 @@ class Frontend extends CoreModule {
     val f3_instrs                = f3_fetchResp.instrs
     val f3_aligned_pc            = fetchAlign(f3_fetchResp.pc)
     val f3_redirects             = Wire(Vec(fetchWidth, Bool()))
-    val f3_tgts                  = Wire(Vec(fetchWidth, UInt(vaddrBits.W)))
+    val f3_tgts                  = Wire(Vec(fetchWidth, UInt(targetSz.W)))
     val f3_cfi_types             = Wire(Vec(fetchWidth, UInt(CFI_SZ.W)))
     val f3_fetch_bundle          = Wire(new FetchBundle)
     val f3_mask                  = Wire(Vec(fetchWidth, Bool()))
     val f3_br_mask               = Wire(Vec(fetchWidth, Bool()))
     val f3_call_mask             = Wire(Vec(fetchWidth, Bool()))
     val f3_ret_mask              = Wire(Vec(fetchWidth, Bool()))
+
+    dontTouch(f3_tgts)
 
     var redirect_found = false.B
     for (i <- 0 until fetchWidth) {
@@ -347,8 +322,8 @@ class Frontend extends CoreModule {
         f3_mask(i) := f3_ifu_resp.io.deq.valid && f3_fetchResp.mask(i) && !redirect_found
         f3_tgts(i) := Mux(
             brsigs.cfiType === CFI_JIRL,
-            f3_bpd_resp.io.deq.bits.predInfos(i).predictedpc.bits, // maybe wrong
-            brsigs.target   // surely right
+            f3_bpd_resp.io.deq.bits.predInfos.tgts(i).bits,
+            getTarget(brsigs.target)   // surely right
         )
 
         /**
@@ -358,7 +333,7 @@ class Frontend extends CoreModule {
          */
         f3_redirects(i) := f3_mask(i) && (
             brsigs.cfiType === CFI_BL || brsigs.cfiType === CFI_JIRL ||
-            (brsigs.cfiType === CFI_BR && f3_bpd_resp.io.deq.bits.predInfos(i).taken)
+            (brsigs.cfiType === CFI_BR && f3_bpd_resp.io.deq.bits.predInfos.takens(i))
         )
         f3_br_mask(i)   := f3_mask(i) && brsigs.cfiType === CFI_BR
         f3_cfi_types(i) := brsigs.cfiType
@@ -382,11 +357,17 @@ class Frontend extends CoreModule {
     f3_fetch_bundle.bpdMeta       := f3_bpd_resp.io.deq.bits.meta
     f3_fetch_bundle.rasTop        := ras.io.read_addr
 
-    val f3_predicted_target = Mux(f3_redirects.reduce(_||_),
-        Mux(f3_fetch_bundle.cfiIsRet, ras.io.read_addr,
-            f3_tgts(PriorityEncoder(f3_redirects))),
+    // s3综合得出的预测目标地址
+    val f3_predicted_target_pc = Mux(f3_redirects.reduce(_||_),
+        Mux(f3_fetch_bundle.cfiIsRet,
+            ras.io.read_addr,
+            getTargetPC(f3_fetch_bundle.pc, f3_tgts(PriorityEncoder(f3_redirects)))
+            )
+          ,
         nextFetch(f3_fetch_bundle.pc)
     )
+
+    dontTouch(f3_predicted_target_pc)
 
     val f3_predicted_ghist = f3_fetch_bundle.gHist.update(
         f3_fetch_bundle.brMask,
@@ -404,26 +385,28 @@ class Frontend extends CoreModule {
     ras.io.write_idx   := WrapInc(f3_fetch_bundle.gHist.rasIdx, numRasEntries)
 
     val f3_correct_f1_ghist = WireInit(false.B) // s1_ghist =/= f3_predicted_ghist
+    val f3_correct_f1_tgt = !IsEqual(getTarget(s1_vpc), getTarget(f3_predicted_target_pc))
     val f3_correct_f2_ghist = WireInit(false.B) // s2_ghist =/= f3_predicted_ghist
+    val f3_correct_f2_tgt = !IsEqual(getTarget(s2_vpc), getTarget(f3_predicted_target_pc))
 
     when (f3_ifu_resp.io.deq.valid && f4_ready) {
         when(f3_fetch_bundle.cfiIsCall && f3_fetch_bundle.cfiIdx.valid){
             ras.io.write_valid := true.B
         }
 
-        when (s2_valid && IsEqual(s2_vpc, f3_predicted_target) && !f3_correct_f2_ghist) {
+        when (s2_valid && !f3_correct_f2_tgt && !f3_correct_f2_ghist) {
             f3_ifu_resp.io.enq.bits.gHist := f3_predicted_ghist
-        } .elsewhen (!s2_valid && s1_valid && IsEqual(s1_vpc, f3_predicted_target) && !f3_correct_f1_ghist) {
+        } .elsewhen (!s2_valid && s1_valid && !f3_correct_f1_tgt && !f3_correct_f1_ghist) {
             s2_ghist := f3_predicted_ghist
         } .elsewhen (
-            (s2_valid && (!IsEqual(s2_vpc, f3_predicted_target) || f3_correct_f2_ghist)) ||
-            (!s2_valid && s1_valid && (!IsEqual(s1_vpc, f3_predicted_target) || f3_correct_f1_ghist)) ||
+            (s2_valid && (f3_correct_f2_tgt || f3_correct_f2_ghist)) ||
+            (!s2_valid && s1_valid && (f3_correct_f1_tgt || f3_correct_f1_ghist)) ||
             (!s2_valid && !s1_valid)
         ) {
             f2_clear     := true.B
             f1_clear     := true.B
             s0_valid     := !f3_fetch_bundle.exception.valid
-            s0_vpc       := f3_predicted_target
+            s0_vpc       := f3_predicted_target_pc
             s0_ghist     := f3_predicted_ghist
         }
     }
@@ -431,12 +414,15 @@ class Frontend extends CoreModule {
     if(!FPGAPlatform)dontTouch(f2_correct_f1_ghist)
     if(!FPGAPlatform)dontTouch(f3_correct_f1_ghist)
     if(!FPGAPlatform)dontTouch(f3_correct_f2_ghist)
+    if(!FPGAPlatform)dontTouch(f2_correct_f1_tgt)
+    if(!FPGAPlatform)dontTouch(f3_correct_f1_tgt)
+    if(!FPGAPlatform)dontTouch(f3_correct_f2_tgt)
     if(!FPGAPlatform)dontTouch(f1_predicted_ghist)
     if(!FPGAPlatform)dontTouch(f2_predicted_ghist)
     if(!FPGAPlatform)dontTouch(f3_predicted_ghist)
-    if(!FPGAPlatform)dontTouch(f1_predicted_target)
-    if(!FPGAPlatform)dontTouch(f2_predicted_target)
-    if(!FPGAPlatform)dontTouch(f3_predicted_target)
+    if(!FPGAPlatform)dontTouch(f1_tgt)
+    if(!FPGAPlatform)dontTouch(f2_tgt)
+    if(!FPGAPlatform)dontTouch(f3_predicted_target_pc)
 
 // -------------------------------------------------------
     val f4_clear = WireInit(false.B)
