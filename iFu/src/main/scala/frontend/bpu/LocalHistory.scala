@@ -3,7 +3,7 @@ package frontend.bpu
 import chisel3._
 import chisel3.util.{Cat, Valid}
 import iFu.frontend.FrontendUtils.{fetchIdx, getPc}
-import iFu.frontend.{BranchPredictionUpdate, HasLocalHistoryParameters}
+import iFu.frontend._
 
 class LocalHistoryPredictMeta extends Bundle with HasLocalHistoryParameters {
     val cntIdx = UInt(nCounterBits.W)
@@ -14,6 +14,7 @@ class LocalHistoryIO extends Bundle with HasLocalHistoryParameters {
     val s0pc = Input(UInt(vaddrBits.W))
 
     val s2taken = Output(Vec(fetchWidth, Valid(Bool())))
+    val s3taken = Output(Vec(fetchWidth, Valid(Bool())))
 
     val s3meta = Output(Vec(fetchWidth, new LocalHistoryPredictMeta))
 
@@ -25,6 +26,7 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
 
     val localHistories = SyncReadMem(nLHRs, Vec(fetchWidth, UInt(localHistoryLength.W)))
     val counters = Seq.fill(fetchWidth) {SyncReadMem(nCounters, UInt(2.W))}
+    val lhcache = Module(new LHCache)
 
     // ---------------------------------------------
     // Reset
@@ -42,12 +44,22 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
     val s1hist = localHistories.read(fetchIdx(io.s0pc)(nLHRBits - 1, 0))
     val s1idx = VecInit(s1hist.zipWithIndex.map({case (hist, w) => hash(getPc(s1pc, w.U), hist)}))
     val s2cnt = VecInit(counters.zip(s1idx).map({case (ram, idx) => ram.read(idx)}))
-    io.s2taken := s2cnt.map(cnt => {
+    /* io.s2taken := s2cnt.map(cnt => {
         val taken = Wire(Valid(Bool()))
         taken.valid := !(cnt(0) ^ cnt(1))
         taken.bits := cnt(1)
         taken
-    })
+    }) */
+
+    lhcache.io.s1_lh := s1hist
+    io.s2taken := lhcache.io.s2_taken
+    io.s3taken := RegNext(VecInit(s2cnt.map(cnt => {
+        val taken = Wire(Valid(Bool()))
+        taken.valid := !(cnt(0) ^ cnt(1))
+        taken.bits := cnt(1)
+        taken
+    })))
+    lhcache.io.s3_cnt := RegNext(s2cnt)
     // ---------------------------------------------
     // Meta
     val s2idx = RegNext(s1idx)

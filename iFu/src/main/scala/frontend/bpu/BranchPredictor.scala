@@ -143,6 +143,11 @@ class BranchPredictor extends Module with HasBPUParameters {
     }
 
     io.resp.f3.predInfos := RegNext(io.resp.f2.predInfos)
+    for (w <- 0 until fetchWidth) {
+        when (lh.io.s3taken(w).valid) {
+            io.resp.f3.predInfos(w).taken := lh.io.s3taken(w).bits
+        }
+    }
 
     for (w <- 0 until fetchWidth) {
         io.resp.f3.meta(w).uBTBMeta := faubtb.io.s3meta(w)
