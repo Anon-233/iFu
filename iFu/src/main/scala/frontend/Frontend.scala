@@ -128,6 +128,9 @@ class Frontend extends CoreModule {
         s0_ras_ptr := 0.U.asTypeOf(new RASPtr)
     }
 
+    icache.io.req.valid := s0_valid
+    icache.io.req.bits.addr := s0_vpc
+
     bpd.io.f0req.valid   := s0_valid
     bpd.io.f0req.bits.pc := s0_vpc
 // --------------------------------------------------------
@@ -147,9 +150,7 @@ class Frontend extends CoreModule {
     itlb.io.req.bits.vaddr := s1_vpc
     val f1_tlb_resp = itlb.io.resp
 
-    // drive icache
-    icache.io.req.valid := s1_valid
-    icache.io.req.bits.addr := s1_vpc
+    // send paddr to icache
     icache.io.s1_paddr := f1_tlb_resp.paddr
     icache.io.s1_kill  := itlb.io.resp.exception.valid || f1_clear
 
