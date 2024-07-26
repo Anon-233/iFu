@@ -2,25 +2,24 @@ package iFu.frontend
 
 import chisel3._
 import chisel3.util._
-
 import iFu.sma._
-
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
 import iFu.tlb._
-import iFu.backend.PreDecode
+import iFu.backend.{PreDecode, PreDecodeSignals}
 import iFu.frontend.FrontendUtils._
 
-class FetchResp extends CoreBundle {
+class F3Pack extends CoreBundle {
     // parameters
     val fetchWidth = frontendParams.fetchWidth
 
     val pc         = UInt(vaddrBits.W)
-    val instrs     = UInt((fetchWidth * coreInstrBits).W)
+    val instrs     = Vec(fetchWidth, UInt(coreInstrBits.W))
     val mask       = UInt(fetchWidth.W)
     val exception  = Valid(new ITLBException)
     val rasPtr     = new RASPtr
+    val predecode  = Vec(fetchWidth, new PreDecodeSignals)
 }
 
 class FetchBundle extends CoreBundle {
@@ -225,7 +224,7 @@ class Frontend extends CoreModule {
     ) {
         s0_valid     := !s2_tlb_resp.exception.valid
         s0_vpc       := s2_vpc
-        s0_ras_ptr     := s2_ras_ptr
+        s0_ras_ptr   := s2_ras_ptr
         f1_clear     := true.B
     } .elsewhen (s2_valid && f3_ready) {
         when (s1_valid && IsEqual(s1_vpc, f2_predicted_target)) {
@@ -242,7 +241,7 @@ class Frontend extends CoreModule {
 // --------------------------------------------------------
     val f3_clear = WireInit(false.B)
     val f3_ifu_resp = withReset(reset.asBool || f3_clear) {
-        Module(new Queue(new FetchResp, 1, pipe = true, flow = false))
+        Module(new Queue(new F3Pack, 1, pipe = true, flow = false))
     }
     val f3_bpd_resp = withReset(reset.asBool || f3_clear) {
         Module(new Queue(new BranchPredictionBundle, 1, pipe = true, flow = true))
@@ -250,6 +249,14 @@ class Frontend extends CoreModule {
     val ras_read_idx = RegInit(0.U(log2Ceil(numRasEntries).W))
 // --------------------------------------------------------
 // Stage 3 ->
+    // predecode
+    val predecoders = Seq.fill(fetchWidth) {Module(new PreDecode)}
+    val instrs = VecInit((0 until fetchWidth).map(i => icache.io.resp.bits.data(i * coreInstrBits + coreInstrBits - 1, i * coreInstrBits)))
+    (0 until fetchWidth).foreach(i => {
+        val pc = getPc(s2_vpc, i.U)
+        predecoders(i).io.pc := pc
+        predecoders(i).io.instr := instrs(i)
+    })
     // do enqueue
     f3_ifu_resp.io.enq.valid := (
         s2_valid && !f2_clear && (          // stage 2 is valid and (
@@ -258,10 +265,11 @@ class Frontend extends CoreModule {
         )                                   // )
     )
     f3_ifu_resp.io.enq.bits.pc        := s2_vpc
-    f3_ifu_resp.io.enq.bits.instrs    := Mux(s2_xcpt, 0.U, icache.io.resp.bits.data)
-    f3_ifu_resp.io.enq.bits.rasPtr     := s2_ras_ptr
+    f3_ifu_resp.io.enq.bits.instrs    := instrs
+    f3_ifu_resp.io.enq.bits.rasPtr    := s2_ras_ptr
     f3_ifu_resp.io.enq.bits.mask      := fetchMask(s2_vpc)
     f3_ifu_resp.io.enq.bits.exception := s2_tlb_resp.exception
+    f3_ifu_resp.io.enq.bits.predecode := VecInit(predecoders.map(_.io.out))
 
     f3_ready := f3_ifu_resp.io.enq.ready
 
@@ -286,7 +294,6 @@ class Frontend extends CoreModule {
     f3_bpd_resp.io.deq.ready := f4_ready
 
     val f3_fetchResp             = f3_ifu_resp.io.deq.bits
-    val f3_instrs                = f3_fetchResp.instrs
     val f3_aligned_pc            = fetchAlign(f3_fetchResp.pc)
     val f3_redirects             = Wire(Vec(fetchWidth, Bool()))
     val f3_tgts                  = Wire(Vec(fetchWidth, UInt(vaddrBits.W)))
@@ -299,15 +306,9 @@ class Frontend extends CoreModule {
 
     var redirect_found = false.B
     for (i <- 0 until fetchWidth) {
-        val pc    = getPc(f3_aligned_pc, i.U)
-        val instr = f3_instrs(i * coreInstrBits + coreInstrBits - 1, i * coreInstrBits)
+        val brsigs = f3_fetchResp.predecode(i)
 
-        val pre_decoder = Module(new PreDecode)
-        pre_decoder.io.pc    := pc
-        pre_decoder.io.instr := instr
-        val brsigs = pre_decoder.io.out
-
-        f3_fetch_bundle.instrs(i) := instr
+        f3_fetch_bundle.instrs(i) := f3_fetchResp.instrs(i)
         f3_mask(i) := f3_ifu_resp.io.deq.valid && f3_fetchResp.mask(i) && !redirect_found
         f3_tgts(i) := Mux(
             brsigs.cfiType === CFI_JIRL,
