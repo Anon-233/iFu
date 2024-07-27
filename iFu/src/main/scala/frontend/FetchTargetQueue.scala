@@ -2,6 +2,7 @@ package iFu.frontend
 
 import chisel3._
 import chisel3.util._
+
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
@@ -32,7 +33,7 @@ class GetPCFromFtqIO extends CoreBundle {
     val ftqIdx  = Input(UInt(log2Ceil(numFTQEntries).W))
 
     val entry   = Output(new FTQBundle)
-    val gHist   = Output(new GlobalHistory)
+    val rasPtr  = Output(new RASPtr)
 
     val pc      = Output(UInt(vaddrBits.W))
     val compc   = Output(UInt(vaddrBits.W))
@@ -84,14 +85,14 @@ class FetchTargetQueue extends CoreModule {
         (WrapInc(WrapInc(bpu_ptr, numFTQEntries), numFTQEntries) === train_ptr)
     ) // why need at least 2 empty entries?
 
-    val pcs   = Reg(Vec(numFTQEntries, UInt(vaddrBits.W)))
-    val meta  = SyncReadMem(numFTQEntries, Vec(fetchWidth ,new PredictionMeta))
-    val ram   = Reg(Vec(numFTQEntries, new FTQBundle))
-    val gHist = Seq.fill(2) { Module(new SDPRam(numFTQEntries, new GlobalHistory)) }
+    val pcs    = Reg(Vec(numFTQEntries, UInt(vaddrBits.W)))
+    val meta   = SyncReadMem(numFTQEntries, Vec(fetchWidth ,new PredictionMeta))
+    val ram    = Reg(Vec(numFTQEntries, new FTQBundle))
+    val rasPtr = SyncReadMem(numFTQEntries, new RASPtr)
 
-    val previousgHist = RegInit((0.U).asTypeOf(new GlobalHistory))
-    val previousEntry = RegInit((0.U).asTypeOf(new FTQBundle))
-    val previouspc    = RegInit(0.U(vaddrBits.W))
+    val previousRasPtr = RegInit(0.U.asTypeOf(new RASPtr))
+    val previousEntry  = RegInit(0.U.asTypeOf(new FTQBundle))
+    val previouspc     = RegInit(0.U(vaddrBits.W))
 
     // 入队操作
     val newEntry = Wire(new FTQBundle)
@@ -102,44 +103,31 @@ class FetchTargetQueue extends CoreModule {
     newEntry.cfiIsCall       := io.enq.bits.cfiIsCall
     newEntry.cfiIsRet        := io.enq.bits.cfiIsRet
     newEntry.rasTop          := io.enq.bits.rasTop
-    newEntry.rasIdx          := io.enq.bits.gHist.rasIdx
+    newEntry.rasIdx          := io.enq.bits.rasPtr.bits
     newEntry.brMask          := io.enq.bits.brMask & io.enq.bits.mask
 
-    // 全局历史，如果currentSawBranchNotTaken为true，那么就用这个历史，否则用根据上一个表项更新的历史
-    val newgHist = Mux(io.enq.bits.gHist.currentSawBranchNotTaken,
-        io.enq.bits.gHist,
-        previousgHist.update(
-            previousEntry.brMask,
-            previousEntry.cfiTaken,
-            previousEntry.brMask(previousEntry.cfiIdx.bits),
-            previousEntry.cfiIdx.bits,
-            previousEntry.cfiIdx.valid,
-            previouspc,
-            previousEntry.cfiIsCall,
-            previousEntry.cfiIsRet
-        )
+    val newRasPtr = previousRasPtr.update(
+        previousEntry.cfiIdx.valid,
+        previousEntry.cfiIsCall,
+        previousEntry.cfiIsRet
     )
 
-    when(io.enq.fire) {
+    when (io.enq.fire) {
         pcs(bpu_ptr) := io.enq.bits.pc
 
         // 进行写入操作
         meta.write(bpu_ptr, io.enq.bits.bpdMeta)
         ram(bpu_ptr) := newEntry
+        rasPtr.write(bpu_ptr, newRasPtr)
 
         // 每次入队更新previous的保存内容
         previouspc    := io.enq.bits.pc
         previousEntry := newEntry
-        previousgHist := newgHist
+        previousRasPtr := newRasPtr
 
         bpu_ptr := WrapInc(bpu_ptr, numFTQEntries)
     }
-    gHist.foreach(g => {
-        g.io.wen := io.enq.fire
-        g.io.waddr := bpu_ptr
-        g.io.wdata := newgHist
-        g.io.wstrobe := 1.U
-    })
+
     io.enqIdx := bpu_ptr
 
     when (io.deq.valid) {
@@ -149,8 +137,7 @@ class FetchTargetQueue extends CoreModule {
     val bpdIdx    = Mux(io.redirect.valid, io.redirect.bits,
                                            train_ptr)
     val bpdEntry  = RegNext(ram(bpdIdx))
-    gHist(0).io.raddr := bpdIdx
-    val bpdgHist  = gHist(0).io.rdata
+    val bpdRasPtr = rasPtr.read(bpdIdx)
     val bpdMeta   = meta.read(bpdIdx, true.B)
     val bpdpc     = RegNext(pcs(bpdIdx))
     val bpdTarget = RegNext(pcs(WrapInc(bpdIdx, numFTQEntries)))
@@ -170,7 +157,6 @@ class FetchTargetQueue extends CoreModule {
             (bpdEntry.cfiIdx.valid || bpdEntry.brMask =/= 0.U)
         )
         io.bpdUpdate.bits.pc              := bpdpc
-        io.bpdUpdate.bits.btbMispredicts  := 0.U
         io.bpdUpdate.bits.brMask          := Mux(
             bpdEntry.cfiIdx.valid,
                 MaskLower(UIntToOH(cfiIdx)) & bpdEntry.brMask,
@@ -182,7 +168,6 @@ class FetchTargetQueue extends CoreModule {
         io.bpdUpdate.bits.target          := bpdTarget
         io.bpdUpdate.bits.cfiIsBr         := bpdEntry.brMask(cfiIdx)
         io.bpdUpdate.bits.cfiIsJal        := bpdEntry.cfiType === CFI_BL || bpdEntry.cfiType === CFI_JIRL
-        io.bpdUpdate.bits.gHist           := bpdgHist
         io.bpdUpdate.bits.meta            := bpdMeta
     }
 
@@ -198,7 +183,7 @@ class FetchTargetQueue extends CoreModule {
         bpu_ptr := WrapInc(io.redirect.bits, numFTQEntries)
     }
 //-------------------------------------------------------------
-// fix ras in global history
+// fix ras
     val rasUpdate    = WireInit(false.B)
     val rasUpdatepc  = WireInit(0.U(vaddrBits.W))
     val rasUpdateIdx = WireInit(0.U(log2Ceil(numRasEntries).W))
@@ -226,7 +211,7 @@ class FetchTargetQueue extends CoreModule {
         rasUpdateIdx := old_entry.rasIdx
     } .elsewhen (RegNext(io.redirect.valid)) {
         previousEntry := RegNext(new_entry)
-        previousgHist := bpdgHist
+        previousRasPtr := bpdRasPtr
         previouspc    := bpdpc
 
         ram(RegNext(io.redirect.bits)) := RegNext(new_entry)
@@ -241,10 +226,9 @@ class FetchTargetQueue extends CoreModule {
         val getEntry = ram(idx)
         io.getFtqpc(i).entry       := RegNext(getEntry)
         if (i == 1) {
-            gHist(1).io.raddr      := idx
-            io.getFtqpc(i).gHist   := gHist(1).io.rdata
+            io.getFtqpc(i).rasPtr   := rasPtr.read(idx)
         } else {
-            io.getFtqpc(i).gHist   := DontCare
+            io.getFtqpc(i).rasPtr   := DontCare
         }
 
         io.getFtqpc(i).pc      := RegNext(pcs(idx))

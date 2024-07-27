@@ -7,6 +7,7 @@ import scala.annotation.switch
 import iFu.common._
 import iFu.common.Consts._
 import iFu.util._
+import ram.SDPRam
 
 
 class DcacheData extends Module with HasDcacheParameters{
@@ -62,9 +63,9 @@ class DcacheData extends Module with HasDcacheParameters{
     val bypass = Wire(Vec(memWidth, Bool()))
     if(!FPGAPlatform)dontTouch(bypass)
     for (w <- 0 until memWidth) {
-        // 当周期判断，下周期转发
-        bypass(w) := rvalid(w) && wvalid && (ridx1v(w) === widx1v)
-        when (RegNext(bypass(w))) {
+        //下周期判断转发
+        bypass(w) := RegNext(rvalid(w)) && RegNext(wvalid) && IsEqual( RegNext(ridx1v(w)) , RegNext(widx1v))
+        when ((bypass(w))) {
             io.read(w).resp.bits.data := RegNext(wreq.data)
         }
     }

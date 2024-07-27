@@ -1,9 +1,10 @@
-package frontend.bpu
+package iFu.frontend
 
 import chisel3._
 import chisel3.util.{Cat, Valid}
 import iFu.frontend.FrontendUtils.{fetchIdx, getPc}
-import iFu.frontend.{BranchPredictionUpdate, HasLocalHistoryParameters}
+import iFu.frontend._
+import ram.SDPRam
 
 class LocalHistoryPredictMeta extends Bundle with HasLocalHistoryParameters {
     val cntIdx = UInt(nCounterBits.W)
@@ -14,6 +15,7 @@ class LocalHistoryIO extends Bundle with HasLocalHistoryParameters {
     val s0pc = Input(UInt(vaddrBits.W))
 
     val s2taken = Output(Vec(fetchWidth, Valid(Bool())))
+    val s3taken = Output(Vec(fetchWidth, Valid(Bool())))
 
     val s3meta = Output(Vec(fetchWidth, new LocalHistoryPredictMeta))
 
@@ -25,6 +27,7 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
 
     val localHistories = SyncReadMem(nLHRs, Vec(fetchWidth, UInt(localHistoryLength.W)))
     val counters = Seq.fill(fetchWidth) {SyncReadMem(nCounters, UInt(2.W))}
+    val cacheCounters = Seq.fill(fetchWidth) {Module(new SDPRam(nCacheCounters, UInt(2.W)))}
 
     // ---------------------------------------------
     // Reset
@@ -40,13 +43,33 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
     // Predict
     val s1pc = RegNext(io.s0pc)
     val s1hist = localHistories.read(fetchIdx(io.s0pc)(nLHRBits - 1, 0))
-    val s1idx = VecInit(s1hist.zipWithIndex.map({case (hist, w) => hash(getPc(s1pc, w.U), hist)}))
+    val s1idx = VecInit(s1hist.zipWithIndex.map({case (hist, w) => idxHash(getPc(s1pc, w.U), hist)}))
     val s2cnt = VecInit(counters.zip(s1idx).map({case (ram, idx) => ram.read(idx)}))
-    io.s2taken := s2cnt.map(cnt => {
+    io.s2taken := s1hist.zip(cacheCounters).map({ case (hist, cnt) =>
+        val idx = cacheIdxHash(hist)
+        cnt.io.raddr := idx
+        val cnt_val = cnt.io.rdata.head
         val taken = Wire(Valid(Bool()))
-        taken.valid := !(cnt(0) ^ cnt(1))
+        taken.valid := !(cnt_val(0) ^ cnt_val(1))
+        taken.bits := cnt_val(1)
+        taken
+    })
+
+    io.s3taken := RegNext(VecInit(s2cnt.map(cnt => {
+        val taken = Wire(Valid(Bool()))
+        taken.valid := !(cnt(0) ^ cnt(1)) && !reset_en
         taken.bits := cnt(1)
         taken
+    })))
+    val s3hist = RegNext(RegNext(s1hist))
+    val s3cnt = RegNext(s2cnt)
+    s3hist.zip(cacheCounters).zip(s3cnt).foreach({
+        case ((hist, cnt), cnt_val) =>
+        val idx = cacheIdxHash(hist)
+        cnt.io.wen := true.B
+        cnt.io.waddr := idx
+        cnt.io.wdata.head := cnt_val
+        cnt.io.wstrobe := 1.U
     })
     // ---------------------------------------------
     // Meta

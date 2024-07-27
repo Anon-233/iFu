@@ -31,14 +31,13 @@ class BusyTable (
     //将写回的寄存器置为非忙
     val busyTableWakeup = busyTable &
         ~(io.wakeup_pdsts zip io.wakeup_valids).map {
-            case (pdst, valid) => UIntToOH(pdst) & Fill(numPregs, valid.asUInt)
+            case (pdst, valid) => valid.asUInt << pdst
         }.reduce(_|_)
-
 
     //将新分配的寄存器置为忙
     val busyTableNext = busyTableWakeup |
         (io.ren_uops zip io.rebusy_reqs) .map {
-            case (uop,req) => UIntToOH(uop.pdst) & Fill(numPregs, req.asUInt)
+            case (uop, req) => req.asUInt << uop.pdst
         }.reduce(_|_)
 
     //更新busytable

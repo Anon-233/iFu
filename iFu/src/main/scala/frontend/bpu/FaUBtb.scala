@@ -11,7 +11,8 @@ import iFu.util._
 import iFu.frontend.FrontendUtils._
 
 class UBTBEntry extends Bundle with HasUbtbParameters {
-    val offset = SInt(offsetSz.W)   // signed offset
+    // val offset = SInt(offsetSz.W)   // signed offset
+    val target = UInt(targetSz.W)   // target address
 }
 
 class PredState extends Bundle {
@@ -47,8 +48,10 @@ class UBTBPredictMeta extends Bundle with HasUbtbParameters {
 class UBTBIO extends Bundle with HasUbtbParameters {
     val s1valid  = Input(Bool())
     val s1pc     = Input(UInt(vaddrBits.W))
+    val s1_mixed_pc = Input(UInt(vaddrBits.W))
 
-    val s1targs  = Output(Vec(fetchWidth, Valid(UInt(vaddrBits.W))))
+    val s1targs  = Output(Vec(fetchWidth, Valid(UInt(targetSz.W))))
+    // val s1targspc = Output(Vec(fetchWidth, Valid(UInt(vaddrBits.W))))
     val s1taken  = Output(Vec(fetchWidth, Bool()))
     val s1br     = Output(Vec(fetchWidth, Bool()))
     val s1jal    = Output(Vec(fetchWidth, Bool()))
@@ -68,7 +71,8 @@ class FaUBtbPredictior extends Module with HasUbtbParameters {
 // ---------------------------------------------
 //      Predict Logic
     // val s1_tag = fetchIdx(io.s1pc)
-    val s1_tag = io.s1pc(tagSz + log2Ceil(fetchBytes) - 1, log2Ceil(fetchBytes))
+    // val s1_tag = io.s1pc(tagSz + log2Ceil(fetchBytes) - 1, log2Ceil(fetchBytes))
+    val s1_tag = getTag(io.s1_mixed_pc)
     val s1_hit_OHs = VecInit((0 until fetchWidth) map { i =>
         VecInit((0 until nWays) map { w =>
             /* (meta(w)(i).tag === s1_tag) && valid(Cat(w.U(log2Ceil(nWays).W), i.U(log2Ceil(fetchWidth).W))) */
@@ -84,8 +88,15 @@ class FaUBtbPredictior extends Module with HasUbtbParameters {
 
         io.s1targs(w).valid := resp_valid
         io.s1targs(w).bits  := (
-            (fetchAlign(io.s1pc) | (w << 2).U).asSInt + btb(s1_hit_ways(w))(w).offset
+            // (fetchAlign(io.s1pc) | (w << 2).U).asSInt + btb(s1_hit_ways(w))(w).offset
+            btb(s1_hit_ways(w))(w).target
         ).asUInt
+
+        // io.s1targspc(w).valid := resp_valid
+        // io.s1targspc(w).bits  := (
+        //     getTargetPC(io.s1pc, btb(s1_hit_ways(w))(w).target)
+        // ).asUInt
+
         io.s1br(w)  := resp_valid &&  entry_meta.is_br
         io.s1jal(w) := resp_valid && !entry_meta.is_br
         // taken:
@@ -125,10 +136,7 @@ class FaUBtbPredictior extends Module with HasUbtbParameters {
     (fetchAlign(s1_update.bits.pc) | (s1_update_cfi_idx << 2).asUInt).asSInt
 
     // update target offset
-    val wen = (
-        s1_update.valid && s1_update.bits.isCommitUpdate &&
-        s1_update.bits.cfiTaken && s1_update.bits.cfiIdx.valid
-    )
+    val wen = s1_update.valid && s1_update.bits.cfiTaken && s1_update.bits.cfiIdx.valid
     
     // for (w <- 0 until fetchWidth) {
     //     when (wen) {
@@ -138,14 +146,16 @@ class FaUBtbPredictior extends Module with HasUbtbParameters {
 
     // among all the ways that are updated, we only care about the hit one
     when(wen){
-        btb(s1_update_way)(s1_update_cfi_idx).offset := new_offset
+        // btb(s1_update_way)(s1_update_cfi_idx).offset := new_offset
+        // update里面存的是32位，这里取出低位做target
+        btb(s1_update_way)(s1_update_cfi_idx).target := getTarget(s1_update.bits.target)
     }
 
     // update predictor state\
     val wastaken = WireInit(VecInit(Seq.fill(fetchWidth)(false.B)))
     for (w <- 0 until fetchWidth) {
         val branch_taken = (
-            s1_update.valid && s1_update.bits.isCommitUpdate && (
+            s1_update.valid && (
                 s1_update.bits.brMask(w) ||
                 (
                     s1_update.bits.cfiIdx.valid &&
@@ -159,8 +169,8 @@ class FaUBtbPredictior extends Module with HasUbtbParameters {
             wastaken(w)      :=  (s1_update_cfi_idx === w.U && s1_update.bits.cfiIdx.valid &&
                                 (s1_update.bits.cfiTaken || s1_update.bits.cfiIsJal))
             /* val s1_update_tag = fetchIdx(s1_update.bits.pc) */
-            val s1_update_tag = s1_update.bits.pc(tagSz + log2Ceil(fetchBytes) - 1, log2Ceil(fetchBytes))
-
+            // val s1_update_tag = s1_update.bits.pc(tagSz + log2Ceil(fetchBytes) - 1, log2Ceil(fetchBytes))
+            val s1_update_tag = getTag(mixHILO(s1_update.bits.pc))
             valid(Cat(s1_update_way, w.U(log2Ceil(fetchWidth).W))) := true.B
             meta(s1_update_way)(w).is_br := s1_update.bits.brMask(w)
             meta(s1_update_way)(w).tag   := s1_update_tag
