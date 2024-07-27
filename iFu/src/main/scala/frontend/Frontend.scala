@@ -285,7 +285,7 @@ class Frontend extends CoreModule {
     val f3_fetchResp    = f3_ifu_resp.io.deq.bits
     val f3_aligned_pc   = fetchAlign(f3_fetchResp.pc)
     val f3_redirects    = Wire(Vec(fetchWidth, Bool()))
-    val f3_tgts         = Wire(Vec(fetchWidth, UInt(targetSz.W)))
+    val f3_tgt_pcs      = Wire(Vec(fetchWidth, UInt(vaddrBits.W)))
     val f3_cfi_types    = Wire(Vec(fetchWidth, UInt(CFI_SZ.W)))
     val f3_fetch_bundle = Wire(new FetchBundle)
     val f3_mask         = Wire(Vec(fetchWidth, Bool()))
@@ -293,7 +293,7 @@ class Frontend extends CoreModule {
     val f3_call_mask    = Wire(Vec(fetchWidth, Bool()))
     val f3_ret_mask     = Wire(Vec(fetchWidth, Bool()))
 
-    if(!FPGAPlatform)dontTouch(f3_tgts)
+    if(!FPGAPlatform)dontTouch(f3_tgt_pcs)
 
     var redirect_found = false.B
     for (i <- 0 until fetchWidth) {
@@ -301,10 +301,10 @@ class Frontend extends CoreModule {
 
         f3_fetch_bundle.instrs(i) := f3_fetchResp.instrs(i)
         f3_mask(i) := f3_ifu_resp.io.deq.valid && f3_fetchResp.mask(i) && !redirect_found
-        f3_tgts(i) := Mux(
+        f3_tgt_pcs(i) := Mux(
             brsigs.cfiType === CFI_JIRL,
-            f3_bpd_resp.io.deq.bits.predInfos.tgts(i).bits,
-            getTarget(brsigs.target)   // surely right
+            getTargetPC(f3_fetchResp.pc, f3_bpd_resp.io.deq.bits.predInfos.tgts(i).bits),
+            brsigs.target   // surely right
         )
 
         /**
@@ -343,7 +343,7 @@ class Frontend extends CoreModule {
         f3_redirects.reduce(_||_),
             Mux(f3_fetch_bundle.cfiIsRet,
                 ras.io.read_addr,
-                getTargetPC(f3_fetch_bundle.pc, f3_tgts(PriorityEncoder(f3_redirects)))
+                f3_tgt_pcs(PriorityEncoder(f3_redirects))
             ),
             nextFetch(f3_fetch_bundle.pc)
     )
