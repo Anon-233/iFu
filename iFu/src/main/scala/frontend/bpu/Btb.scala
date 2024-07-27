@@ -26,6 +26,7 @@ class BTBPredictMeta extends Bundle with HasBtbParameters {
 class BTBIO extends Bundle with HasBtbParameters {
     val s0valid = Input(Bool())
     val s0pc    = Input(UInt(vaddrBits.W))
+    val s0_mixed_pc = Input(UInt(vaddrBits.W))
 
     val s2br    = Output(Vec(fetchWidth, Bool()))
     val s2jal   = Output(Vec(fetchWidth, Bool()))
@@ -64,7 +65,7 @@ class BTBPredictor extends Module with HasBtbParameters{
 //      Predict Logic
     val s0_valid   = io.s0valid
     // val s0_tag_idx = fetchIdx(io.s0pc)
-    val s0_mixed_pc = mixHILO(io.s0pc)
+    val s0_mixed_pc = io.s0_mixed_pc
     val s0_idx = getIdx(s0_mixed_pc)
     val s0_tag = getTag(s0_mixed_pc)
 

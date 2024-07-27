@@ -48,6 +48,7 @@ class UBTBPredictMeta extends Bundle with HasUbtbParameters {
 class UBTBIO extends Bundle with HasUbtbParameters {
     val s1valid  = Input(Bool())
     val s1pc     = Input(UInt(vaddrBits.W))
+    val s1_mixed_pc = Input(UInt(vaddrBits.W))
 
     val s1targs  = Output(Vec(fetchWidth, Valid(UInt(targetSz.W))))
     // val s1targspc = Output(Vec(fetchWidth, Valid(UInt(vaddrBits.W))))
@@ -71,7 +72,7 @@ class FaUBtbPredictior extends Module with HasUbtbParameters {
 //      Predict Logic
     // val s1_tag = fetchIdx(io.s1pc)
     // val s1_tag = io.s1pc(tagSz + log2Ceil(fetchBytes) - 1, log2Ceil(fetchBytes))
-    val s1_tag = getTag(mixHILO(io.s1pc))
+    val s1_tag = getTag(io.s1_mixed_pc)
     val s1_hit_OHs = VecInit((0 until fetchWidth) map { i =>
         VecInit((0 until nWays) map { w =>
             /* (meta(w)(i).tag === s1_tag) && valid(Cat(w.U(log2Ceil(nWays).W), i.U(log2Ceil(fetchWidth).W))) */

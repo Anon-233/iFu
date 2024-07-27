@@ -76,7 +76,9 @@ class BranchPredictor extends Module with HasBPUParameters {
     val s3mask = RegNext(s2mask)
 
     val s0pc = io.f0req.bits.pc
+    val s0_mixed_pc = mixHILO(io.f0req.bits.pc)
     val s1pc = RegNext(s0pc)
+    val s1_mixed_pc = RegNext(s0_mixed_pc)
     val s2pc = RegNext(s1pc)
     val s3pc = RegNext(s2pc)
 
@@ -96,8 +98,10 @@ class BranchPredictor extends Module with HasBPUParameters {
     // 基本的pc和使能位
     faubtb.io.s1valid := s1valid
     faubtb.io.s1pc    := s1pc
+    faubtb.io.s1_mixed_pc := s1_mixed_pc
     btb.io.s0valid    := s0valid
     btb.io.s0pc       := s0pc
+    btb.io.s0_mixed_pc := s0_mixed_pc
     bim.io.s0valid    := s0valid
     bim.io.s0pc       := s0pc
     lh.io.s0pc        := s0pc
