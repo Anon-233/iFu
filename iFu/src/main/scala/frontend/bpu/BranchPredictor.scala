@@ -142,10 +142,15 @@ class BranchPredictor extends Module with HasBPUParameters {
     // f3以f2为基础，接收tage的输出结果
     io.resp.f3.predInfos := RegNext(io.resp.f2.predInfos)
     for (w <- 0 until fetchWidth) {
-        when (lh.io.s3taken(w).valid) {
-            io.resp.f3.predInfos.takens(w) := lh.io.s3taken(w).bits
-        }
+        io.resp.f3.predInfos.takens(w) := RegNext(
+            Mux(
+                lh.io.s2_high_taken(w).valid,
+                lh.io.s2_high_taken(w).bits,
+                io.resp.f2.predInfos.takens(w)
+            )
+        )
     }
+
 
     io.resp.f1.pc := RegNext(io.f0req.bits.pc)
     io.resp.f2.pc := RegNext(io.resp.f1.pc)

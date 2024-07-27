@@ -15,7 +15,7 @@ class LocalHistoryIO extends Bundle with HasLocalHistoryParameters {
     val s0pc = Input(UInt(vaddrBits.W))
 
     val s2taken = Output(Vec(fetchWidth, Valid(Bool())))
-    val s3taken = Output(Vec(fetchWidth, Valid(Bool())))
+    val s2_high_taken = Output(Vec(fetchWidth, Valid(Bool())))
 
     val s3meta = Output(Vec(fetchWidth, new LocalHistoryPredictMeta))
 
@@ -55,12 +55,12 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
         taken
     })
 
-    io.s3taken := RegNext(VecInit(s2cnt.map(cnt => {
+    io.s2_high_taken := VecInit(s2cnt.map(cnt => {
         val taken = Wire(Valid(Bool()))
         taken.valid := !(cnt(0) ^ cnt(1)) && !reset_en
         taken.bits := cnt(1)
         taken
-    })))
+    }))
     val s3hist = RegNext(RegNext(s1hist))
     val s3cnt = RegNext(s2cnt)
     s3hist.zip(cacheCounters).zip(s3cnt).foreach({
