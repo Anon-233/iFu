@@ -34,15 +34,11 @@ class FrontendParameters{
     val bpdParams: BPUParameters       = new BPUParameters
 }
 
-class ROBParameters {
-    val coreWidth: Int = 3
-    val retireWidth: Int = 3 //decodeWidth
-    // val numRobEntries:Int = 128
-    // val numRobEntries:Int = 32
-    // val numRobEntries:Int = 64
-    val numRobEntries:Int = 48
-    val numRobRows: Int = numRobEntries/coreWidth
-    val robAddrSz: Int = log2Ceil(numRobRows) + log2Ceil(coreWidth)
+class ROBParameters(coreWidth: Int) {
+    val numRobEntries: Int = 48
+    val retireWidth: Int   = coreWidth
+    val numRobRows: Int    = numRobEntries / coreWidth
+    val robAddrSz: Int     = log2Ceil(numRobRows) + log2Ceil(coreWidth)
 }
 
 class LSUParameters{
@@ -119,7 +115,7 @@ trait HasCoreParameters {
     val numPRegs: Int = 63
     val pregSz: Int = log2Ceil(numPRegs)
     val frontendParams: FrontendParameters = new FrontendParameters
-    val robParameters: ROBParameters = new ROBParameters
+    val robParameters: ROBParameters = new ROBParameters(coreWidth)
     val lsuParameters: LSUParameters = new LSUParameters
     val dcacheParameters: DcacheParameters = new DcacheParameters
     val issueParams: Seq[IssueParams] = Seq(
