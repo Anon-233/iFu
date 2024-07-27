@@ -360,8 +360,9 @@ class Frontend extends CoreModule {
     ras.io.write_addr  := getPc(f3_aligned_pc, f3_fetch_bundle.cfiIdx.bits) + 4.U
     ras.io.write_idx   := WrapInc(f3_fetch_bundle.rasPtr.bits, numRasEntries)
 
-    val f3_correct_f1_tgt = !IsEqual(getTarget(s1_vpc), getTarget(f3_predicted_target_pc))
-    val f3_correct_f2_tgt = !IsEqual(getTarget(s2_vpc), getTarget(f3_predicted_target_pc))
+    // 三阶段必须保证译出的地址完全正确
+    val f3_correct_f1_tgt = !IsEqual((s1_vpc), (f3_predicted_target_pc))
+    val f3_correct_f2_tgt = !IsEqual((s2_vpc), (f3_predicted_target_pc))
 
     when (f3_ifu_resp.io.deq.valid && f4_ready) {
         when (f3_fetch_bundle.cfiIsCall && f3_fetch_bundle.cfiIdx.valid){
