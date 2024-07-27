@@ -129,21 +129,23 @@ class iFuCore extends CoreModule {
     require(jmp_unit.bypassable)
 
     // --------------------------------------
-    val bru = Module(new BranchUnit)
-    bru.io.br_infos zip exe_units.alu_units map {
-        case (b, e) => b := e.io.brinfo
+    val brus = Seq.fill(2) { Module(new BranchUnit) }
+    brus foreach { bru =>
+        bru.io.br_infos zip exe_units.alu_units map {
+            case (b, e) => b := e.io.brinfo
+        }
+        bru.io.rob_flush := rob.io.flush.valid
+        bru.io.rob_head  := rob.io.rob_head_idx
+        bru.io.jalr_tgt  := jmp_unit.io.brinfo.jalrTarget
     }
-    bru.io.rob_flush := rob.io.flush.valid
-    bru.io.rob_head  := rob.io.rob_head_idx
-    bru.io.jalr_tgt  := jmp_unit.io.brinfo.jalrTarget
 
-    val b1_mispredict_val = bru.io.br_s1_mispredict
-    ifu.io.core.getFtqPc(1).ftqIdx := bru.io.mis_br_ftqIdx
-    val brUpdate = bru.io.br_update
+    val b1_mispredict_val = brus(0).io.br_s1_mispredict
+    ifu.io.core.getFtqPc(1).ftqIdx := brus(0).io.mis_br_ftqIdx
+    val brUpdate = brus(0).io.br_update
 
     ifu.io.core.brupdate := brUpdate
     for (exu <- exe_units) {
-        exu.io.brupdate := brUpdate
+        exu.io.brupdate := brus(1).io.br_update
     }
 
     val mem_resps = mem_units.map(_.io.mem_iresp)
