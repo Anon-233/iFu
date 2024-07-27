@@ -27,14 +27,20 @@ class SDPRam[T <: Data](size: Int, t: T, lineSize: Int = 1, useXpm: Boolean = tr
             mem.io.addra := io.waddr
             mem.io.addrb := io.raddr
             mem.io.wea := (if (split) io.wstrobe(idx) else io.wstrobe)
-            mem.io.dina := io.wdata(idx).asUInt
-            io.rdata(idx) := mem.io.doutb.asTypeOf(t)
+            if (split) {
+                mem.io.dina := io.wdata(idx).asUInt
+                io.rdata(idx) := mem.io.doutb.asTypeOf(t)
+            }
             mem.io.regceb := true.B
             mem.io.rstb := false.B
             mem.io.sleep := false.B
             mem.io.injectdbiterra := false.B
             mem.io.injectsbiterra := false.B
         })
+        if (!split) {
+            mems.head.io.dina := io.wdata.asUInt
+            io.rdata := mems.head.io.doutb.asTypeOf(Vec(lineSize, t))
+        }
     } else {
         val mem = SyncReadMem(size, Vec(lineSize, t))
         io.rdata := mem.read(io.raddr)
