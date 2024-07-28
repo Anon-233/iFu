@@ -128,7 +128,8 @@ class BranchPredictor extends Module with HasBPUParameters {
     // 覆盖顺序是倒着，从高位到低位
     for (w <- (0 until fetchWidth).reverse) {
         // bim预测taken（不存在命不命中的说法）覆盖f2的初值
-        val pred_taken = Mux(lh.io.s2taken(w).valid, lh.io.s2taken(w).bits, bim.io.s2taken(w)) || btb.io.s2taken(w)
+        // val pred_taken = Mux(lh.io.s2taken(w).valid, lh.io.s2taken(w).bits, bim.io.s2taken(w)) || btb.io.s2taken(w)
+        val pred_taken = bim.io.s2taken(w) || btb.io.s2taken(w)
         s2jumpvalid(w) := f2_valid_instr_mask(w) && s2valid && btb.io.s2targs(w).valid && (btb.io.s2br(w) && pred_taken || btb.io.s2jal(w))
         // io.resp.f2.predInfos(w).taken := bim.io.s2taken(w)
         // 对于btb，当且仅当命中，结果的valid有效，才会把对应的结果覆盖f2的初值
