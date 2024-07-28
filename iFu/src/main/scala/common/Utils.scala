@@ -32,6 +32,15 @@ object WrapInc {
     }
 }
 
+object WrapAdd {
+    def apply(value: UInt, inc: UInt, n: Int): UInt = {
+        val value_padd = value.pad(value.getWidth + 1)
+        val result = value_padd + inc
+        val wrap = result >= n.U
+        Mux(wrap, result - n.U, result)
+    }
+}
+
 object WrapDec {
     // "n" is the number of increments, so we wrap at n-1.
     def apply(value: UInt, n: Int): UInt = {

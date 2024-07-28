@@ -101,8 +101,8 @@ class LDQEntry extends CoreBundle with HasUop {
     val stqAddrSz     = lsuParameters.stqAddrSz
     val ldqAddrSz     = lsuParameters.ldqAddrSz
 
-    require(isPow2(numLdqEntries), "numLdqEntries must be a power of 2")
-    require(isPow2(numStqEntries), "numStqEntries must be a power of 2")
+    // require(isPow2(numLdqEntries), "numLdqEntries must be a power of 2")
+    // require(isPow2(numStqEntries), "numStqEntries must be a power of 2")
     /** ************************************ */
 
     val addr             = Valid(UInt(xLen.W))

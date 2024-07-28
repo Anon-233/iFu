@@ -11,6 +11,8 @@ import iFu.util._
 class IndexAllocator extends CoreModule {
     val stqAddrSz       = lsuParameters.stqAddrSz
     val ldqAddrSz       = lsuParameters.ldqAddrSz
+    val numStqEntries   = lsuParameters.numSTQEntries
+    val numLdqEntries   = lsuParameters.numLDQEntries
     val io = IO(new CoreBundle {
         val dis_uops    = Input(Vec(coreWidth, Valid(new MicroOp)))
         val old_ldq_tail = Input(UInt(ldqAddrSz.W))
@@ -28,237 +30,13 @@ class IndexAllocator extends CoreModule {
     io.new_ldq_tail := 0.U
     io.new_stq_tail := 0.U
 
-    // switch(dis_ld_valids.asUInt){
-    //     is("b0000".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail
-    //         io.new_ldq_tail := io.old_ldq_tail
-    //     }
-    //     is("b0001".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 1.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 1.U
-    //     }
-    //     is("b0010".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 1.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 1.U
-    //     }
-    //     is("b0011".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail + 2.U
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 2.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 2.U
-    //     }
-    //     is("b0100".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 1.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 1.U
-    //     }
-    //     is("b0101".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 2.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 2.U
-    //     }
-    //     is("b0110".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 2.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 2.U
-    //     }
-    //     is("b0111".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail + 2.U
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 3.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 3.U
-    //     }
-    //     is("b1000".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail 
-    //         io.new_ldq_tail := io.old_ldq_tail + 1.U
-    //     }
-    //     is("b1001".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 1.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 2.U
-    //     }
-    //     is("b1010".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 1.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 2.U
-    //     }
-    //     is("b1011".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail + 2.U
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 2.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 3.U
-    //     }
-    //     is("b1100".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 1.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 2.U
-    //     }
-    //     is("b1101".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 2.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 3.U
-    //     }
-    //     is("b1110".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 2.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 3.U
-    //     }
-    //     is("b1111".U){
-    //         io.ldq_enq_idxs(0) := io.old_ldq_tail
-    //         io.ldq_enq_idxs(1) := io.old_ldq_tail + 1.U
-    //         io.ldq_enq_idxs(2) := io.old_ldq_tail + 2.U
-    //         io.ldq_enq_idxs(3) := io.old_ldq_tail + 3.U
-    //         io.new_ldq_tail := io.old_ldq_tail + 4.U
-    //     }
-        
-    // }
+    val ldq_tail_add_1 = WrapAdd(io.old_ldq_tail, 1.U, numLdqEntries)
+    val ldq_tail_add_2 = WrapAdd(io.old_ldq_tail, 2.U, numLdqEntries)
+    val ldq_tail_add_3 = WrapAdd(io.old_ldq_tail, 3.U, numLdqEntries)
 
-    // switch(dis_st_valids.asUInt){
-    //     is("b0000".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail
-    //         io.stq_enq_idxs(2) := io.old_stq_tail
-    //         io.stq_enq_idxs(3) := io.old_stq_tail
-    //         io.new_stq_tail := io.old_stq_tail
-    //     }
-    //     is("b0001".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(2) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 1.U
-    //         io.new_stq_tail := io.old_stq_tail + 1.U
-    //     }
-    //     is("b0010".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail
-    //         io.stq_enq_idxs(2) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 1.U
-    //         io.new_stq_tail := io.old_stq_tail + 1.U
-    //     }
-    //     is("b0011".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(2) := io.old_stq_tail + 2.U
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 2.U
-    //         io.new_stq_tail := io.old_stq_tail + 2.U
-    //     }
-    //     is("b0100".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail
-    //         io.stq_enq_idxs(2) := io.old_stq_tail
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 1.U
-    //         io.new_stq_tail := io.old_stq_tail + 1.U
-    //     }
-    //     is("b0101".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(2) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 2.U
-    //         io.new_stq_tail := io.old_stq_tail + 2.U
-    //     }
-    //     is("b0110".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail
-    //         io.stq_enq_idxs(2) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 2.U
-    //         io.new_stq_tail := io.old_stq_tail + 2.U
-    //     }
-    //     is("b0111".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(2) := io.old_stq_tail + 2.U
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 3.U
-    //         io.new_stq_tail := io.old_stq_tail + 3.U
-    //     }
-    //     is("b1000".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail
-    //         io.stq_enq_idxs(2) := io.old_stq_tail
-    //         io.stq_enq_idxs(3) := io.old_stq_tail 
-    //         io.new_stq_tail := io.old_stq_tail + 1.U
-    //     }
-    //     is("b1001".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(2) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 1.U
-    //         io.new_stq_tail := io.old_stq_tail + 2.U
-    //     }
-    //     is("b1010".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail
-    //         io.stq_enq_idxs(2) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 1.U
-    //         io.new_stq_tail := io.old_stq_tail + 2.U
-    //     }
-    //     is("b1011".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(2) := io.old_stq_tail + 2.U
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 2.U
-    //         io.new_stq_tail := io.old_stq_tail + 3.U
-    //     }
-    //     is("b1100".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail
-    //         io.stq_enq_idxs(2) := io.old_stq_tail
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 1.U
-    //         io.new_stq_tail := io.old_stq_tail + 2.U
-    //     }
-    //     is("b1101".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(2) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 2.U
-    //         io.new_stq_tail := io.old_stq_tail + 3.U
-    //     }
-    //     is("b1110".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail
-    //         io.stq_enq_idxs(2) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 2.U
-    //         io.new_stq_tail := io.old_stq_tail + 3.U
-    //     }
-    //     is("b1111".U){
-    //         io.stq_enq_idxs(0) := io.old_stq_tail
-    //         io.stq_enq_idxs(1) := io.old_stq_tail + 1.U
-    //         io.stq_enq_idxs(2) := io.old_stq_tail + 2.U
-    //         io.stq_enq_idxs(3) := io.old_stq_tail + 3.U
-    //         io.new_stq_tail := io.old_stq_tail + 4.U
-    //     }
-        
-    // }
+    val stq_tail_add_1 = WrapAdd(io.old_stq_tail, 1.U, numStqEntries)
+    val stq_tail_add_2 = WrapAdd(io.old_stq_tail, 2.U, numStqEntries)
+    val stq_tail_add_3 = WrapAdd(io.old_stq_tail, 3.U, numStqEntries)
 
     assert(coreWidth == 3 , "coreWidth must be 3")
     switch(dis_ld_valids.asUInt){
@@ -270,45 +48,45 @@ class IndexAllocator extends CoreModule {
         }
         is("b001".U){
             io.ldq_enq_idxs(0) := io.old_ldq_tail
-            io.ldq_enq_idxs(1) := io.old_ldq_tail + 1.U
-            io.ldq_enq_idxs(2) := io.old_ldq_tail + 1.U
-            io.new_ldq_tail := io.old_ldq_tail + 1.U
+            io.ldq_enq_idxs(1) := ldq_tail_add_1
+            io.ldq_enq_idxs(2) := ldq_tail_add_1
+            io.new_ldq_tail := ldq_tail_add_1
         }
         is("b010".U){
             io.ldq_enq_idxs(0) := io.old_ldq_tail
             io.ldq_enq_idxs(1) := io.old_ldq_tail
-            io.ldq_enq_idxs(2) := io.old_ldq_tail + 1.U
-            io.new_ldq_tail := io.old_ldq_tail + 1.U
+            io.ldq_enq_idxs(2) := ldq_tail_add_1
+            io.new_ldq_tail := ldq_tail_add_1
         }
         is("b011".U){
             io.ldq_enq_idxs(0) := io.old_ldq_tail
-            io.ldq_enq_idxs(1) := io.old_ldq_tail + 1.U
-            io.ldq_enq_idxs(2) := io.old_ldq_tail + 2.U
-            io.new_ldq_tail := io.old_ldq_tail + 2.U
+            io.ldq_enq_idxs(1) := ldq_tail_add_1
+            io.ldq_enq_idxs(2) := ldq_tail_add_2
+            io.new_ldq_tail := ldq_tail_add_2
         }
         is("b100".U){
             io.ldq_enq_idxs(0) := io.old_ldq_tail
             io.ldq_enq_idxs(1) := io.old_ldq_tail
             io.ldq_enq_idxs(2) := io.old_ldq_tail
-            io.new_ldq_tail := io.old_ldq_tail + 1.U
+            io.new_ldq_tail := ldq_tail_add_1
         }
         is("b101".U){
             io.ldq_enq_idxs(0) := io.old_ldq_tail
-            io.ldq_enq_idxs(1) := io.old_ldq_tail + 1.U
-            io.ldq_enq_idxs(2) := io.old_ldq_tail + 1.U
-            io.new_ldq_tail := io.old_ldq_tail + 2.U
+            io.ldq_enq_idxs(1) := ldq_tail_add_1
+            io.ldq_enq_idxs(2) := ldq_tail_add_1
+            io.new_ldq_tail := ldq_tail_add_2
         }
         is("b110".U){
             io.ldq_enq_idxs(0) := io.old_ldq_tail
             io.ldq_enq_idxs(1) := io.old_ldq_tail
-            io.ldq_enq_idxs(2) := io.old_ldq_tail + 1.U
-            io.new_ldq_tail := io.old_ldq_tail + 2.U
+            io.ldq_enq_idxs(2) := ldq_tail_add_1
+            io.new_ldq_tail := ldq_tail_add_2
         }
         is("b111".U){
             io.ldq_enq_idxs(0) := io.old_ldq_tail
-            io.ldq_enq_idxs(1) := io.old_ldq_tail + 1.U
-            io.ldq_enq_idxs(2) := io.old_ldq_tail + 2.U
-            io.new_ldq_tail := io.old_ldq_tail + 3.U
+            io.ldq_enq_idxs(1) := ldq_tail_add_1
+            io.ldq_enq_idxs(2) := ldq_tail_add_2
+            io.new_ldq_tail := ldq_tail_add_3
         }
     }
 
@@ -321,45 +99,45 @@ class IndexAllocator extends CoreModule {
         }
         is("b001".U){
             io.stq_enq_idxs(0) := io.old_stq_tail
-            io.stq_enq_idxs(1) := io.old_stq_tail + 1.U
-            io.stq_enq_idxs(2) := io.old_stq_tail + 1.U
-            io.new_stq_tail := io.old_stq_tail + 1.U
+            io.stq_enq_idxs(1) := stq_tail_add_1
+            io.stq_enq_idxs(2) := stq_tail_add_1
+            io.new_stq_tail := stq_tail_add_1
         }
         is("b010".U){
             io.stq_enq_idxs(0) := io.old_stq_tail
             io.stq_enq_idxs(1) := io.old_stq_tail
-            io.stq_enq_idxs(2) := io.old_stq_tail + 1.U
-            io.new_stq_tail := io.old_stq_tail + 1.U
+            io.stq_enq_idxs(2) := stq_tail_add_1
+            io.new_stq_tail := stq_tail_add_1
         }
         is("b011".U){
             io.stq_enq_idxs(0) := io.old_stq_tail
-            io.stq_enq_idxs(1) := io.old_stq_tail + 1.U
-            io.stq_enq_idxs(2) := io.old_stq_tail + 2.U
-            io.new_stq_tail := io.old_stq_tail + 2.U
+            io.stq_enq_idxs(1) := stq_tail_add_1
+            io.stq_enq_idxs(2) := stq_tail_add_2
+            io.new_stq_tail := stq_tail_add_2
         }
         is("b100".U){
             io.stq_enq_idxs(0) := io.old_stq_tail
             io.stq_enq_idxs(1) := io.old_stq_tail
             io.stq_enq_idxs(2) := io.old_stq_tail
-            io.new_stq_tail := io.old_stq_tail + 1.U
+            io.new_stq_tail := stq_tail_add_1
         }
         is("b101".U){
             io.stq_enq_idxs(0) := io.old_stq_tail
-            io.stq_enq_idxs(1) := io.old_stq_tail + 1.U
-            io.stq_enq_idxs(2) := io.old_stq_tail + 1.U
-            io.new_stq_tail := io.old_stq_tail + 2.U
+            io.stq_enq_idxs(1) := stq_tail_add_1
+            io.stq_enq_idxs(2) := stq_tail_add_1
+            io.new_stq_tail := stq_tail_add_2
         }
         is("b110".U){
             io.stq_enq_idxs(0) := io.old_stq_tail
             io.stq_enq_idxs(1) := io.old_stq_tail
-            io.stq_enq_idxs(2) := io.old_stq_tail + 1.U
-            io.new_stq_tail := io.old_stq_tail + 2.U
+            io.stq_enq_idxs(2) := stq_tail_add_1
+            io.new_stq_tail := stq_tail_add_2
         }
         is("b111".U){
             io.stq_enq_idxs(0) := io.old_stq_tail
-            io.stq_enq_idxs(1) := io.old_stq_tail + 1.U
-            io.stq_enq_idxs(2) := io.old_stq_tail + 2.U
-            io.new_stq_tail := io.old_stq_tail + 3.U
+            io.stq_enq_idxs(1) := stq_tail_add_1
+            io.stq_enq_idxs(2) := stq_tail_add_2
+            io.new_stq_tail := stq_tail_add_3
         }
     }
 }
