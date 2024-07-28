@@ -807,7 +807,7 @@ class Lsu extends CoreModule {
 
     if(!FPGAPlatform)dontTouch(temp_bits)
 
-    val s3_l_idx = PriorityEncoder(temp_bits)
+    val s2_l_idx = PriorityEncoder(temp_bits)
 
     // s3 stage
     // wrap
