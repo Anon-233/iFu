@@ -386,7 +386,6 @@ class Lsu extends CoreModule {
 // -----------------------------------------------------------------------
 // s1 stage: prepare for scheduling
     val will_fire_load_incoming = Wire(Vec(memWidth, Bool()))
-    val will_fire_stad_incoming = Wire(Vec(memWidth, Bool()))
     val will_fire_sta_incoming  = Wire(Vec(memWidth, Bool()))
     val will_fire_std_incoming  = Wire(Vec(memWidth, Bool()))
     val will_fire_store_commit  = Wire(Vec(memWidth, Bool()))
@@ -401,7 +400,7 @@ class Lsu extends CoreModule {
     val ldq_incoming_idx = widthMap(i => s1_exe_req(i).bits.uop.ldqIdx)
     val ldq_incoming_e   = widthMap(i => ldq(ldq_incoming_idx(i)))
 
-    // stad_incoming / sta_incoming / std_incoming
+    // sta_incoming / std_incoming
     val stq_incoming_idx = widthMap(i => s1_exe_req(i).bits.uop.stqIdx)
     val stq_incoming_e   = widthMap(i => stq(stq_incoming_idx(i)))
 
@@ -423,9 +422,6 @@ class Lsu extends CoreModule {
     // can_fire_xxx logic
     val can_fire_load_incoming = widthMap(
         w => s1_exe_req(w).valid && s1_exe_req(w).bits.uop.ctrl.is_load
-    )
-    val can_fire_stad_incoming = widthMap(
-        w => s1_exe_req(w).valid && s1_exe_req(w).bits.uop.ctrl.is_sta && s1_exe_req(w).bits.uop.ctrl.is_std
     )
     val can_fire_sta_incoming = widthMap(
         w => s1_exe_req(w).valid && s1_exe_req(w).bits.uop.ctrl.is_sta && !s1_exe_req(w).bits.uop.ctrl.is_std
@@ -487,7 +483,6 @@ class Lsu extends CoreModule {
         }
 
         will_fire_load_incoming(w) := lsu_sched(can_fire_load_incoming(w), true , true ) // DC , LCAM
-        will_fire_stad_incoming(w) := lsu_sched(can_fire_stad_incoming(w), false, true ) //    , LCAM
         will_fire_sta_incoming(w)  := lsu_sched(can_fire_sta_incoming(w) , false, true ) //    , LCAM
         will_fire_std_incoming(w)  := lsu_sched(can_fire_std_incoming(w) , false, false) //    ,     
         will_fire_load_wakeup(w)   := lsu_sched(can_fire_load_wakeup(w)  , true , true ) // DC , LCAM
@@ -572,7 +567,7 @@ class Lsu extends CoreModule {
                 "[lsu] Incoming load is overwriting a valid address")
         }
 
-        when (will_fire_sta_incoming(w) || will_fire_stad_incoming(w)) {
+        when (will_fire_sta_incoming(w)) {
             val stq_idx = stq_incoming_idx(w)
             stq(stq_idx).bits.addr.valid     := true.B
             stq(stq_idx).bits.addr.bits      := s1_exe_tlb_paddr(w)
@@ -584,7 +579,7 @@ class Lsu extends CoreModule {
                 "[lsu] Incoming store is overwriting a valid address")
         }
 
-        when (will_fire_std_incoming(w) || will_fire_stad_incoming(w)) {
+        when (will_fire_std_incoming(w)) {
             val stq_idx = stq_incoming_idx(w)
             stq(stq_idx).bits.data.valid := true.B
             stq(stq_idx).bits.data.bits  := s1_exe_req(w).bits.data
@@ -598,7 +593,6 @@ class Lsu extends CoreModule {
     val s1_exe_req_killed = widthMap(w => IsKilledByBranch(io.core.brupdate, s1_exe_req(w).bits.uop))
 
     val fired_load_incoming = widthMap(w => RegNext(will_fire_load_incoming(w) && !s1_exe_req_killed(w)))
-    val fired_stad_incoming = widthMap(w => RegNext(will_fire_stad_incoming(w) && !s1_exe_req_killed(w)))
     val fired_sta_incoming  = widthMap(w => RegNext(will_fire_sta_incoming(w)  && !s1_exe_req_killed(w)))
     val fired_std_incoming  = widthMap(w => RegNext(will_fire_std_incoming(w)  && !s1_exe_req_killed(w)))
     val fired_load_wakeup   = widthMap(w => RegNext(will_fire_load_wakeup(w)   && !IsKilledByBranch(io.core.brupdate, ldq_wakeup_e.bits.uop)))
@@ -616,8 +610,8 @@ class Lsu extends CoreModule {
 
     val mem_stq_incoming_e = RegNext(widthMap(w => UpdateBrMask(io.core.brupdate, stq_incoming_e(w))))
     val mem_stq_e = widthMap(w =>
-        Mux(fired_stad_incoming(w) || fired_sta_incoming(w), mem_stq_incoming_e(w),
-                                                             0.U.asTypeOf(Valid(new STQEntry)))
+        Mux(fired_sta_incoming(w), mem_stq_incoming_e(w),
+                                   0.U.asTypeOf(Valid(new STQEntry)))
     )
 
     val mem_tlb_xcpt        = RegNext(s1_exe_tlb_xcpt)
@@ -625,12 +619,12 @@ class Lsu extends CoreModule {
     val mem_tlb_uncacheable = RegNext(s1_exe_tlb_uncacheable)
 
     val do_ld_search = widthMap(w => ((fired_load_incoming(w) && !mem_tlb_xcpt(w)) || fired_load_wakeup(w)))
-    val do_st_search = widthMap(w => (fired_stad_incoming(w) || fired_sta_incoming(w)) && !mem_tlb_xcpt(w))
+    val do_st_search = widthMap(w => fired_sta_incoming(w) && !mem_tlb_xcpt(w))
 
     // we get store address from dtlb, and load address from pipeline
     val lcam_addr = widthMap(w =>
-        Mux(fired_stad_incoming(w) || fired_sta_incoming(w), RegNext(s1_exe_tlb_paddr(w)),
-                                                             mem_paddr(w))
+        Mux(fired_sta_incoming(w), RegNext(s1_exe_tlb_paddr(w)),
+                                   mem_paddr(w))
     )
     val lcam_uop = widthMap(w => 
         Mux(do_st_search(w), mem_stq_e(w).bits.uop,
@@ -645,8 +639,7 @@ class Lsu extends CoreModule {
                                     0.U))
     )
     val lcam_stq_idx = widthMap(w =>
-        Mux(fired_stad_incoming(w) || fired_sta_incoming(w), mem_incoming_uop(w).stqIdx,
-                                                             0.U)
+        Mux(fired_sta_incoming(w), mem_incoming_uop(w).stqIdx, 0.U)
     )
     // can we forward to the load?
     val can_forward_to = WireInit(widthMap(w =>
@@ -872,14 +865,7 @@ class Lsu extends CoreModule {
         clr_bsy_rob_idx(w) := mem_stq_incoming_e(w).bits.uop.robIdx
         clr_bsy_brmask(w)  := GetNewBrMask(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)        
 
-        when (fired_stad_incoming(w)) {
-            clr_bsy_valid(w) := (
-                mem_stq_incoming_e(w).valid            &&
-                !mem_tlb_xcpt(w)                       &&
-                !mem_stq_incoming_e(w).bits.uop.is_sc  &&
-                !IsKilledByBranch(io.core.brupdate, mem_stq_incoming_e(w).bits.uop)
-            )
-        } .elsewhen(fired_sta_incoming(w)) {
+        when(fired_sta_incoming(w)) {
             clr_bsy_valid(w) := (
                 mem_stq_incoming_e(w).valid            &&
                 mem_stq_incoming_e(w).bits.data.valid  &&
