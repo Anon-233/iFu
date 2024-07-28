@@ -14,7 +14,7 @@ class LocalHistoryPredictMeta extends Bundle with HasLocalHistoryParameters {
 class LocalHistoryIO extends Bundle with HasLocalHistoryParameters {
     val s0pc = Input(UInt(vaddrBits.W))
 
-    val s2taken = Output(Vec(fetchWidth, Valid(Bool())))
+    /* val s2taken = Output(Vec(fetchWidth, Valid(Bool()))) */
     val s2_high_taken = Output(Vec(fetchWidth, Valid(Bool())))
 
     val s3meta = Output(Vec(fetchWidth, new LocalHistoryPredictMeta))
@@ -27,7 +27,7 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
 
     val localHistories = SyncReadMem(nLHRs, Vec(fetchWidth, UInt(localHistoryLength.W)))
     val counters = Seq.fill(fetchWidth) {SyncReadMem(nCounters, UInt(2.W))}
-    val cacheCounters = Seq.fill(fetchWidth) {Module(new SDPRam(nCacheCounters, UInt(2.W)))}
+    /* val cacheCounters = Seq.fill(fetchWidth) {Module(new SDPRam(nCacheCounters, UInt(2.W)))} */
 
     // ---------------------------------------------
     // Reset
@@ -45,7 +45,7 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
     val s1hist = localHistories.read(fetchIdx(io.s0pc)(nLHRBits - 1, 0))
     val s1idx = VecInit(s1hist.zipWithIndex.map({case (hist, w) => idxHash(getPc(s1pc, w.U), hist)}))
     val s2cnt = VecInit(counters.zip(s1idx).map({case (ram, idx) => ram.read(idx)}))
-    io.s2taken := s1hist.zip(cacheCounters).map({ case (hist, cnt) =>
+    /* io.s2taken := s1hist.zip(cacheCounters).map({ case (hist, cnt) =>
         val idx = cacheIdxHash(hist)
         cnt.io.raddr := idx
         val cnt_val = cnt.io.rdata.head
@@ -53,7 +53,7 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
         taken.valid := !(cnt_val(0) ^ cnt_val(1))
         taken.bits := cnt_val(1)
         taken
-    })
+    }) */
 
     io.s2_high_taken := VecInit(s2cnt.map(cnt => {
         val taken = Wire(Valid(Bool()))
@@ -61,7 +61,7 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
         taken.bits := cnt(1)
         taken
     }))
-    val s3hist = RegNext(RegNext(s1hist))
+    /* val s3hist = RegNext(RegNext(s1hist))
     val s3cnt = RegNext(s2cnt)
     s3hist.zip(cacheCounters).zip(s3cnt).foreach({
         case ((hist, cnt), cnt_val) =>
@@ -70,7 +70,7 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
         cnt.io.waddr := idx
         cnt.io.wdata.head := cnt_val
         cnt.io.wstrobe := 1.U
-    })
+    }) */
     // ---------------------------------------------
     // Meta
     val s2idx = RegNext(s1idx)
