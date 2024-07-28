@@ -6,7 +6,7 @@ import chisel3.util._
 import iFu.common.Consts._
 
 class BPUParameters {
-    val numRasEntries: Int       = 16
+    val numRasEntries: Int = 8
 }
 
 class ICacheParameters(fetchWidth: Int) {
@@ -29,21 +29,21 @@ class FrontendParameters{
     // val numFTQEntries: Int             = 40
     val numFTQEntries: Int             = 16
     // val numFetchBufferEntries: Int     = 32
-    val numFetchBufferEntries: Int     = 15
+    val numFetchBufferEntries: Int     = 9
     val iCacheParams: ICacheParameters = new ICacheParameters(fetchWidth)
     val bpdParams: BPUParameters       = new BPUParameters
 }
 
 class ROBParameters(coreWidth: Int) {
-    val numRobEntries: Int = 48
+    val numRobEntries: Int = 36
     val retireWidth: Int   = coreWidth
     val numRobRows: Int    = numRobEntries / coreWidth
     val robAddrSz: Int     = log2Ceil(numRobRows) + log2Ceil(coreWidth)
 }
 
 class LSUParameters{
-    val numSTQEntries: Int = 16
-    val numLDQEntries: Int = 16
+    val numSTQEntries: Int = 12
+    val numLDQEntries: Int = 12
     val ldqAddrSz    : Int = log2Ceil(numLDQEntries)
     val stqAddrSz    : Int = log2Ceil(numSTQEntries)
 }
