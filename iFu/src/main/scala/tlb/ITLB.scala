@@ -43,16 +43,28 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule with L0TLBState {
     ))
 
     val csr_regs = io.itlb_csr_cxt
-    val da_mode  =  csr_regs.crmd_da && !csr_regs.crmd_pg
-    val pg_mode  = !csr_regs.crmd_da &&  csr_regs.crmd_pg
+    val da_mode  = RegNext(csr_regs.crmd_da && !csr_regs.crmd_pg)
+    val pg_mode  = RegNext(!csr_regs.crmd_da &&  csr_regs.crmd_pg)
 
     val vaddr        = io.req.bits.vaddr
     val l0_hit_oh    = VecInit(l0_entry.map(
-        e => e.entry.matches(vaddr(vaddrBits - 1, 13), csr_regs.asid_asid)
+        e => e.entry.matches(vaddr(vaddrBits - 1, 13), RegNext(csr_regs.asid_asid))
     ))
     val l0_hit       = l0_hit_oh.asUInt.orR
     val l0_hit_idx   = OHToUInt(l0_hit_oh)
     val l0_hit_entry = l0_entry(l0_hit_idx)
+
+
+    val dmw0_en = (
+        RegNext(csr_regs.dmw0_plv0 && csr_regs.crmd_plv === 0.U) ||
+        RegNext(csr_regs.dmw0_plv3 && csr_regs.crmd_plv === 3.U)
+    ) && (vaddr(31, 29) === RegNext(csr_regs.dmw0_vseg))
+    val dmw1_en = (
+        RegNext(csr_regs.dmw1_plv0 && csr_regs.crmd_plv === 0.U) ||
+        RegNext(csr_regs.dmw1_plv3 && csr_regs.crmd_plv === 3.U)
+    ) && (vaddr(31, 29) === RegNext(csr_regs.dmw1_vseg))
+    if (!FPGAPlatform) dontTouch(dmw0_en)
+    if (!FPGAPlatform) dontTouch(dmw1_en)
 
     // addr translation
     io.resp := 0.U.asTypeOf(new ITLBResp)
@@ -62,20 +74,9 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule with L0TLBState {
     } .elsewhen (da_mode) {
         io.resp.paddr := vaddr
     } .elsewhen (pg_mode) {
-        val dmw0_en = (
-            (csr_regs.dmw0_plv0 && csr_regs.crmd_plv === 0.U) ||
-            (csr_regs.dmw0_plv3 && csr_regs.crmd_plv === 3.U)
-        ) && (vaddr(31, 29) === csr_regs.dmw0_vseg)
-        val dmw1_en = (
-            (csr_regs.dmw1_plv0 && csr_regs.crmd_plv === 0.U) ||
-            (csr_regs.dmw1_plv3 && csr_regs.crmd_plv === 3.U)
-        ) && (vaddr(31, 29) === csr_regs.dmw1_vseg)
-        if (!FPGAPlatform) dontTouch(dmw0_en)
-        if (!FPGAPlatform) dontTouch(dmw1_en)
-
         when (dmw0_en || dmw1_en) {
             io.resp.paddr           := Cat(
-                Mux(dmw0_en, csr_regs.dmw0_pseg, csr_regs.dmw1_pseg), vaddr(28, 0)
+                Mux(dmw0_en, RegNext(csr_regs.dmw0_pseg), RegNext(csr_regs.dmw1_pseg)), vaddr(28, 0)
             )
             io.resp.exception.valid := false.B
         } .otherwise {
@@ -95,7 +96,7 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule with L0TLBState {
                         when (!data.v) {
                             io.resp.exception.valid           := true.B
                             io.resp.exception.bits.xcpt_cause := CauseCode.PIF
-                        } .elsewhen(csr_regs.crmd_plv > data.plv) {
+                        } .elsewhen(RegNext(csr_regs.crmd_plv) > data.plv) {
                             io.resp.exception.valid           := true.B
                             io.resp.exception.bits.xcpt_cause := CauseCode.PPI
                         }
@@ -128,11 +129,11 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule with L0TLBState {
         l0_entry(refill_idx) := Mux(
             r_resp.valid,
             L0ITLBEntry.new_entry(r_resp.bits.entry),
-            L0ITLBEntry.fake_entry(refill_vppn, csr_regs.asid_asid)
+            L0ITLBEntry.fake_entry(refill_vppn, RegNext(csr_regs.asid_asid))
         )
         state_nxt := s_ready
     }
-    when (csr_regs.inv_l0_tlb) {
+    when (RegNext(csr_regs.inv_l0_tlb)) {
         l0_entry map { e => e.entry.meta.e := false.B }
     }
 }
