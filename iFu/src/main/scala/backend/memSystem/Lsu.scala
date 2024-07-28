@@ -812,8 +812,13 @@ class Lsu extends CoreModule {
         failed_loads
     )).asUInt
 
+    if(!FPGAPlatform)dontTouch(temp_bits)
+
+    val s3_l_idx = PriorityEncoder(temp_bits)
+
     // s3 stage
-    val l_idx         = RegNext(PriorityEncoder(temp_bits)(ldqAddrSz - 1, 0))
+    // wrap
+    val l_idx         = RegNext(Mux(s2_l_idx >= numLdqEntries.U, s2_l_idx - numLdqEntries.U, s2_l_idx)(ldqAddrSz - 1, 0))
     val ld_xcpt_valid = RegNext(failed_loads.asUInt.orR) && ldq(l_idx).valid
     val ld_xcpt_uop   = ldq(l_idx).bits.uop
 
