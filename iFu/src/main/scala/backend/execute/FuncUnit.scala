@@ -251,13 +251,12 @@ class PipelinedMulUnit(numStages: Int = 2) extends PipelinedFuncUnit (
 class AddrGenUnit(numStages: Int = 0) extends PipelinedFuncUnit(
     numStages = numStages
 ) {
-    val uop        = io.req.bits.uop
-    val offset     = immGen(uop.immPacked, uop.ctrl.imm_sel)
-    val addr       = (io.req.bits.rs1Data.asSInt + offset).asUInt
-    val store_data = io.req.bits.rs2Data
+    val uop    = io.req.bits.uop
+    val offset = immGen(uop.immPacked, uop.ctrl.imm_sel)
+    val addr   = (io.req.bits.rs1Data.asSInt + offset).asUInt
 
     io.resp.bits.addr := addr
-    io.resp.bits.data := store_data
+    io.resp.bits.data := io.req.bits.rs1Data
 }
 
 abstract class IterativeFuncUnit extends FuncUnit (

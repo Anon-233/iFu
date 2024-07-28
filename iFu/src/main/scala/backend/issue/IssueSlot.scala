@@ -8,8 +8,6 @@ import iFu.common.Consts._
 import iFu.util._
 
 class IssueSlotIO(val numWakeupPorts: Int) extends CoreBundle {
-    val ftqSz = frontendParams.numFTQEntries
-
     val valid       = Output(Bool())
     val willBeValid = Output(Bool())
 
@@ -69,10 +67,7 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     val killed = IsKilledByBranch(io.brUpdate, slot_uop)
     when (io.kill || killed) {
         next_state := s_invalid
-    } .elsewhen (
-        (io.grant && (state === s_valid_1)) ||
-        (io.grant && (state === s_valid_2) && p1 && p2)
-    ) {
+    } .elsewhen (io.grant && (state === s_valid_1)) {
         when (!(io.ldSpecMiss && (p1_poisoned || p2_poisoned))) {
             next_state := s_invalid
         }
@@ -89,8 +84,8 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     }
 
     when (io.inUop.valid) {
-        p1    := !io.inUop.bits.prs1_busy
-        p2    := !io.inUop.bits.prs2_busy
+        p1 := !io.inUop.bits.prs1_busy
+        p2 := !io.inUop.bits.prs2_busy
     }
     p1_poisoned := false.B
     p2_poisoned := false.B
@@ -150,9 +145,7 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
     io.uop.iw_p1_poisoned := p1_poisoned
     io.uop.iw_p2_poisoned := p2_poisoned
     when (state === s_valid_2) {
-        when (p1 && p2) {
-            ;
-        } .elsewhen (p1) {
+        when (p1) {
             io.uop.lrs2_rtype := RT_X
         } .elsewhen (p2) {
             io.uop.uopc := uopSTD
@@ -160,7 +153,6 @@ class IssueSlot(val numWakeupPorts: Int) extends CoreModule with IssueState {
         }
     }
 
-    val may_vacate = io.grant && ((state === s_valid_1) || (state === s_valid_2) && p1 && p2)
     val squash_grant = io.ldSpecMiss && (p1_poisoned || p2_poisoned)
-    io.willBeValid := isValid(state) && !(may_vacate && !squash_grant)
+    io.willBeValid := isValid(state) && !(io.grant && (state === s_valid_1) && !squash_grant)
 }

@@ -7,14 +7,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import iFu.common._
 import iFu.common.Consts._
-import iFu.util._
 
 import iFu.frontend.GetPCFromFtqIO
 
 abstract class ExecutionUnit (
-    val readsIrf: Boolean         = false,
     val writesIrf: Boolean        = false,
-    val writesMemIrf: Boolean     = false,
     val bypassable: Boolean       = false,
     val alwaysBypassable: Boolean = false,
     val hasMem: Boolean           = false,
@@ -31,8 +28,7 @@ abstract class ExecutionUnit (
 
         val req       = Flipped(new DecoupledIO(new FuncUnitReq))
 
-        val iresp     = if (writesIrf) new DecoupledIO(new ExeUnitResp) else null
-        val mem_iresp = if (writesMemIrf) new DecoupledIO(new ExeUnitResp) else null
+        val iresp     = new DecoupledIO(new ExeUnitResp)
 
         val bypass    = Output(Vec(numStages, Valid(new ExeUnitResp)))
         val brupdate  = Input(new BrUpdateInfo)
@@ -46,7 +42,7 @@ abstract class ExecutionUnit (
     require (bypassable || !alwaysBypassable, "[execute] an execution unit must be bypassable if it is always bypassable")
 
     def supportedFuncUnits = {
-        new SupportedFuncs(
+        SupportedFuncs(
             alu    = hasAlu,
             jmp    = hasJmpUnit,
             mem    = hasMem,
@@ -54,6 +50,10 @@ abstract class ExecutionUnit (
             csr    = hasCSR,
             cnt    = hasCnt
         )
+    }
+
+    def numReadPorts = {
+        if (hasMem) 1 else 2
     }
 }
 
@@ -64,13 +64,9 @@ class ALUExeUnit (
     hasMul: Boolean     = false,
     hasDiv: Boolean     = false,
     hasCnt: Boolean     = false,
-    hasIfpu: Boolean    = false,
     hasMem: Boolean     = false,
-    hasRocc: Boolean    = false
 ) extends ExecutionUnit (
-    readsIrf         = true,
     writesIrf        = hasAlu || hasMul || hasDiv || hasCnt,
-    writesMemIrf     = hasMem,
     bypassable       = hasAlu || hasCnt,
     alwaysBypassable = (hasAlu || hasCnt) && !(hasMem || hasJmpUnit || hasMul || hasDiv || hasCSR),
     hasMem           = hasMem,
@@ -170,7 +166,7 @@ class ALUExeUnit (
         div.io.req.bits.rs2Data := io.req.bits.rs2Data
         div.io.brUpdate         := io.brupdate
         div.io.req.bits.kill    := io.req.bits.kill
-        div.io.resp.ready       := !(iresp_fu_units.map(_.io.resp.valid).reduce(_|_))
+        div.io.resp.ready       := !iresp_fu_units.map(_.io.resp.valid).reduce(_|_)
 
         div_resp_val := div.io.resp.valid
         div_busy     := !div.io.req.ready || (io.req.valid && io.req.bits.uop.fu_code_is(FU_DIV))
@@ -190,7 +186,7 @@ class ALUExeUnit (
         maddrcalc.io.resp.ready := true.B
 
         io.lsu_io.req := maddrcalc.io.resp
-        io.mem_iresp <> io.lsu_io.iresp
+        io.iresp <> io.lsu_io.iresp
     }
 
     // Outputs (Write Port #0)  ---------------
@@ -212,6 +208,6 @@ class ALUExeUnit (
         }
     }
     assert ((PopCount(iresp_fu_units.map(_.io.resp.valid)) <= 1.U && !div_resp_val) ||
-            (PopCount(iresp_fu_units.map(_.io.resp.valid)) <= 2.U && (div_resp_val)),
+            (PopCount(iresp_fu_units.map(_.io.resp.valid)) <= 2.U &&  div_resp_val),
         "Multiple functional units are fighting over the write port.")
 }

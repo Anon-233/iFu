@@ -1,7 +1,6 @@
 package iFu.backend
 
 import chisel3._
-import chisel3.util._
 
 import iFu.common._
 import iFu.common.Consts._
@@ -9,8 +8,6 @@ import iFu.common.Consts._
 import scala.collection.mutable.ArrayBuffer
 
 class ExecutionUnits extends HasCoreParameters {
-    val totalIssueWidth = issueParams.map(_.issueWidth).sum
-
     private val exe_units = ArrayBuffer[ExecutionUnit]()
 
     def length = exe_units.length
@@ -66,11 +63,10 @@ class ExecutionUnits extends HasCoreParameters {
             hasAlu = false,
             hasMem = true
         ))
-        memExeUnit.io.mem_iresp.ready := DontCare
         exe_units += memExeUnit
     }
     for (w <- 0 until int_width) {
-        def is_nth(n: Int): Boolean = w == ((n) % int_width)
+        def is_nth(n: Int): Boolean = w == (n % int_width)
 
         val alu_exe_unit = Module(new ALUExeUnit(
             hasJmpUnit = is_nth(0),
@@ -82,11 +78,8 @@ class ExecutionUnits extends HasCoreParameters {
         exe_units += alu_exe_unit
     }
 
-    val numReaders          = exe_units.count(_.readsIrf)
-    val numReadPorts        = exe_units.count(_.readsIrf) * 2
     val numWritePorts       = exe_units.count(_.writesIrf)
-    val numMemWritePorts    = exe_units.count(_.writesMemIrf)
-    val numTotalBypassPorts = exe_units.withFilter(_.bypassable).map(_.numStages).foldLeft(0)(_ + _)
+    val numTotalBypassPorts = exe_units.withFilter(_.bypassable).map(_.numStages).sum
 
-    val bypassable_write_port_mask = exe_units.withFilter(x => x.writesIrf).map(u => u.bypassable)
+    val bypassable_write_port_mask = exe_units.withFilter(_.writesIrf).map(_.bypassable)
 }

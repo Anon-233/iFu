@@ -3,7 +3,7 @@ package iFu
 import chisel3._
 import chisel3.util._
 import iFu.frontend._
-import iFu.frontend.FrontendUtils.fetchAlign
+
 import iFu.backend._
 import iFu.tlb._
 import iFu.sma._
@@ -34,7 +34,6 @@ class iFuCore extends CoreModule {
     val decode_units = Seq.fill(decodeWidth) { Module(new DecodeUnit) }
     val dec_brmask_logic = Module(new BranchMaskGenerationLogic)
 
-
     val dispatcher = Module(new BasicDispatcher)
 
     val exe_units = new ExecutionUnits
@@ -42,7 +41,6 @@ class iFuCore extends CoreModule {
     val jmp_unit = exe_units(jmp_unit_idx)
     val mem_units = exe_units.memory_units
 
-    val numReadPorts  = exe_units.numReadPorts
     val numWritePorts = exe_units.numWritePorts + memWidth
     val numFastWakeupPorts = exe_units.count(_.bypassable)
     val numAlwaysBypassable = exe_units.count(_.alwaysBypassable)
@@ -58,16 +56,15 @@ class iFuCore extends CoreModule {
 
     val iregfile = Module(new RegisterFileSynthesizable(
         numPRegs,
-        numReadPorts,
+        exe_units.map(_.numReadPorts).sum,
         numWritePorts,
         xLen,
         Seq.fill(memWidth) { true } ++ exe_units.bypassable_write_port_mask
     ))
     val iregister_read = Module(new RegisterRead(
         issue_units.map(_.issueWidth).sum,
-        exe_units.withFilter(_.readsIrf).map(_.supportedFuncUnits).toSeq,
-        numReadPorts,
-        exe_units.withFilter(_.readsIrf).map(x => 2).toSeq,
+        exe_units.map(_.supportedFuncUnits).toSeq,
+        exe_units.map(_.numReadPorts).toSeq,
         exe_units.numTotalBypassPorts,
         xLen
     ))
@@ -120,11 +117,11 @@ class iFuCore extends CoreModule {
     val dis_valids = Wire(Vec(coreWidth, Bool()))
     val dis_uops   = Wire(Vec(coreWidth, new MicroOp))
     val dis_fire   = Wire(Vec(coreWidth, Bool()))
-    val dis_ready  = Wire(Bool())   // TODO: ??? why 1 bit
+    val dis_ready  = Wire(Bool())
 
     // Issue/Register Read
-    val iss_valids    = Wire(Vec(exe_units.numReaders, Bool()))
-    val iss_uops      = Wire(Vec(exe_units.numReaders, new MicroOp()))
+    val iss_valids    = Wire(Vec(exe_units.length, Bool()))
+    val iss_uops      = Wire(Vec(exe_units.length, new MicroOp))
     val bypasses      = Wire(Vec(exe_units.numTotalBypassPorts, Valid(new ExeUnitResp)))
     require(jmp_unit.bypassable)
 
@@ -148,7 +145,7 @@ class iFuCore extends CoreModule {
         exu.io.brupdate := brus(1).io.br_update
     }
 
-    val mem_resps = mem_units.map(_.io.mem_iresp)
+    val mem_resps = mem_units.map(_.io.iresp)
     for (i <- 0 until memWidth) {
         mem_units(i).io.lsu_io <> lsu.io.core.exe(i)
     }
@@ -538,29 +535,25 @@ class iFuCore extends CoreModule {
     for (w <- 0 until exe_units.length) {
         var fu_types = exe_units(w).io.fu_types
         val exe_unit = exe_units(w)
-        if (exe_unit.readsIrf) {
-            if (exe_unit.supportedFuncUnits.muldiv) {
-                // Supress just-issued divides from issuing back-to-back, since it's an iterative divider.
-                // But it takes a cycle to get to the Exe stage, so it can't tell us it is busy yet.
-                val idiv_issued = iss_valids(iss_idx) && iss_uops(iss_idx).fu_code_is(FU_DIV)
-                fu_types = fu_types & RegNext(~Mux(idiv_issued, FU_DIV, 0.U))
-            }
-
-            if (exe_unit.hasMem) {
-                mem_iss_unit.io.fuTypes(mem_iss_cnt) := Mux(pause_mem, 0.U, fu_types)
-                iss_valids(iss_idx) := mem_iss_unit.io.issueValids(mem_iss_cnt)
-                iss_uops(iss_idx)   := mem_iss_unit.io.issueUops(mem_iss_cnt)
-                mem_iss_cnt += 1
-            } else {
-                int_iss_unit.io.fuTypes(int_iss_cnt) := fu_types
-                iss_valids(iss_idx) := int_iss_unit.io.issueValids(int_iss_cnt)
-                iss_uops(iss_idx)   := int_iss_unit.io.issueUops(int_iss_cnt)
-                int_iss_cnt += 1
-            }
-            iss_idx += 1
+        if (exe_unit.supportedFuncUnits.muldiv) {
+            // Supress just-issued divides from issuing back-to-back, since it's an iterative divider.
+            // But it takes a cycle to get to the Exe stage, so it can't tell us it is busy yet.
+            val idiv_issued = iss_valids(iss_idx) && iss_uops(iss_idx).fu_code_is(FU_DIV)
+            fu_types = fu_types & RegNext(~Mux(idiv_issued, FU_DIV, 0.U)).asUInt
         }
+        if (exe_unit.hasMem) {
+            mem_iss_unit.io.fuTypes(mem_iss_cnt) := Mux(pause_mem, 0.U, fu_types)
+            iss_valids(iss_idx) := mem_iss_unit.io.issueValids(mem_iss_cnt)
+            iss_uops(iss_idx)   := mem_iss_unit.io.issueUops(mem_iss_cnt)
+            mem_iss_cnt += 1
+        } else {
+            int_iss_unit.io.fuTypes(int_iss_cnt) := fu_types
+            iss_valids(iss_idx) := int_iss_unit.io.issueValids(int_iss_cnt)
+            iss_uops(iss_idx)   := int_iss_unit.io.issueUops(int_iss_cnt)
+            int_iss_cnt += 1
+        }
+        iss_idx += 1
     }
-    require(iss_idx == exe_units.numReaders)
 
     issue_units.foreach(_.io.brUpdate := brUpdate)
     issue_units.foreach(_.io.flushPipeline := RegNext(rob.io.flush.valid))
@@ -583,9 +576,11 @@ class iFuCore extends CoreModule {
 
     iregister_read.io.rf_read_ports <> iregfile.io.read_ports
 
-    for (w <- 0 until exe_units.numReaders) {
-        iregister_read.io.iss_valids(w) :=iss_valids(w) &&
+    for (w <- 0 until exe_units.length) {
+        iregister_read.io.iss_valids(w) := (
+            iss_valids(w) &&
             !(lsu.io.core.ld_miss && (iss_uops(w).iw_p1_poisoned || iss_uops(w).iw_p2_poisoned))
+        )
     }
 
     iregister_read.io.iss_uops := iss_uops
@@ -637,23 +632,16 @@ class iFuCore extends CoreModule {
     var bypass_idx = 0
     for (w <- 0 until exe_units.length) {
         val exe_unit = exe_units(w)
-        if (exe_unit.readsIrf) {
-            exe_unit.io.req <> iregister_read.io.exe_reqs(iss_idx)
-
-            if (exe_unit.bypassable) {
-                for (i <- 0 until exe_unit.numStages) {
-                    bypasses(bypass_idx) := exe_unit.io.bypass(i)
-                    bypass_idx += 1
-                }
+        exe_unit.io.req <> iregister_read.io.exe_reqs(iss_idx)
+        if (exe_unit.bypassable) {
+            for (i <- 0 until exe_unit.numStages) {
+                bypasses(bypass_idx) := exe_unit.io.bypass(i)
+                bypass_idx += 1
             }
-            iss_idx += 1
         }
+        iss_idx += 1
     }
     require(bypass_idx == exe_units.numTotalBypassPorts)
-
-    for (w <- 0 until exe_units.length) {
-        exe_units(w).io.req.bits.kill := RegNext(rob.io.flush.valid)
-    }
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
