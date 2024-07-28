@@ -11,11 +11,10 @@ trait HasBPUParameters {
     
 
     val mixSize = 24
-    def mixHILO(pc: UInt): UInt = Cat(pc(vaddrBits - 1 , mixSize) , pc(mixSize - 1, 0) ^ pc(vaddrBits - 1 , vaddrBits - mixSize))
-    
+    // def mixHILO(pc: UInt): UInt = Cat(pc(vaddrBits - 1 , mixSize) , pc(mixSize - 1, 0) ^ pc(vaddrBits - 1 , vaddrBits - mixSize))
+    def mixHILO(pc: UInt): UInt = pc
 
-    // val targetSz = 15
-    val targetSz = 18
+    val targetSz = 15
 
     def getTargetPC(pc: UInt , target : UInt): UInt = {
         Cat(pc(vaddrBits - 1, targetSz + 2) , target(targetSz - 1 , 0) , 0.U(2.W))
@@ -31,7 +30,7 @@ trait HasUbtbParameters extends HasBPUParameters {
     // def tagSz = 8
 
     // tag视野大小
-    val tagView = 16
+    val tagView = 11
     // val offsetSz = 6
     def tagSz = tagView - log2Ceil(fetchBytes) + 1
     def getTag(pc: UInt): UInt =  pc(tagView , log2Ceil(fetchBytes))
