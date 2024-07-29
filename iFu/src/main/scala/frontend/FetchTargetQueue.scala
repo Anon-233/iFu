@@ -22,7 +22,7 @@ class FTQBundle extends CoreBundle {
     val cfiIsCall       = Bool()
     val cfiIsRet        = Bool()
 
-    val rasTop          = UInt(vaddrBits.W)
+    val rasTop          = UInt(targetSz.W)
     val rasIdx          = UInt(log2Ceil(numRasEntries).W)
 }
 
@@ -72,7 +72,7 @@ class FetchTargetQueue extends CoreModule {
         // 控制ras更新的信息
         val rasUpdate    = Output(Bool())
         val rasUpdateIdx = Output(UInt(log2Ceil(numRasEntries).W))
-        val rasUpdatepc  = Output(UInt(vaddrBits.W))
+        val rasUpdate_tgt  = Output(UInt(targetSz.W))
     })
 
     val train_ptr    = RegInit(0.U(idxSz.W))
@@ -185,11 +185,11 @@ class FetchTargetQueue extends CoreModule {
 //-------------------------------------------------------------
 // fix ras
     val rasUpdate    = WireInit(false.B)
-    val rasUpdatepc  = WireInit(0.U(vaddrBits.W))
+    val rasUpdate_tgt  = WireInit(0.U(targetSz.W))
     val rasUpdateIdx = WireInit(0.U(log2Ceil(numRasEntries).W))
 
     io.rasUpdate    := RegNext(rasUpdate)
-    io.rasUpdatepc  := RegNext(rasUpdatepc)
+    io.rasUpdate_tgt  := RegNext(rasUpdate_tgt)
     io.rasUpdateIdx := RegNext(rasUpdateIdx)
 //-------------------------------------------------------------
 // fix ram entry(ftq meta)
@@ -207,7 +207,7 @@ class FetchTargetQueue extends CoreModule {
         }
 
         rasUpdate    := true.B
-        rasUpdatepc  := old_entry.rasTop
+        rasUpdate_tgt  := old_entry.rasTop
         rasUpdateIdx := old_entry.rasIdx
     } .elsewhen (RegNext(io.redirect.valid)) {
         previousEntry := RegNext(new_entry)

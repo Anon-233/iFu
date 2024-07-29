@@ -28,6 +28,7 @@ class FetchBundle extends CoreBundle {
     val fetchBytes         = frontendParams.fetchBytes
     val numFTQEntries      = frontendParams.numFTQEntries
 
+
     val pc              = UInt(vaddrBits.W) // fetch PC, possibly unaligned.
     val instrs          = Vec(fetchWidth, Bits(coreInstrBits.W))
 
@@ -35,7 +36,9 @@ class FetchBundle extends CoreBundle {
     val cfiType   = UInt(CFI_SZ.W)
     val cfiIsCall = Bool()
     val cfiIsRet  = Bool()
-    val rasTop    = UInt(vaddrBits.W)
+
+    val targetSz  = frontendParams.targetSz
+    val rasTop    = UInt(targetSz.W)
     val ftqIdx    = UInt(log2Ceil(numFTQEntries).W)
     val mask      = UInt(fetchWidth.W)    // the purpose and specific details of the mask need more information, check later
     val brMask    = UInt(fetchWidth.W)
@@ -91,12 +94,10 @@ class Frontend extends CoreModule {
     val fetchBytes    = frontendParams.fetchBytes
     val instrBytes    = frontendParams.instrBytes
 
-    val bpuParams = new HasBPUParameters {}
-    val targetSz = bpuParams.targetSz
     def getTargetPC(pc: UInt , target : UInt): UInt = {
-        bpuParams.getTargetPC(pc, target)
+        frontendParams.getTargetPC(pc, target)
     }
-    def getTarget(tgtpc : UInt): UInt = bpuParams.getTarget(tgtpc)
+    def getTarget(tgtpc : UInt): UInt = frontendParams.getTarget(tgtpc)
 // --------------------------------------------------------
     val io = IO(new FrontendIO)
 
@@ -335,14 +336,17 @@ class Frontend extends CoreModule {
     f3_fetch_bundle.cfiIsCall    := f3_call_mask(f3_fetch_bundle.cfiIdx.bits)
     f3_fetch_bundle.cfiIsRet     := f3_ret_mask(f3_fetch_bundle.cfiIdx.bits)
     f3_fetch_bundle.rasPtr       := f3_ifu_resp.io.deq.bits.rasPtr
-    f3_fetch_bundle.rasTop       := ras.io.read_addr
+    f3_fetch_bundle.rasTop       := ras.io.read_tgt
     f3_fetch_bundle.bpdMeta      := f3_bpd_resp.io.deq.bits.meta
+
+
+    val f3_ras_tgt_pc = getTargetPC(f3_fetchResp.pc, ras.io.read_tgt)
 
     // s3综合得出的预测目标地址
     val f3_predicted_target_pc = Mux(
         f3_redirects.reduce(_||_),
             Mux(f3_fetch_bundle.cfiIsRet,
-                ras.io.read_addr,
+                f3_ras_tgt_pc,
                 f3_tgt_pcs(PriorityEncoder(f3_redirects))
             ),
             nextFetch(f3_fetch_bundle.pc)
@@ -357,8 +361,8 @@ class Frontend extends CoreModule {
     )
 
     ras.io.write_valid := false.B
-    ras.io.write_addr  := getPc(f3_aligned_pc, f3_fetch_bundle.cfiIdx.bits) + 4.U
-    ras.io.write_idx   := WrapInc(f3_fetch_bundle.rasPtr.bits, numRasEntries)
+    ras.io.write_tgt  := getTarget(getPc(f3_aligned_pc, f3_fetch_bundle.cfiIdx.bits) + 4.U)
+    ras.io.write_idx  := WrapInc(f3_fetch_bundle.rasPtr.bits, numRasEntries)
 
     // 三阶段必须保证译出的地址完全正确
     val f3_correct_f1_tgt = !IsEqual((s1_vpc), (f3_predicted_target_pc))
@@ -417,7 +421,7 @@ class Frontend extends CoreModule {
     when (ftq.io.rasUpdate) {
         ras.io.write_valid := true.B
         ras.io.write_idx   := ftq.io.rasUpdateIdx
-        ras.io.write_addr  := ftq.io.rasUpdatepc
+        ras.io.write_tgt  := ftq.io.rasUpdate_tgt
     }
 // -------------------------------------------------------
 
