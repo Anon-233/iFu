@@ -355,68 +355,53 @@ class DecodeUnit extends CoreModule {
     io.deq.uop  := uop
 }
 
-class BranchMaskGenerationLogic extends CoreModule {
+class BrMaskUnit extends CoreModule {
     val io = IO(new Bundle {
         val is_branch = Input(Vec(coreWidth, Bool()))
         val will_fire = Input(Vec(coreWidth, Bool()))
         val br_tag    = Output(Vec(coreWidth, UInt(log2Ceil(maxBrCount).W)))
         val br_mask   = Output(Vec(coreWidth, UInt(maxBrCount.W)))
-        val is_full   = Output(Vec(coreWidth, Bool())) //branchmask全为1
-        val brupdate         = Input(new BrUpdateInfo())
-        val flush_pipeline = Input(Bool())
-
-        val debug_branch_mask = Output(UInt(maxBrCount.W))
+        val is_full   = Output(Vec(coreWidth, Bool()))
+        val br_update = Input(new BrUpdateInfo())
+        val flush     = Input(Bool())
     })
 
     val branch_mask = RegInit(0.U(maxBrCount.W))
 
-    //-------------------------------------------------------------
-    // Give out the branch tag to each branch micro-op
-
     var allocate_mask = branch_mask
     val tag_masks = Wire(Vec(coreWidth, UInt(maxBrCount.W)))
-
     for (w <- 0 until coreWidth) {
-        // TODO this is a loss of performance as we're blocking branches based on potentially fake branches
-        io.is_full(w) := (allocate_mask === ~(0.U(maxBrCount.W))) && io.is_branch(w)
+        io.is_full(w) := (allocate_mask === (~0.U(maxBrCount.W)).asUInt) && io.is_branch(w)
 
         // find br_tag and compute next br_mask
         val new_br_tag = Wire(UInt(log2Ceil(maxBrCount).W))
-        new_br_tag := 0.U
+        new_br_tag   := 0.U
         tag_masks(w) := 0.U
 
-        for (i <- maxBrCount-1 to 0 by -1) {
-            when (~allocate_mask(i)) {
-                new_br_tag := i.U
-                tag_masks(w) := (1.U << i.U)    //会覆盖，结果是新的mask
+        for (i <- maxBrCount - 1 to 0 by -1) {
+            when (!allocate_mask(i)) {
+                new_br_tag   := i.U
+                tag_masks(w) := (1.U << i.U)
             }
         }
 
         io.br_tag(w) := new_br_tag
-        allocate_mask = Mux(io.is_branch(w), tag_masks(w) | allocate_mask, allocate_mask) //发射后的mask，并且由于是var类型，所以会覆盖
+        allocate_mask = Mux(io.is_branch(w), tag_masks(w) | allocate_mask, allocate_mask)
     }
-
-    //-------------------------------------------------------------
-    // Give out the branch mask to each micro-op
-    // (kill off the bits that corresponded to branches that aren't going to fire)
 
     var curr_mask = branch_mask
     for (w <- 0 until coreWidth) {
-        io.br_mask(w) := GetNewBrMask(io.brupdate, curr_mask)
+        io.br_mask(w) := GetNewBrMask(io.br_update, curr_mask)
         curr_mask = Mux(io.will_fire(w), tag_masks(w) | curr_mask, curr_mask)
     }
 
-    //-------------------------------------------------------------
-    // Update the current branch_mask
-
-    when (io.flush_pipeline) {
+    when (io.flush) {
         branch_mask := 0.U
     } .otherwise {
-        val mask = Mux(io.brupdate.b2.mispredict,
-            io.brupdate.b2.uop.brMask,
-            ~(0.U(maxBrCount.W)))
-        branch_mask := GetNewBrMask(io.brupdate, curr_mask) & mask
+        val mask = Mux(
+            io.br_update.b2.mispredict, io.br_update.b2.uop.brMask,
+                                        (~0.U(maxBrCount.W)).asUInt
+        )
+        branch_mask := GetNewBrMask(io.br_update, curr_mask) & mask
     }
-
-    io.debug_branch_mask := branch_mask
 }

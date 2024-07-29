@@ -21,18 +21,14 @@ class iFuCore extends CoreModule {
 /*-----------------------------*/
 
     val fetchWidth      = frontendParams.fetchWidth
-    val decodeWidth     = coreWidth
-    val memIssueParam   = issueParams.filter(_.iqType == IQT_MEM.litValue)(0)
-    val intIssueParam   = issueParams.filter(_.iqType == IQT_INT.litValue)(0)
+    val memIssueParam   = issueParams.filter(_.iqType == IQT_MEM.litValue).head
+    val intIssueParam   = issueParams.filter(_.iqType == IQT_INT.litValue).head
     val numFTQEntries   = frontendParams.numFTQEntries
     val fetchBytes      = frontendParams.fetchBytes
 
 /*-----------------------------*/
 
     val ifu = Module(new Frontend)
-
-    val decode_units = Seq.fill(decodeWidth) { Module(new DecodeUnit) }
-    val dec_brmask_logic = Module(new BranchMaskGenerationLogic)
 
     val dispatcher = Module(new BasicDispatcher)
 
@@ -104,13 +100,7 @@ class iFuCore extends CoreModule {
 
 /*-----------------------------*/
 
-    // Decode/Rename1
-    val dec_valids = Wire(Vec(coreWidth, Bool()))
-    val dec_uops   = Wire(Vec(coreWidth, new MicroOp))
-    val dec_fire   = Wire(Vec(coreWidth, Bool()))
-
-    val dec_ready  = Wire(Bool())
-    val dec_xcpts  = Wire(Vec(coreWidth, Bool()))
+    // Rename1
     val ren_stalls = Wire(Vec(coreWidth, Bool()))
 
     // Rename2/Dispatch
@@ -120,9 +110,9 @@ class iFuCore extends CoreModule {
     val dis_ready  = Wire(Bool())
 
     // Issue/Register Read
-    val iss_valids    = Wire(Vec(exe_units.length, Bool()))
-    val iss_uops      = Wire(Vec(exe_units.length, new MicroOp))
-    val bypasses      = Wire(Vec(exe_units.numTotalBypassPorts, Valid(new ExeUnitResp)))
+    val iss_valids = Wire(Vec(exe_units.length, Bool()))
+    val iss_uops   = Wire(Vec(exe_units.length, new MicroOp))
+    val bypasses   = Wire(Vec(exe_units.numTotalBypassPorts, Valid(new ExeUnitResp)))
     require(jmp_unit.bypassable)
 
     // --------------------------------------
@@ -131,7 +121,7 @@ class iFuCore extends CoreModule {
         Module(new BranchUnit(i != 0))
     }
     brus foreach { bru =>
-        bru.io.br_infos zip exe_units.alu_units map {
+        bru.io.br_infos zip exe_units.alu_units foreach {
             case (b, e) => b := e.io.brinfo
         }
         bru.io.rob_flush := rob.io.flush.valid
@@ -164,7 +154,7 @@ class iFuCore extends CoreModule {
     ifu.io.core.redirect_val := false.B
     ifu.io.core.redirect_flush := false.B
     ifu.io.core.flush_icache := (0 until coreWidth).map { i =>
-        (rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_ibar)
+        rob.io.commit.arch_valids(i) && rob.io.commit.uops(i).is_ibar
     }.reduce(_||_)
 
     when (RegNext(rob.io.flush.valid)) {
@@ -217,17 +207,17 @@ class iFuCore extends CoreModule {
     } .elsewhen (rob.io.flush_frontend || b1_mispredict_val) {
         ifu.io.core.redirect_flush   := true.B
         ifu.io.core.redirect_pc      := DontCare
-        ifu.io.core.redirect_ras_ptr   := DontCare
+        ifu.io.core.redirect_ras_ptr := DontCare
         ifu.io.core.redirect_ftq_idx := DontCare
     } .otherwise {
         ifu.io.core.redirect_pc      := DontCare
-        ifu.io.core.redirect_ras_ptr   := DontCare
+        ifu.io.core.redirect_ras_ptr := DontCare
         ifu.io.core.redirect_ftq_idx := DontCare
     }
 
     val youngest_com_idx = (coreWidth - 1).U - PriorityEncoder(rob.io.commit.valids.reverse)
     ifu.io.core.commit.valid := rob.io.commit.valids.reduce(_|_) || rob.io.com_xcpt.valid
-    ifu.io.core.commit.bits := Mux(
+    ifu.io.core.commit.bits  := Mux(
         rob.io.com_xcpt.valid,
         rob.io.com_xcpt.bits.ftq_idx,
         rob.io.commit.uops(youngest_com_idx).ftqIdx
@@ -243,8 +233,6 @@ class iFuCore extends CoreModule {
     ftq_arb.io.in(0) <> flush_pc_req
     ftq_arb.io.in(1) <> jmp_pc_req
     ftq_arb.io.in(2) <> xcpt_pc_req
-
-    // printf("jump pc req: %d\n", jmp_pc_req.bits)
 
     flush_pc_req.valid := rob.io.flush.valid
     flush_pc_req.bits := rob.io.flush.bits.ftq_idx
@@ -271,70 +259,18 @@ class iFuCore extends CoreModule {
     //-------------------------------------------------------------
     //-------------------------------------------------------------
 
-    val dec_finished_mask = RegInit(0.U(coreWidth.W))
-
-    ifu.io.core.fetchPacket.ready := dec_ready
-    val dec_fbundle = ifu.io.core.fetchPacket.bits
-
-    //-------------------------------------------------------------
-    // Decoders
-
-    for (w <- 0 until coreWidth) {
-        dec_valids(w) :=
-            ifu.io.core.fetchPacket.valid && dec_fbundle.uops(w).valid && !dec_finished_mask(w)
-        decode_units(w).io.enq.uop   := dec_fbundle.uops(w).bits
-        decode_units(w).io.interrupt := csr.io.interrupt
-
-        dec_uops(w) := decode_units(w).io.deq.uop
-    }
-
-    //-------------------------------------------------------------
-    // Branch Mask Logic
-
-    dec_brmask_logic.io.brupdate := brUpdate
-    dec_brmask_logic.io.flush_pipeline := RegNext(rob.io.flush.valid)
-
-    for (w <- 0 until coreWidth) {
-        dec_brmask_logic.io.is_branch(w) := !dec_finished_mask(w) && dec_uops(w).allocate_brtag
-        dec_brmask_logic.io.will_fire(w) := dec_fire(w) && dec_uops(w).allocate_brtag
-        
-        dec_uops(w).brTag := dec_brmask_logic.io.br_tag(w)
-        dec_uops(w).brMask := dec_brmask_logic.io.br_mask(w)
-    }
-
-    val branch_mask_full = dec_brmask_logic.io.is_full
-
-    //-------------------------------------------------------------
-    // Decode/Rename1 pipeline logic
-
-    dec_xcpts := dec_uops zip dec_valids map { case (u, v) => u.xcpt_valid && v }
-    val dec_xcpt_stall = dec_xcpts.reduce(_||_) && !xcpt_pc_req.ready
-
-    val dec_hazards = (0 until coreWidth).map(w =>
-        dec_valids(w) && (
-            !dis_ready                ||
-            rob.io.commit.rollback    ||
-            dec_xcpt_stall            ||
-            branch_mask_full(w)       ||
-            b1_mispredict_val         ||
-            brUpdate.b2.mispredict    ||
-            ifu.io.core.redirect_flush
-        )
-    )
-    val dec_stalls = dec_hazards.scanLeft(false.B)((s, h) => s || h).takeRight(coreWidth)
-    dec_fire := (0 until coreWidth).map { w => dec_valids(w) && !dec_stalls(w) }
-
-    dec_ready := dec_fire.last
-
-    when (dec_ready || ifu.io.core.redirect_flush) {
-        dec_finished_mask := 0.U
-    } .otherwise {
-        dec_finished_mask := dec_fire.asUInt | dec_finished_mask
-    }
-
-    val xcpt_idx = PriorityEncoder(dec_xcpts)
-    xcpt_pc_req.valid := dec_xcpts.reduce(_ || _)
-    xcpt_pc_req.bits := dec_uops(xcpt_idx).ftqIdx
+    val dec_stage = Module(new DecodeStage)
+    dec_stage.io.enq               <> ifu.io.core.fetchPacket
+    dec_stage.io.intrpt            := csr.io.interrupt
+    dec_stage.io.flush             := RegNext(rob.io.flush.valid)
+    dec_stage.io.clear             := ifu.io.core.redirect_flush
+    dec_stage.io.rollback          := rob.io.commit.rollback
+    dec_stage.io.dis_ready         := dis_ready
+    dec_stage.io.b1_mispred        := b1_mispredict_val
+    dec_stage.io.br_update         := brUpdate
+    xcpt_pc_req.valid              := dec_stage.io.xcpt_ftqIdx.valid
+    xcpt_pc_req.bits               := dec_stage.io.xcpt_ftqIdx.bits
+    dec_stage.io.xcpt_ftqIdx.ready := xcpt_pc_req.ready
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------
@@ -345,8 +281,8 @@ class iFuCore extends CoreModule {
     // Inputs
     rename_stage.io.kill       := ifu.io.core.redirect_flush
     rename_stage.io.brupdate   := brUpdate
-    rename_stage.io.dec_fire   := dec_fire
-    rename_stage.io.dec_uops   := dec_uops
+    rename_stage.io.dec_fire   := dec_stage.io.deq.map(_.valid)
+    rename_stage.io.dec_uops   := dec_stage.io.deq.map(_.bits)
     rename_stage.io.dis_fire   := dis_fire
     rename_stage.io.dis_ready  := dis_ready
     rename_stage.io.com_valids := rob.io.commit.valids
