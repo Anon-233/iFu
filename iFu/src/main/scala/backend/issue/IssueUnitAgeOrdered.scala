@@ -47,7 +47,7 @@ class IssueUnitAgeOrdered (
     for (i <- 0 until numIssueSlots) {
         issueSlots(i).inUop.valid := false.B
         issueSlots(i).inUop.bits := uops(i + 1)
-        
+
         for (j <- 1 to maxShift) {
             when (shamtOH(i + j) === (1 << (j - 1)).U) {
                 issueSlots(i).inUop.valid := willBeValid(i + j)
