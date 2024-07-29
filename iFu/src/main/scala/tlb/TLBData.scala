@@ -2,10 +2,9 @@ package iFu.tlb
 
 import chisel3._
 import chisel3.util._
-import iFu.common._
-import iFu.common.Consts._
-import iFu.backend._
 import iFu.common.CauseCode.ecodeBits
+import iFu.common.Consts._
+import iFu.common._
 
 class TLBMeta extends CoreBundle {
     val vppn = UInt((vaddrBits - 13).W)
@@ -42,7 +41,8 @@ class TLBDataRReq extends CoreBundle {
 }
 
 class TLBDataRResp extends CoreBundle {
-    val entry   = new TLBEntry
+    val found = Bool()
+    val entry = new TLBEntry
 }
 
 class TLBDataCSRContext extends CoreBundle {
@@ -87,7 +87,7 @@ class TLBDataCSRIO extends CoreBundle {
 
 class TLBDataManagerIO extends CoreBundle {
     val csr    = new TLBDataCSRIO
-    val r_req  = Vec(memWidth + 1, Input(new TLBDataRReq))
+    val r_req  = Vec(memWidth + 1, Flipped(Valid(new TLBDataRReq)))
     val r_resp = Vec(memWidth + 1, Valid(new TLBDataRResp))
     val fill_idx = if (!FPGAPlatform) Output(UInt(log2Ceil(TLB_NUM).W)) else null
 }
@@ -102,12 +102,21 @@ class TLBDataManager extends CoreModule {
     // because we assume that user will call invtlb before using TLB
     val tlb_entries = Reg(Vec(TLB_NUM, new TLBEntry))
 
-    val csr_ctx = io.csr.csr_ctx
+    val csr_ctx = RegNext(io.csr.csr_ctx)
 // --------------------------------------------------------
-    for (w <- 0 until memWidth + 1) {
-        val matchOH = tlb_entries.map(_.matches(io.r_req(w).vaddr(vaddrBits-1, 13), csr_ctx.asid_asid))
-        io.r_resp(w).valid := matchOH.reduce(_||_)
-        io.r_resp(w).bits.entry := Mux1H(matchOH, tlb_entries)
+    // stage 0
+    val qry_idx    = PriorityEncoder(io.r_req.map(_.valid))
+    // stage 1
+    val qry_vaddr  = RegNext(io.r_req(qry_idx).bits.vaddr)
+    val resp_valid = RegNext(VecInit(UIntToOH(qry_idx, memWidth + 1).asBools))
+    val matchOH    = VecInit(
+        tlb_entries.map(_.matches(qry_vaddr(vaddrBits - 1, 13), csr_ctx.asid_asid))
+    )
+
+    io.r_resp zip resp_valid foreach { case (resp, valid) =>
+        resp.valid      := valid
+        resp.bits.found := matchOH.asUInt.orR
+        resp.bits.entry := Mux1H(matchOH, tlb_entries)
     }
 // --------------------------------------------------------
     val instr = io.csr.instr

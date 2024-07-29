@@ -24,7 +24,7 @@ class ITLBIO extends CoreBundle {
     val itlb_csr_cxt = Input(new TLBCsrContext)
     val req          = Flipped(Valid(new ITLBReq))
     val resp         = Output(new ITLBResp)
-    val r_req        = Output(new TLBDataRReq)
+    val r_req        = Valid(new TLBDataRReq)
     val r_resp       = Flipped(Valid(new TLBDataRResp))
 }
 
@@ -116,21 +116,24 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule with L0TLBState {
     }
 
     // access L1 TLB
-    io.r_req.vaddr := RegNext(vaddr)
+    io.r_req.valid      := RegNext(io.req.valid && !l0_hit)
+    io.r_req.bits.vaddr := RegNext(vaddr)
     val r_resp = RegNext(io.r_resp)
 
-    val refill_vppn = RegNext(RegNext(vaddr(vaddrBits - 1, 13)))
-    val refill_en   = RegNext(RegNext(io.req.valid && !l0_hit)) && (state === s_refill)
+    val refill_vppn = RegNext(RegNext(RegNext(vaddr(vaddrBits - 1, 13))))
+    val refill_en   = RegNext(RegNext(RegNext(io.req.valid && !l0_hit))) && (state === s_refill)
     val refill_idx  = RegInit(0.U(log2Ceil(num_l0_itlb_entries).W))
     refill_idx := refill_idx + refill_en
     if (!FPGAPlatform) dontTouch(refill_idx)
 
     when (refill_en) {
-        l0_entry(refill_idx) := Mux(
-            r_resp.valid,
-            L0ITLBEntry.new_entry(r_resp.bits.entry),
-            L0ITLBEntry.fake_entry(refill_vppn, RegNext(csr_regs.asid_asid))
-        )
+        when (r_resp.valid) {
+            l0_entry(refill_idx) := Mux(
+                r_resp.bits.found,
+                L0ITLBEntry.new_entry(r_resp.bits.entry),
+                L0ITLBEntry.fake_entry(refill_vppn, RegNext(csr_regs.asid_asid))
+            )
+        }
         state_nxt := s_ready
     }
     when (RegNext(csr_regs.inv_l0_tlb)) {

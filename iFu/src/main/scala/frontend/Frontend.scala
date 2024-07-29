@@ -48,7 +48,7 @@ class FetchBundle extends CoreBundle {
 }
 
 class FrontendTLBDataIO extends CoreBundle {
-    val r_req   = Output(new TLBDataRReq)
+    val r_req   = Valid(new TLBDataRReq)
     val r_resp  = Flipped(Valid(new TLBDataRResp))
 }
 

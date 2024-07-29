@@ -26,7 +26,7 @@ class DTLBResp extends CoreBundle {
 class DTLBIO extends CoreBundle {
     val req              = Vec(memWidth, Flipped(Valid(new DTLBReq)))
     val resp             = Vec(memWidth, Output(new DTLBResp))
-    val r_req            = Vec(memWidth, Output(new TLBDataRReq))
+    val r_req            = Vec(memWidth, Valid(new TLBDataRReq))
     val r_resp           = Vec(memWidth, Flipped(Valid(new TLBDataRResp)))
     val dtlb_csr_context = Input(new TLBCsrContext)
 }
@@ -137,21 +137,24 @@ class DTLB(num_l0_dtlb_entries: Int = 2) extends CoreModule with L0TLBState {
 
     // access L1 TLB
     for (w <- 0 until memWidth) {
-        io.r_req(w).vaddr := RegNext(io.req(w).bits.vaddr)
+        io.r_req(w).valid      := RegNext(l0_miss(w))
+        io.r_req(w).bits.vaddr := RegNext(io.req(w).bits.vaddr)
         val r_resp = RegNext(io.r_resp(w))
 
-        val refill_vppn = RegNext(RegNext(io.req(w).bits.vaddr(vaddrBits - 1, 13)))
-        val refill_en   = RegNext(RegNext(l0_miss(w))) && (state === s_refill)
+        val refill_vppn = RegNext(RegNext(RegNext(io.req(w).bits.vaddr(vaddrBits - 1, 13))))
+        val refill_en   = RegNext(RegNext(RegNext(l0_miss(w))) && (state === s_refill))
         val refill_idx  = RegInit(0.U(log2Ceil(num_l0_dtlb_entries).W))
         refill_idx := refill_idx + refill_en
         if (!FPGAPlatform) dontTouch(refill_idx)
 
         when (refill_en) {
-            l0_entry(w)(refill_idx) := Mux(
-                r_resp.valid,
-                L0ITLBEntry.new_entry(r_resp.bits.entry),
-                L0ITLBEntry.fake_entry(refill_vppn, csr_regs.asid_asid)
-            )
+            when (r_resp.valid) {
+                l0_entry(w)(refill_idx) := Mux(
+                    r_resp.bits.found,
+                    L0ITLBEntry.new_entry(r_resp.bits.entry),
+                    L0ITLBEntry.fake_entry(refill_vppn, csr_regs.asid_asid)
+                )
+            }
             state_nxt := s_ready
         }
         when (csr_regs.inv_l0_tlb) {

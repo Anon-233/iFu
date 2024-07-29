@@ -31,7 +31,7 @@ class LSUExeIO extends CoreBundle {
 }
 
 class LSUTLBDataIO extends CoreBundle {
-    val r_req  = Vec(memWidth, Output(new TLBDataRReq))
+    val r_req  = Vec(memWidth, Valid(new TLBDataRReq))
     val r_resp = Vec(memWidth, Flipped(Valid(new TLBDataRResp)))
 }
 /**

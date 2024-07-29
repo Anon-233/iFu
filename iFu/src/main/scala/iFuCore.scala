@@ -75,9 +75,9 @@ class iFuCore extends CoreModule {
     val tlb_data    = Module(new TLBDataManager)
 
     tlb_data.io.csr      <> csr.io.tlb_data
-    tlb_data.io.r_req(0) := ifu.io.core.tlb_data.r_req
-    tlb_data.io.r_req(1) := lsu.io.core.tlb_data.r_req(0)
-    tlb_data.io.r_req(2) := lsu.io.core.tlb_data.r_req(1)
+    tlb_data.io.r_req(0) := lsu.io.core.tlb_data.r_req(0)
+    tlb_data.io.r_req(1) := lsu.io.core.tlb_data.r_req(1)
+    tlb_data.io.r_req(2) := ifu.io.core.tlb_data.r_req
 
     ifu.io.core.tlb_data.r_resp    := tlb_data.io.r_resp(0)
     lsu.io.core.tlb_data.r_resp(0) := tlb_data.io.r_resp(1)
