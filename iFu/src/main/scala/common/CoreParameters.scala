@@ -4,6 +4,7 @@ import chisel3._
 import chisel3.util._
 
 import iFu.common.Consts._
+import iFu.frontend.{HasBPUParameters}
 
 class BPUParameters {
     val numRasEntries: Int = 8
@@ -19,6 +20,7 @@ class ICacheParameters(fetchWidth: Int) {
     val tagBits: Int      = 32 - untagBits
     val fetchBytes        = fetchWidth * 4
     val fetchesPerLine    = lineBytes / fetchBytes
+
     require(isPow2(fetchesPerLine))
 }
 
@@ -32,6 +34,14 @@ class FrontendParameters{
     val numFetchBufferEntries: Int     = 9
     val iCacheParams: ICacheParameters = new ICacheParameters(fetchWidth)
     val bpdParams: BPUParameters       = new BPUParameters
+
+    val bpuParams = new HasBPUParameters {}
+    val targetSz = bpuParams.targetSz
+    def getTargetPC(pc: UInt , target : UInt): UInt = {
+        bpuParams.getTargetPC(pc, target)
+    }
+    def getTarget(tgtpc : UInt): UInt = bpuParams.getTarget(tgtpc)
+
 }
 
 class ROBParameters(coreWidth: Int) {
