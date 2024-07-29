@@ -25,7 +25,7 @@ class iFuCore extends CoreModule {
     val memIssueParam   = issueParams.filter(_.iqType == IQT_MEM.litValue)(0)
     val intIssueParam   = issueParams.filter(_.iqType == IQT_INT.litValue)(0)
     val numFTQEntries   = frontendParams.numFTQEntries
-    val iCacheLineBytes = frontendParams.iCacheParams.lineBytes
+    val fetchBytes      = frontendParams.fetchBytes
 
 /*-----------------------------*/
 
@@ -126,14 +126,19 @@ class iFuCore extends CoreModule {
     require(jmp_unit.bypassable)
 
     // --------------------------------------
-    val brus = Seq.fill(2) { Module(new BranchUnit) }
+    // val brus = Seq(Module(new BranchUnit(false)), Module(new BranchUnit(true)))
+    val brus = (0 until 2) map { i =>
+        Module(new BranchUnit(i != 0))
+    }
     brus foreach { bru =>
         bru.io.br_infos zip exe_units.alu_units map {
             case (b, e) => b := e.io.brinfo
         }
         bru.io.rob_flush := rob.io.flush.valid
-        bru.io.rob_head  := rob.io.rob_head_idx
-        bru.io.jalr_tgt  := jmp_unit.io.brinfo.jalrTarget
+        if (!bru.b1Only) {
+            bru.io.rob_head  := rob.io.rob_head_idx
+            bru.io.jalr_tgt  := jmp_unit.io.brinfo.jalrTarget
+        }
     }
 
     val b1_mispredict_val = brus(0).io.br_s1_mispredict
@@ -173,10 +178,7 @@ class iFuCore extends CoreModule {
         when (FlushTypes.useCsrEvec(flush_type)) {
             ifu.io.core.redirect_pc := csr.io.redirect_pc
         } .otherwise {
-            val flush_pc = (
-                AlignPCToBoundary(ifu.io.core.getFtqPc(0).pc, iCacheLineBytes) +
-                RegNext(rob.io.flush.bits.pc_lob)
-            )
+            val flush_pc = AlignPCToBoundary(ifu.io.core.getFtqPc(0).pc, fetchBytes) | RegNext(rob.io.flush.bits.pc_lob)
             val flush_pc_next = flush_pc + coreInstrBytes.U
             ifu.io.core.redirect_pc := Mux(
                 FlushTypes.useSamePC(flush_type),
@@ -185,11 +187,11 @@ class iFuCore extends CoreModule {
         }
         ifu.io.core.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
     } .elsewhen(brUpdate.b2.mispredict) {
-        val block_pc = AlignPCToBoundary(ifu.io.core.getFtqPc(1).pc, iCacheLineBytes)
-        val uop_maybe_pc = block_pc | brUpdate.b2.uop.pcLowBits
+        val block_pc = AlignPCToBoundary(ifu.io.core.getFtqPc(1).pc, fetchBytes)
+        val uop_pc = block_pc | brUpdate.b2.uop.pcLowBits
 
-        val npc = uop_maybe_pc + coreInstrBytes.U
-        val jal_br_target = (uop_maybe_pc.asSInt + brUpdate.b2.targetOffset).asUInt
+        val npc = uop_pc + coreInstrBytes.U
+        val jal_br_target = (uop_pc.asSInt + brUpdate.b2.targetOffset).asUInt
 
         val bj_addr = Mux(brUpdate.b2.cfiType === CFI_JIRL,
             brUpdate.b2.jalrTarget, jal_br_target
@@ -611,10 +613,7 @@ class iFuCore extends CoreModule {
     csr.io.exception := RegNext(rob.io.com_xcpt.valid)
     csr.io.com_xcpt  := RegNext(rob.io.com_xcpt)
 
-    csr.io.err_pc := (
-        AlignPCToBoundary(ifu.io.core.getFtqPc(0).compc, iCacheLineBytes) +
-        RegNext(rob.io.com_xcpt.bits.pc_lob)
-    )
+    csr.io.err_pc := AlignPCToBoundary(ifu.io.core.getFtqPc(0).compc, fetchBytes) | RegNext(rob.io.com_xcpt.bits.pc_lob)
 
     csr.io.is_ll := (
         (mem_resps(0).valid && mem_resps(0).bits.uop.is_ll) ||

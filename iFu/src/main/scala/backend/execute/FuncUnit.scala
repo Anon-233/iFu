@@ -108,9 +108,8 @@ class ALUUnit(
 
     var op1Data: UInt = null
     if (isJmpUnit) {
-        val icBlockBytes = frontendParams.iCacheParams.lineBytes
-        val block_pc = AlignPCToBoundary(io.getFtqPC.pc, icBlockBytes)
-        val uop_pc  = (block_pc | uop.pcLowBits)
+        val block_pc = AlignPCToBoundary(io.getFtqPC.pc, frontendParams.fetchBytes)
+        val uop_pc  = block_pc | uop.pcLowBits
 
         op1Data = Mux(uop.ctrl.op1_sel === OP1_RS1, io.req.bits.rs1Data,
                   Mux(uop.ctrl.op1_sel === OP1_PC,  uop_pc, 0.U))
