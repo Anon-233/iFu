@@ -9,12 +9,12 @@ import iFu.common.Consts._
 class MicroOp extends CoreBundle {
     // ---------------------------------------------------------
     val numFTQEntries: Int   = frontendParams.numFTQEntries
-    val iCacheLineBytes: Int = frontendParams.iCacheParams.lineBytes
+    val fetchBytes: Int      = frontendParams.fetchBytes
     val robAddrSz: Int       = robParameters.robAddrSz
     val ldqAddrSz: Int       = lsuParameters.ldqAddrSz
     val stqAddrSz: Int       = lsuParameters.stqAddrSz
     // ---------------------------------------------------------
-    val pcLowBits: UInt = UInt(log2Ceil(iCacheLineBytes).W)
+    val pcLowBits: UInt = UInt(log2Ceil(fetchBytes).W)
     val instr: UInt     = UInt(coreInstrBits.W)
     val uopc: UInt      = UInt(UOPC_SZ.W)
     val iqType: UInt    = UInt(IQT_SZ.W)

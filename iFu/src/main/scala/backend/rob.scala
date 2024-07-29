@@ -334,7 +334,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
             rXcptVal := true.B
             nextXcptUop := io.enq_uops(idx)
-            rXcptBadvaddr := AlignPCToBoundary(io.xcpt_fetch_pc,frontendParams.iCacheParams.lineBytes) | io.enq_uops(idx).pcLowBits
+            rXcptBadvaddr := AlignPCToBoundary(io.xcpt_fetch_pc,frontendParams.fetchBytes) | io.enq_uops(idx).pcLowBits
         }
     }
 

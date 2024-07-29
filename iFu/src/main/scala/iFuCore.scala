@@ -25,7 +25,7 @@ class iFuCore extends CoreModule {
     val memIssueParam   = issueParams.filter(_.iqType == IQT_MEM.litValue)(0)
     val intIssueParam   = issueParams.filter(_.iqType == IQT_INT.litValue)(0)
     val numFTQEntries   = frontendParams.numFTQEntries
-    val iCacheLineBytes = frontendParams.iCacheParams.lineBytes
+    val fetchBytes      = frontendParams.fetchBytes
 
 /*-----------------------------*/
 
@@ -173,10 +173,7 @@ class iFuCore extends CoreModule {
         when (FlushTypes.useCsrEvec(flush_type)) {
             ifu.io.core.redirect_pc := csr.io.redirect_pc
         } .otherwise {
-            val flush_pc = (
-                AlignPCToBoundary(ifu.io.core.getFtqPc(0).pc, iCacheLineBytes) +
-                RegNext(rob.io.flush.bits.pc_lob)
-            )
+            val flush_pc = AlignPCToBoundary(ifu.io.core.getFtqPc(0).pc, fetchBytes) | RegNext(rob.io.flush.bits.pc_lob)
             val flush_pc_next = flush_pc + coreInstrBytes.U
             ifu.io.core.redirect_pc := Mux(
                 FlushTypes.useSamePC(flush_type),
@@ -185,11 +182,11 @@ class iFuCore extends CoreModule {
         }
         ifu.io.core.redirect_ftq_idx := RegNext(rob.io.flush.bits.ftq_idx)
     } .elsewhen(brUpdate.b2.mispredict) {
-        val block_pc = AlignPCToBoundary(ifu.io.core.getFtqPc(1).pc, iCacheLineBytes)
-        val uop_maybe_pc = block_pc | brUpdate.b2.uop.pcLowBits
+        val block_pc = AlignPCToBoundary(ifu.io.core.getFtqPc(1).pc, fetchBytes)
+        val uop_pc = block_pc | brUpdate.b2.uop.pcLowBits
 
-        val npc = uop_maybe_pc + coreInstrBytes.U
-        val jal_br_target = (uop_maybe_pc.asSInt + brUpdate.b2.targetOffset).asUInt
+        val npc = uop_pc + coreInstrBytes.U
+        val jal_br_target = (uop_pc.asSInt + brUpdate.b2.targetOffset).asUInt
 
         val bj_addr = Mux(brUpdate.b2.cfiType === CFI_JIRL,
             brUpdate.b2.jalrTarget, jal_br_target
@@ -611,10 +608,7 @@ class iFuCore extends CoreModule {
     csr.io.exception := RegNext(rob.io.com_xcpt.valid)
     csr.io.com_xcpt  := RegNext(rob.io.com_xcpt)
 
-    csr.io.err_pc := (
-        AlignPCToBoundary(ifu.io.core.getFtqPc(0).compc, iCacheLineBytes) +
-        RegNext(rob.io.com_xcpt.bits.pc_lob)
-    )
+    csr.io.err_pc := AlignPCToBoundary(ifu.io.core.getFtqPc(0).compc, fetchBytes) | RegNext(rob.io.com_xcpt.bits.pc_lob)
 
     csr.io.is_ll := (
         (mem_resps(0).valid && mem_resps(0).bits.uop.is_ll) ||
