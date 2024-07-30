@@ -375,8 +375,8 @@ class CSRFile extends CoreModule {
         csrRegNxt.crmd.plv       := 0.U(2.W)
         csrRegNxt.crmd.ie        := 0.U(1.W)
         csrRegNxt.era            := io.err_pc
-        csrRegNxt.estat.ecode    := io.com_xcpt.bits.cause(14,9)
-        csrRegNxt.estat.esubcode := io.com_xcpt.bits.cause(8,0)
+        csrRegNxt.estat.ecode    := CauseCode.microCause2ecode(io.com_xcpt.bits.cause)
+        csrRegNxt.estat.esubcode := CauseCode.microCause2esubcode(io.com_xcpt.bits.cause)
 
         when (
             io.com_xcpt.bits.cause === TLBR ||

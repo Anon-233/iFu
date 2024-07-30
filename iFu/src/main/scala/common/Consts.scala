@@ -4,41 +4,29 @@ import chisel3._
 import chisel3.util._
 
 object CauseCode {
-    val ecodeBits     = 6
-    val subcodeBits   = 9
+    val ecodeBits = 6
+    val subcodeBits = 9
     val causeCodeBits = ecodeBits + subcodeBits
+    val microCauseBits = 6
 
-    // 接收到外部硬件中断 核间中断 内部软中断 定时器中断
-    def INT = Cat(0x0.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    // load 指令访问的页表项无效
-    def PIL = Cat(0x1.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    // store 指令访问的页表项无效
-    def PIS = Cat(0x2.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    // 取指操作访问的页表项无效
-    def PIF = Cat(0x3.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    // store 指令访问一个可写位和脏位不全为 1 的有效页表项
-    def PME = Cat(0x4.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    // 访问的有效页表项的PLV等级权限高于CPU当前的PLV等级
-    def PPI = Cat(0x7.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    // 取指PC不对齐 映射地址模式下 CPU当前处于PLV3 PC第31位为 1 且不落在任何有效的直接映射窗口中
-    def ADEF = Cat(0x8.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    // 映射地址模式下 CPU当前处于PLV3 访存指令虚地址的第31位为 1 且不落在任何有效的直接映射窗口中
-    def ADEM = Cat(0x8.U(ecodeBits.W), 0x1.U(subcodeBits.W))
-    // 非字节访存指令的地址不是自然对齐的
-    def ALE = Cat(0x9.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    // 执行 syscall 指令
-    def SYS = Cat(0xb.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    // 执行 break 指令
-    def BRK = Cat(0xc.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    // 指令不存在
-    def INE = Cat(0xd.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    // CPU当前处于PLV3，执行特权指令
-    def IPE = Cat(0xe.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    // 映射地址模式下 访存地址不落在任何有效的直接映射窗口中 且在 TLB 中找不到对应的表项
-    def TLBR = Cat(0x3f.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    def INT = 0x0.U(ecodeBits.W)
+    def PIL = 0x1.U(ecodeBits.W)
+    def PIS = 0x2.U(ecodeBits.W)
+    def PIF = 0x3.U(ecodeBits.W)
+    def PME = 0x4.U(ecodeBits.W)
+    def PPI = 0x7.U(ecodeBits.W)
+    def ADEF = 0x8.U(ecodeBits.W)
+    def ALE = 0x9.U(ecodeBits.W)
+    def SYS = 0xb.U(ecodeBits.W)
+    def BRK = 0xc.U(ecodeBits.W)
+    def INE = 0xd.U(ecodeBits.W)
+    def TLBR = 0x3f.U(ecodeBits.W)
 
     def MINI_EXCEPTION_MEM_ORDERING = Cat(0x1a.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    def MINI_EXCEPTION_L0TLB_MISS   = Cat(0x1a.U(ecodeBits.W), 0x1.U(subcodeBits.W))
+    def MINI_EXCEPTION_L0TLB_MISS   = Cat(0x1b.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+
+    def microCause2ecode(uCause: UInt): UInt = uCause
+    def microCause2esubcode(uCause: UInt): UInt = 0.U(subcodeBits.W)
 }
 
 object Consts {

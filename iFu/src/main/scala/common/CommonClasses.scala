@@ -124,7 +124,7 @@ class Exception extends CoreBundle {
 class CommitExceptionSignals extends CoreBundle {
     val ftq_idx = UInt(log2Ceil(frontendParams.numFTQEntries).W)
     val pc_lob = UInt(log2Ceil(frontendParams.fetchBytes).W)
-    val cause = UInt(15.W)
+    val cause = UInt(CauseCode.microCauseBits.W)
     val badvaddr = UInt(xLen.W)
     val vaddrWriteEnable = Bool()
 

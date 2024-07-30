@@ -50,7 +50,7 @@ class MicroOp extends CoreBundle {
     val ldqIdx: UInt = UInt(ldqAddrSz.W)
     val stqIdx: UInt = UInt(stqAddrSz.W)
 
-    val iwState: UInt        = UInt(2.W)
+    val iwState: UInt = UInt(2.W)
     val iw_p1_poisoned: Bool = Bool()
     val iw_p2_poisoned: Bool = Bool()
 
@@ -58,7 +58,7 @@ class MicroOp extends CoreBundle {
     val prs2_busy: Bool  = Bool()
 
     val xcpt_valid: Bool = Bool()
-    val xcpt_cause: UInt = UInt(15.W)
+    val xcpt_cause: UInt = UInt(CauseCode.microCauseBits.W)
     val vaddrWriteEnable: Bool = Bool()
     val ctrl = new CtrlSignals
 
@@ -70,17 +70,17 @@ class MicroOp extends CoreBundle {
     val mem_size: UInt   = UInt(2.W)
     val mem_signed: Bool = Bool()
 
-    val is_dbar: Bool  = Bool()
+    val is_dbar: Bool = Bool()
     val is_ibar: Bool = Bool()
-    val is_ll: Bool     = Bool()
-    val is_sc: Bool     = Bool()
+    val is_ll: Bool = Bool()
+    val is_sc: Bool = Bool()
 
     val is_sys_pc2epc: Bool = Bool()
     val is_unique: Bool = Bool()
     val flush_on_commit: Bool = Bool()
 
-    val debug_inst: UInt    = if (!FPGAPlatform) UInt(coreInstrBits.W) else null
-    val debug_pc: UInt      = if (!FPGAPlatform) UInt(32.W) else null
+    val debug_inst: UInt = if (!FPGAPlatform) UInt(coreInstrBits.W) else null
+    val debug_pc: UInt = if (!FPGAPlatform) UInt(vaddrBits.W) else null
     val debug_mispred: Bool = if (!FPGAPlatform) Bool() else null
     val debug_load_uncacheable: Bool = if (!FPGAPlatform) Bool() else null
 
