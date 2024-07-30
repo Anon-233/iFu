@@ -7,7 +7,7 @@ import iFu.common._
 import iFu.common.Consts._
 
 class DTLBException extends CoreBundle {
-    val xcpt_cause = UInt(15.W)
+    val xcpt_cause = UInt(CauseCode.microCauseBits.W)
 }
 
 class DTLBReq extends CoreBundle {

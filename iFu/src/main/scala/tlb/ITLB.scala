@@ -12,7 +12,7 @@ class ITLBReq extends CoreBundle {
 
 // PIF PPI ADEF TLBR
 class ITLBException extends CoreBundle {
-    val xcpt_cause = UInt(CauseCode.causeCodeBits.W)
+    val xcpt_cause = UInt(CauseCode.microCauseBits.W)
 }
 
 class ITLBResp extends CoreBundle {
