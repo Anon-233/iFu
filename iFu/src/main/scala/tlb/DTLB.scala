@@ -53,6 +53,7 @@ class DTLB(num_l0_dtlb_entries: Int = 2) extends CoreModule with L0TLBState {
 
     // addr translation
     val l0_miss = WireInit(VecInit(Seq.fill(memWidth)(false.B)))
+    val use_page_table = WireInit(VecInit(Seq.fill(memWidth)(false.B)))
     for (w <- 0 until memWidth) {
         val trans_resp   = WireInit(0.U.asTypeOf(new DTLBResp))
         val vaddr        = io.req(w).bits.vaddr
@@ -93,6 +94,7 @@ class DTLB(num_l0_dtlb_entries: Int = 2) extends CoreModule with L0TLBState {
                     (dmw1_en && (csr_regs.dmw1_mat === 0.U))
                 )
             } .otherwise {
+                use_page_table(w) := true.B
                 val entry = l0_hit_entry.entry
                 val odd_even_page = Mux(entry.meta.ps === 12.U, vaddr(12), vaddr(21))
                 val data = entry.data(odd_even_page)
@@ -142,7 +144,7 @@ class DTLB(num_l0_dtlb_entries: Int = 2) extends CoreModule with L0TLBState {
         val r_resp = RegNext(io.r_resp(w))
 
         val refill_vppn = RegNext(RegNext(RegNext(io.req(w).bits.vaddr(vaddrBits - 1, 13))))
-        val refill_en   = RegNext(RegNext(RegNext(l0_miss(w))) && (state === s_refill))
+        val refill_en   = RegNext(RegNext(RegNext(l0_miss(w) && use_page_table(w)))) && (state === s_refill)
         val refill_idx  = RegInit(0.U(log2Ceil(num_l0_dtlb_entries).W))
         refill_idx := refill_idx + refill_en
         if (!FPGAPlatform) dontTouch(refill_idx)

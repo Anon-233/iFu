@@ -22,8 +22,8 @@ object CauseCode {
     def INE = 0xd.U(ecodeBits.W)
     def TLBR = 0x3f.U(ecodeBits.W)
 
-    def MINI_EXCEPTION_MEM_ORDERING = Cat(0x1a.U(ecodeBits.W), 0x0.U(subcodeBits.W))
-    def MINI_EXCEPTION_L0TLB_MISS   = Cat(0x1b.U(ecodeBits.W), 0x0.U(subcodeBits.W))
+    def MINI_EXCEPTION_MEM_ORDERING = 0x1a.U(ecodeBits.W)
+    def MINI_EXCEPTION_L0TLB_MISS   = 0x1b.U(ecodeBits.W)
 
     def microCause2ecode(uCause: UInt): UInt = uCause
     def microCause2esubcode(uCause: UInt): UInt = 0.U(subcodeBits.W)

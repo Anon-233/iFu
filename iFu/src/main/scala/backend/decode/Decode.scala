@@ -261,7 +261,7 @@ class DecodeUnit extends CoreModule {
 
     val id_illegal_insn = !cs.legal
     val xcpt_valid = WireInit(false.B)
-    val xcpt_cause = WireInit(0.U(15.W))
+    val xcpt_cause = WireInit(0.U(CauseCode.microCauseBits.W))
 
     when (io.interrupt) {
         xcpt_valid := true.B

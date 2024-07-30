@@ -67,6 +67,7 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule with L0TLBState {
     if (!FPGAPlatform) dontTouch(dmw1_en)
 
     // addr translation
+    val use_page_table = WireInit(false.B)
     io.resp := 0.U.asTypeOf(new ITLBResp)
     when (vaddr(1, 0) =/= 0.U) {
         io.resp.exception.valid           := true.B
@@ -80,6 +81,7 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule with L0TLBState {
             )
             io.resp.exception.valid := false.B
         } .otherwise {
+            use_page_table := true.B
             val entry = l0_hit_entry.entry
             val odd_even_page = Mux(entry.meta.ps === 12.U, vaddr(12), vaddr(21))
             val data = entry.data(odd_even_page)
@@ -121,7 +123,7 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule with L0TLBState {
     val r_resp = RegNext(io.r_resp)
 
     val refill_vppn = RegNext(RegNext(RegNext(vaddr(vaddrBits - 1, 13))))
-    val refill_en   = RegNext(RegNext(RegNext(io.req.valid && !l0_hit))) && (state === s_refill)
+    val refill_en   = RegNext(RegNext(RegNext(io.req.valid && !l0_hit && use_page_table))) && (state === s_refill)
     val refill_idx  = RegInit(0.U(log2Ceil(num_l0_itlb_entries).W))
     refill_idx := refill_idx + refill_en
     if (!FPGAPlatform) dontTouch(refill_idx)
