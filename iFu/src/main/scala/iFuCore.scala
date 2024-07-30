@@ -315,7 +315,8 @@ class iFuCore extends CoreModule {
     val wait_for_empty_pipeline = (0 until coreWidth).map { w =>
         (dis_uops(w).is_unique) &&
         (
-            !rob.io.empty ||
+            // for better timing , now we need rob.io.enq_valids
+            RegNext(!rob.io.empty || rob.io.enq_valids.asUInt.orR) ||
             // !(lsu.io.core.stq_empty && !(dis_uops(w).is_ibar && !lsu.io.core.dcache_ord)) ||
             (!lsu.io.core.stq_empty || (dis_uops(w).is_ibar && !lsu.io.core.dcache_ord)) ||
             dis_prior_slot_valid(w)
