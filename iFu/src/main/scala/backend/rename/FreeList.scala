@@ -38,7 +38,8 @@ class FreeList extends CoreModule {
     val regIndices = Seq.fill(coreWidth) {Reg(UInt(pregSize.W))}
     // if selected reg is valid, always valid, otherwise may be used by req
     regValids zip selPregsValid zip io.reqs foreach { case ((regValid, selValid), req) =>
-        regValid := selValid || (regValid && !req) }
+        regValid := selValid || (regValid && !req)
+    }
     // whether should fill in new regs
     val selPregFire = VecInit(selPregsValid zip regValids zip io.reqs map { case ((selValid, regValid), req) =>
         (!regValid || req) && selValid

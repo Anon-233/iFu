@@ -102,11 +102,7 @@ class RenameStage (numRenameWakeupPorts: Int) extends CoreModule {
     io.ren2_mask := ren2Valids
 
     //实例化模块
-    val maptable = Module(new RenameMapTable(
-        coreWidth,
-        32,
-        numPRegs
-    ))
+    val maptable = Module(new MapTable)
 
     val freelist = Module(new FreeList)
 
@@ -132,8 +128,8 @@ class RenameStage (numRenameWakeupPorts: Int) extends CoreModule {
     //-------------------RenameTable-------------------
 
     //inputs
-    val mapReqs = Wire(Vec(coreWidth, new MaptableReq(lregSz)))
-    val remapReqs = Wire(Vec(coreWidth, new ReMapReq(lregSz, pregSize)))
+    val mapReqs = Wire(Vec(coreWidth, new MaptableReq))
+    val remapReqs = Wire(Vec(coreWidth, new ReMapReq))
 
     for ((((ren1, ren2), com), w) <- (ren1Uops zip ren2Uops zip io.com_uops.reverse).zipWithIndex) {
         mapReqs(w).lrs1 := ren1.lrs1
@@ -152,7 +148,6 @@ class RenameStage (numRenameWakeupPorts: Int) extends CoreModule {
     maptable.io.remap_reqs := remapReqs
     maptable.io.ren_br_tags := ren2BrTags
     maptable.io.brupdate := io.brupdate
-    maptable.io.rollback := io.rollback
 
     //outputs
     for ((uop, w) <- ren1Uops.zipWithIndex) {
