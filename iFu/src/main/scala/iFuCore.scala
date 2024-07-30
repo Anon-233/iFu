@@ -116,7 +116,22 @@ class iFuCore extends CoreModule {
     require(jmp_unit.bypassable)
 
     // --------------------------------------
-    // val brus = Seq(Module(new BranchUnit(false)), Module(new BranchUnit(true)))
+    val ftq_arb = Seq.fill(2) { Module(new Arbiter(UInt(log2Ceil(numFTQEntries).W), 2)) }
+    ftq_arb map { _.io.out.ready := true.B }
+
+    val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
+    val jmp_pc_req   = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
+    ftq_arb(0).io.in(0) <> flush_pc_req
+    ftq_arb(0).io.in(1) <> jmp_pc_req
+    ifu.io.core.getFtqPc(0).ftqIdx := ftq_arb(0).io.out.bits
+
+    val mispred_req  = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
+    val xcpt_pc_req  = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
+    ftq_arb(1).io.in(0) <> mispred_req
+    ftq_arb(1).io.in(1) <> xcpt_pc_req
+    ifu.io.core.getFtqPc(1).ftqIdx := ftq_arb(1).io.out.bits
+
+    // --------------------------------------
     val brus = (0 until 2) map { i =>
         Module(new BranchUnit(i != 0))
     }
@@ -132,7 +147,8 @@ class iFuCore extends CoreModule {
     }
 
     val b1_mispredict_val = brus(0).io.br_s1_mispredict
-    ifu.io.core.getFtqPc(1).ftqIdx := brus(0).io.mis_br_ftqIdx
+    mispred_req.valid := b1_mispredict_val
+    mispred_req.bits  := brus(0).io.mis_br_ftqIdx
     val brUpdate = brus(0).io.br_update
 
     ifu.io.core.brupdate := brUpdate
@@ -223,25 +239,11 @@ class iFuCore extends CoreModule {
         rob.io.commit.uops(youngest_com_idx).ftqIdx
     )
 
-    val ftq_arb = Module(new Arbiter(UInt(log2Ceil(numFTQEntries).W), 3))
-    val flush_pc_req = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
-    val jmp_pc_req   = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
-    val xcpt_pc_req  = Wire(Decoupled(UInt(log2Ceil(numFTQEntries).W)))
-
-    // Order by the oldest. Flushes come from the oldest instructions in pipe
-    // Decoding exceptions come from youngest
-    ftq_arb.io.in(0) <> flush_pc_req
-    ftq_arb.io.in(1) <> jmp_pc_req
-    ftq_arb.io.in(2) <> xcpt_pc_req
-
     flush_pc_req.valid := rob.io.flush.valid
     flush_pc_req.bits := rob.io.flush.bits.ftq_idx
 
     jmp_pc_req.valid := RegNext(iss_valids(jmp_unit_idx) && iss_uops(jmp_unit_idx).fuCode === FU_JMP)
     jmp_pc_req.bits := RegNext(iss_uops(jmp_unit_idx).ftqIdx)
-
-    ifu.io.core.getFtqPc(0).ftqIdx := ftq_arb.io.out.bits
-    ftq_arb.io.out.ready := true.B
 
     jmp_unit.io.getFtqPc := DontCare
     jmp_unit.io.getFtqPc.pc      := ifu.io.core.getFtqPc(0).pc
@@ -249,9 +251,9 @@ class iFuCore extends CoreModule {
     jmp_unit.io.getFtqPc.nextVal := ifu.io.core.getFtqPc(0).nextVal
     jmp_unit.io.getFtqPc.nextpc  := ifu.io.core.getFtqPc(0).nextpc
 
-    val reg_xcpt_fetch_pc = RegEnable(ifu.io.core.getFtqPc(0).pc, 0.U, RegNext(xcpt_pc_req.fire))
+    val reg_xcpt_fetch_pc = RegEnable(ifu.io.core.getFtqPc(1).pc, 0.U, RegNext(xcpt_pc_req.fire))
     dontTouch(reg_xcpt_fetch_pc)
-    rob.io.xcpt_fetch_pc := Mux(RegNext(xcpt_pc_req.fire), ifu.io.core.getFtqPc(0).pc, reg_xcpt_fetch_pc)
+    rob.io.xcpt_fetch_pc := Mux(RegNext(xcpt_pc_req.fire), ifu.io.core.getFtqPc(1).pc, reg_xcpt_fetch_pc)
 
     //-------------------------------------------------------------
     //-------------------------------------------------------------

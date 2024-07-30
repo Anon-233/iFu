@@ -223,17 +223,18 @@ class FetchTargetQueue extends CoreModule {
         val nextIdx = WrapInc(idx, numFTQEntries)
         val nextIsEnq = (nextIdx === bpu_ptr) && io.enq.fire
         val nextpc = Mux(nextIsEnq, io.enq.bits.pc, pcs(nextIdx))
-        val getEntry = ram(idx)
-        io.getFtqpc(i).entry       := RegNext(getEntry)
-        if (i == 1) {
-            io.getFtqpc(i).rasPtr   := rasPtr.read(idx)
+        io.getFtqpc(i).entry := RegNext(ram(idx))
+        io.getFtqpc(i).pc := RegNext(pcs(idx))
+        if (i == 0) {
+            io.getFtqpc(i).rasPtr := DontCare
+            io.getFtqpc(i).compc := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, commited_ptr)))
+            io.getFtqpc(i).nextVal := RegNext(nextIdx =/= bpu_ptr || nextIsEnq)
+            io.getFtqpc(i).nextpc := RegNext(nextpc)
         } else {
-            io.getFtqpc(i).rasPtr   := DontCare
+            io.getFtqpc(i).rasPtr := rasPtr.read(idx)
+            io.getFtqpc(i).compc := DontCare
+            io.getFtqpc(i).nextVal := DontCare
+            io.getFtqpc(i).nextpc := DontCare
         }
-
-        io.getFtqpc(i).pc      := RegNext(pcs(idx))
-        io.getFtqpc(i).nextpc  := RegNext(nextpc)
-        io.getFtqpc(i).nextVal := RegNext(nextIdx =/= bpu_ptr || nextIsEnq)
-        io.getFtqpc(i).compc   := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, commited_ptr)))
     }
 }
