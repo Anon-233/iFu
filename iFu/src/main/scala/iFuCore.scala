@@ -43,7 +43,7 @@ class iFuCore extends CoreModule {
     val numIssueWakeupPorts = numWritePorts + numFastWakeupPorts - numAlwaysBypassable
     val numRenameWakeupPorts = numIssueWakeupPorts
 
-    val rename_stage = Module(new RenameStage(coreWidth, numPRegs, numRenameWakeupPorts))
+    val rename_stage = Module(new RenameStage(numRenameWakeupPorts))
 
     val mem_iss_unit = Module(new IssueUnitAgeOrdered(memIssueParam, numIssueWakeupPorts))
     val int_iss_unit = Module(new IssueUnitAgeOrdered(intIssueParam, numIssueWakeupPorts))

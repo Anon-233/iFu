@@ -68,20 +68,6 @@ object GetNewUopAndBrMask {
     }
 }
 
-object SelectFirstN {
-    def apply(in: UInt, n: Int) = {
-        val sels = Wire(Vec(n, UInt(in.getWidth.W)))
-        var mask = in
-
-        for (i <- 0 until n) {
-            sels(i) := PriorityEncoderOH(mask)
-            mask = mask & ~sels(i)
-        }
-
-        sels
-    }
-}
-
 object IsOlder
 {
     def apply(i0: UInt, i1: UInt, head: UInt) = ((i0 < i1) ^ (i0 < head) ^ (i1 < head))

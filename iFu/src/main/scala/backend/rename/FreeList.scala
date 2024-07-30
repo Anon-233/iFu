@@ -2,97 +2,81 @@ package iFu.backend
 
 import chisel3._
 import chisel3.util._
-
 import iFu.common._
 import iFu.util._
 
-class FreeList (
-    val plWidth: Int,
-    val numPregs: Int,
-    val numLregs: Int
-) extends CoreModule {
-    val pregSize = log2Ceil(numPregs)
+class FreeList extends CoreModule {
+    val pregSize = log2Ceil(numPRegs)
 
     val io = IO(new Bundle {
-        val reqs = Input(Vec(plWidth, Bool()))
-        val alloc_pregs = Output(Vec(plWidth, Valid(UInt(pregSize.W))))
+        val reqs = Input(Vec(coreWidth, Bool()))
+        val alloc_pregs = Vec(coreWidth, Valid(UInt(pregSize.W)))
 
-        //ROB返回
-        val dealloc_pregs = Input(Vec(plWidth, Valid(UInt(pregSize.W))))
+        // from ROB
+        val dealloc_pregs = Input(Vec(coreWidth, Valid(UInt(pregSize.W))))
 
-        val ren_br_tags   = Input(Vec(plWidth, Valid(UInt(brTagSz.W))))
+        val ren_br_tags = Input(Vec(coreWidth, Valid(UInt(brTagSz.W))))
 
         val brupdate = Input(new BrUpdateInfo)
     })
 
-    //除了x0其他的寄存器刚开始都是free
-    val freeList = RegInit(UInt(numPregs.W), ~(1.U(numPregs.W)))
-    // val brAllocList = Reg(Vec(maxBrCount, UInt(numPregs.W)))
-    val brAllocList = Reg(Vec(maxBrCount, UInt(numPregs.W)))
+    // all free except x0
+    val freeList = RegInit(UInt(numPRegs.W), (~1.U(numPRegs.W)).asUInt)
+    val allocsAfterBr = Reg(Vec(maxBrCount, UInt(numPRegs.W)))
 
-    //分配
-    val selPreg = SelectFirstN(freeList, plWidth)
-    val selPregFire = Wire(Vec(plWidth, Bool()))
+    // allocate
+    val selPregs = Wire(Vec(coreWidth, UInt(numPRegs.W)))
+    val selPregsValid = VecInit(selPregs.map(_.orR))
+    var mask = freeList
+    for (i <- 0 until coreWidth) {
+        selPregs(i) := PriorityEncoderOH(mask)
+        mask = mask & (~selPregs(i)).asUInt
+    }
 
-    val allocPreg = io.alloc_pregs map (a => UIntToOH(a.bits))
-    val allocPregMask = (allocPreg zip io.reqs).scanRight(0.U(numPregs.W)){ case ((a,r),m) => m | a & Fill(numPregs,r) }
+    // maintain stored allocated regs
+    val regValids = Seq.fill(coreWidth) {RegInit(false.B)}
+    val regIndices = Seq.fill(coreWidth) {Reg(UInt(pregSize.W))}
+    // if selected reg is valid, always valid, otherwise may be used by req
+    regValids zip selPregsValid zip io.reqs foreach { case ((regValid, selValid), req) =>
+        regValid := selValid || (regValid && !req) }
+    // whether should fill in new regs
+    val selPregFire = VecInit(selPregsValid zip regValids zip io.reqs map { case ((selValid, regValid), req) =>
+        (!regValid || req) && selValid
+    })
+    regIndices zip selPregs zip selPregFire map { case ((regNum, selPreg), fire) =>
+        when (fire) {
+            regNum := OHToUInt(selPreg)
+        }
+    }
 
-    //标记分配mask
-    val selMask = (selPreg zip selPregFire) map { case (s,f) => s & Fill(numPregs,f) } reduce(_|_)
-    //预测错误的分支中空闲物理寄存器的独热码集合
-    val brDeallocs = brAllocList(io.brupdate.b2.uop.brTag) & Fill(numPregs, io.brupdate.b2.mispredict)
-    //需要释放的物理寄存器独热码集合
-    val deallocMask = io.dealloc_pregs.map(d => UIntToOH(d.bits)(numPregs - 1,0) & Fill(numPregs, d.valid)).reduce(_|_) | brDeallocs
+    io.alloc_pregs zip regValids zip regIndices foreach { case ((io, valid), num) =>
+        io.valid := valid
+        io.bits := num
+    }
 
-    val brSlots = VecInit(io.ren_br_tags.map(tag => tag.valid)).asUInt
+    val allocOHs = regIndices map {UIntToOH(_)}
+    val allocMasks = (allocOHs zip io.reqs).scanRight(0.U(numPRegs.W)) { case ((alloc, req), mask) =>
+        mask | Mux(req, alloc, 0.U)
+    }
 
-    //分支指令分配列表
+    val selMask = ((selPregs zip selPregFire) map { case (reg, fire) => Mux(fire, reg, 0.U) }).reduce(_|_)
+    // free pregs in mispredicted branch
+    val brDeallocs = Mux(io.brupdate.b2.mispredict, allocsAfterBr(io.brupdate.b2.uop.brTag), 0.U)
+    // pregs to free from rob
+    val deallocMask =
+        (io.dealloc_pregs map { de => Mux(de.valid, UIntToOH(de.bits)(numPRegs - 1, 0), 0.U) }).reduce(_|_) | brDeallocs
+
+    val brTagValids = VecInit(io.ren_br_tags map (_.valid)).asUInt
+
     for (i <- 0 until maxBrCount) {
-        val listReq = VecInit(io.ren_br_tags.map(tag => UIntToOH(tag.bits)(i))).asUInt & brSlots
-        val newList = listReq.orR
-        brAllocList(i) := Mux(
-            newList,
-            Mux1H(listReq, allocPregMask.slice(1, plWidth + 1)),
-            brAllocList(i) & ~brDeallocs | allocPregMask(0)
+        val updateList = VecInit(io.ren_br_tags.map(_.bits === i.U)).asUInt & brTagValids
+        allocsAfterBr(i) := Mux(
+            updateList.orR,
+            Mux1H(updateList, allocMasks.slice(1, coreWidth + 1)),
+            (allocsAfterBr(i) & (~brDeallocs).asUInt) | allocMasks.head
         )
     }
 
-    //更新
-    freeList := (freeList & ~selMask | deallocMask) & ~(1.U(numPregs.W))
+    freeList := (freeList & (~selMask).asUInt | deallocMask) & (~1.U(numPRegs.W)).asUInt
 
-    //输出
-    for (w <- 0 until plWidth) {
-        val can = selPreg(w).orR
-        val rValid = RegInit(false.B)
-        val rSel = RegEnable(OHToUInt(selPreg(w)), selPregFire(w))
-
-        rValid := rValid & !io.reqs(w) || can
-        selPregFire(w) := (!rValid || io.reqs(w)) && can
-
-        io.alloc_pregs(w).bits := rSel
-        io.alloc_pregs(w).valid := rValid
-    }
-
-    // val rValids = RegInit(VecInit(Seq.fill(plWidth)(false.B)))
-    // val rPregs  = Reg(Vec(plWidth, UInt(pregSize.W)))
-
-    // val selPregs = SelectFirstN(freeList, plWidth)
-    // val newPregs = selPregs.map(s => s.orR)
-
-    // // alloc logic
-    // for (w <- 0 until plWidth) {
-    //     io.alloc_pregs(w).valid := rValids(w)
-    //     io.alloc_pregs(w).bits := rPregs(w)
-    // }
-
-    // // fill logic
-    // for (w <- 0 until plWidth) {
-    //     rValids(w) := (rValids(w) && !io.reqs(w)) || newPregs(w)
-
-    //     val needNewPreg := !rValids(w) || io.reqs(w)
-    //     val rPregWriteEn := needNewPreg(w) && newPregs(w)
-    //     when (rPregWriteEn) {
-    //         rPregs(w) := selPregs(w)
-    //     }
-    // }
 }
