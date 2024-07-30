@@ -122,9 +122,6 @@ object Consts {
     val OP2_ZERO = 2.U(3.W) // constant 0
     val OP2_NEXT = 3.U(3.W) // constant 4 (for PC + 4)
 
-    val REN_0 = false.B
-    val REN_1 = true.B
-
     val BUBBLE = 0.U(32.W)
 
     val UOPC_SZ = 7
@@ -277,13 +274,12 @@ object FlushTypes {
     def apply() = UInt(SZ.W)
     def none = 0.U
     def xcpt = 1.U
-    def eret = (2+1).U
-    def refetch = 2.U
+    def eret = 2.U
+    def refetch = 3.U
     def next = 4.U
 
     def useCsrEvec(typ: UInt): Bool = typ === eret || typ === xcpt
     def useSamePC(typ: UInt): Bool  = typ === refetch
-    def usePCplus4(typ: UInt): Bool = typ === next
 
     def getType(valid: Bool, i_xcpt: Bool, i_eret: Bool, i_refetch: Bool): UInt = {
         val ret = Mux(!valid, none,

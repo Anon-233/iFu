@@ -39,11 +39,11 @@ class MapTable extends CoreModule {
     val brShot = Reg(Vec(maxBrCount, Vec(numLRegs, UInt(pregSz.W))))
 
     val remapTable = io.remap_reqs.scanLeft(mapTable) { case (table, req) =>
-        VecInit(table.zipWithIndex map { case (preg, idx) =>
-            if (idx == 0) {
+        VecInit(table.zipWithIndex map { case (preg, lreg) =>
+            if (lreg == 0) {
                 0.U
             } else {
-                Mux(req.valid && req.ldst === idx.U, req.pdst, preg)
+                Mux(req.valid && req.ldst === lreg.U, req.pdst, preg)
             }
         })
     }
