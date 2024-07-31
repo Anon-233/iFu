@@ -68,7 +68,7 @@ class ALUExeUnit (
 ) extends ExecutionUnit (
     writesIrf        = hasAlu || hasMul || hasDiv || hasCnt,
     bypassable       = hasAlu || hasCnt,
-    alwaysBypassable = (hasAlu || hasCnt) && !(hasMem || hasJmpUnit || hasMul || hasDiv || hasCSR),
+    alwaysBypassable = (hasAlu || hasCnt) && !(hasMem || hasJmpUnit || hasMul || hasDiv /* || hasCSR */),
     hasMem           = hasMem,
     hasCSR           = hasCSR,
     hasJmpUnit       = hasJmpUnit,
