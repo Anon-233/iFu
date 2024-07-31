@@ -90,7 +90,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
 
     val rXcptVal      = RegInit(false.B)
     val rXcptUop      = Reg(new MicroOp)
-    val rXcptBadvaddr = Reg(UInt(paddrBits.W))
+    val rXcptBadvaddr = Reg(UInt(vaddrBits.W))
 
     io.flush_frontend := rXcptVal
 
@@ -282,7 +282,7 @@ class Rob(val numWritePorts: Int) extends CoreModule {
     io.com_xcpt.bits.vaddrWriteEnable := rXcptUop.vaddrWriteEnable
     io.com_xcpt.bits.uop := rXcptUop
 
-    io.com_xcpt.bits.badvaddr := Sext(rXcptBadvaddr, xLen)
+    io.com_xcpt.bits.badvaddr := rXcptBadvaddr
 
     val refetchInst = exceptionThrown
     val comXcptUop = PriorityMux(robHeadVals, io.commit.uops)
