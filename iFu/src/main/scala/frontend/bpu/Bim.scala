@@ -74,24 +74,9 @@ class BimPredictor extends Module with HasBimParameters {
     val s1_update_mask = Wire(Vec(fetchWidth,Bool()))
     val s1_update_data = Wire(Vec(fetchWidth, UInt(2.W)))
 
-    // TODO: why we need this?
-    val wr_bypass_regs    = Reg(Vec(nWrBypassEntries, Vec(fetchWidth, UInt(2.W))))
-    val wr_bypass_idxs    = Reg(Vec(nWrBypassEntries, UInt(log2Ceil(nSets).W)))
-    val wr_bypass_enq_idx = RegInit(0.U(log2Ceil(nWrBypassEntries).W))
-
-    val wr_bypass_hits = VecInit((0 until nWrBypassEntries).map { i =>
-        !reset_en &&
-        wr_bypass_idxs(i) === s1_update_idx(log2Ceil(nSets) - 1, 0)
-    })
-    val wr_bypass_hit     = wr_bypass_hits.reduce(_||_)
-    val wr_bypass_hit_idx = PriorityEncoder(wr_bypass_hits)
-
     for (w <- 0 until fetchWidth) {
         s1_update_mask(w) := false.B
-        s1_update_data(w) := Mux(wr_bypass_hit, wr_bypass_regs(wr_bypass_hit_idx)(w), s1_update_meta(w).asUInt)
-
-        val update_pc  = s1_update.bits.pc + (w << 2).U
-        val update_idx = fetchIdx(update_pc)
+        s1_update_data(w) := s1_update_meta(w).asUInt
 
         when (s1_update.valid && (s1_update.bits.brMask(w) ||(s1_update.bits.cfiIdx.valid && s1_update.bits.cfiIdx.bits === w.U))) {
             val was_taken = (
@@ -102,11 +87,7 @@ class BimPredictor extends Module with HasBimParameters {
                     s1_update.bits.cfiIsJal
                 )
             )
-            val old_bim = Mux(
-                wr_bypass_hit,
-                wr_bypass_regs(wr_bypass_hit_idx)(w),
-                s1_update_meta(w).asUInt
-            )
+            val old_bim = s1_update_meta(w).asUInt
 
             s1_update_mask(w) := true.B
             s1_update_data(w) := bimWrite(old_bim, was_taken)
@@ -119,19 +100,5 @@ class BimPredictor extends Module with HasBimParameters {
         Mux(reset_en, (~(0.U(fetchWidth.W))), s1_update_mask.asUInt).asBools
     )
 
-    when (s1_update_mask.reduce(_||_) && s1_update.valid) {
-        when (wr_bypass_hit) {
-            wr_bypass_regs(wr_bypass_hit_idx) := s1_update_data
-        } .otherwise {
-            wr_bypass_regs(wr_bypass_enq_idx) := s1_update_data
-            wr_bypass_idxs(wr_bypass_enq_idx) := s1_update_idx
-            wr_bypass_enq_idx := WrapInc(wr_bypass_enq_idx, nWrBypassEntries)
-        }
-    }
-// ---------------------------------------------
-
-// ---------------------------------------------
-//      Performance Counter
-    // TODO
 // ---------------------------------------------
 }
