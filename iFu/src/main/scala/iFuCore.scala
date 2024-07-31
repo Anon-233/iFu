@@ -530,7 +530,7 @@ class iFuCore extends CoreModule {
         u.iw_p2_poisoned := false.B
     }
 
-    iregister_read.io.brupdate := brUpdate
+    iregister_read.io.brupdate := brus(1).io.br_update
     iregister_read.io.kill := RegNext(rob.io.flush.valid)
 
     iregister_read.io.bypass := bypasses
