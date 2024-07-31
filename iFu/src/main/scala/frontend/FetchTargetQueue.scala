@@ -224,13 +224,15 @@ class FetchTargetQueue extends CoreModule {
         val nextIsEnq = (nextIdx === bpu_ptr) && io.enq.fire
         val nextpc = Mux(nextIsEnq, io.enq.bits.pc, pcs(nextIdx))
         io.getFtqpc(i).entry := RegNext(ram(idx))
-        io.getFtqpc(i).pc := RegNext(pcs(idx))
         if (i == 0) {
+            io.getFtqpc(i).pc := RegNext(pcs(idx))
             io.getFtqpc(i).rasPtr := DontCare
             io.getFtqpc(i).compc := RegNext(pcs(Mux(io.deq.valid, io.deq.bits, commited_ptr)))
             io.getFtqpc(i).nextVal := RegNext(nextIdx =/= bpu_ptr || nextIsEnq)
             io.getFtqpc(i).nextpc := RegNext(nextpc)
         } else {
+            //pcs fetch at s1 for better timing 
+            io.getFtqpc(i).pc := pcs(RegNext(idx))
             io.getFtqpc(i).rasPtr := rasPtr.read(idx)
             io.getFtqpc(i).compc := DontCare
             io.getFtqpc(i).nextVal := DontCare
