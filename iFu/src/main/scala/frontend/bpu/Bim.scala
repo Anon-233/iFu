@@ -28,7 +28,7 @@ class BimPredictor extends Module with HasBimParameters {
 
 // ---------------------------------------------
 //      Reset Logic
-    val reset_en  = RegInit(true.B)
+    val reset_en  = RegInit(false.B)
     val reset_idx = RegInit(0.U(log2Ceil(nSets).W))
     when (reset_en) {
         reset_idx := reset_idx + 1.U
