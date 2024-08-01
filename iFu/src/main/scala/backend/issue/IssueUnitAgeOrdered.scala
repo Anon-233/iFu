@@ -78,12 +78,22 @@ class IssueUnitAgeOrdered (
     val requests = issueSlots.map(_.request)    // get request from each slot
     val portIssued = Array.fill(issueWidth) { false.B }
 
+    val iss_mask = Seq(
+        Seq(true, true,  true,  true,  true,  true,  true, false,  true, false),
+        Seq(true, true,  true,  true,  true,  true, false,  true, false,  true),
+        Seq(true, true,  true, false, false, false, false, false,  true,  true),
+    )
+
     for (i <- 0 until numIssueSlots) {  // iterate through all slots
         issueSlots(i).grant := false.B
         var uopIssued = false.B
 
         for (w <- 0 until issueWidth) {
-            val canAllocate = (issueSlots(i).uop.fuCode & io.fuTypes(w)) =/= 0.U
+            val canAllocate = if (issParams.iqType == IQT_INT.litValue.toInt) {
+                iss_mask(w)(i).B && (issueSlots(i).uop.fuCode & io.fuTypes(w)) =/= 0.U
+            } else {
+                true.B
+            }
             when (canAllocate && requests(i) && !uopIssued && !portIssued(w)) {
                 issueSlots(i).grant := true.B
                 io.issueValids(w) := true.B
