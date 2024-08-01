@@ -31,7 +31,7 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
 
     // ---------------------------------------------
     // Reset
-    val reset_en = RegInit(true.B)
+    val reset_en = RegInit(false.B)
     val reset_idx = RegInit(0.U(nCounterBits.W))
     when(reset_en) {
         reset_idx := reset_idx + 1.U

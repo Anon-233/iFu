@@ -64,7 +64,7 @@ class UBTBIO extends Bundle with HasUbtbParameters {
 class FaUBtbPredictior extends Module with HasUbtbParameters {
     val io = IO(new UBTBIO)
 
-    val valid = RegInit(VecInit(Seq.fill(nWays * fetchWidth)(false.B)))
+    val valid = Reg(Vec(nWays * fetchWidth, Bool()))
     val meta  = Reg(Vec(nWays, Vec(fetchWidth, new UBTBMeta)))
     val btb   = Reg(Vec(nWays, Vec(fetchWidth, new UBTBEntry)))
 
