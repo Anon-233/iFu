@@ -31,6 +31,14 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
 
     // ---------------------------------------------
     // Reset
+    val reset_en = RegInit(true.B)
+    val reset_idx = RegInit(0.U(nCounterBits.W))
+    when(reset_en) {
+        reset_idx := reset_idx + 1.U
+    }
+    when(reset_idx.andR) {
+        reset_en := false.B
+    }
     // ---------------------------------------------
     // Predict
     val s1pc = RegNext(io.s0pc)
@@ -49,7 +57,7 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
 
     io.s2_high_taken := VecInit(s2cnt.map(cnt => {
         val taken = Wire(Valid(Bool()))
-        taken.valid := cnt =/= 2.U
+        taken.valid := cnt =/= 2.U && !reset_en
         taken.bits := cnt(1)
         taken
     }))
@@ -91,9 +99,10 @@ class LocalHistoryPredictor extends Module with HasLocalHistoryParameters {
     when (RegNext(io.s1update.valid)) {
         localHistories.write(fetchIdx(s2update.pc)(nLHRBits - 1, 0), s2newHist)
     }
-    when (RegNext(io.s1update.valid)) { // only counter needs resetting
+    when (RegNext(io.s1update.valid) || reset_en) { // only counter needs resetting
         for (w <- 0 until fetchWidth) {
-            counters(w).write(s2update.meta(w).localHistoryMeta.cntIdx, s2newCounter(w))
+            counters(w).write(Mux(reset_en, reset_idx, s2update.meta(w).localHistoryMeta.cntIdx),
+                Mux(reset_en, 2.U(2.W), s2newCounter(w)))
         }
     }
     // ---------------------------------------------
