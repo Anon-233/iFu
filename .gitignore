@@ -4,4 +4,3 @@ iFu/build
 
 iFu/src/main/scala/backend/memSystem/DCache_v2
 iFu/src/main/scala/backend/memSystem/Dcache/Dcache.scala
-iFu/doc
