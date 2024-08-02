@@ -51,14 +51,6 @@ class BTBPredictor extends Module with HasBtbParameters{
 
 // ---------------------------------------------
 //      Reset Logic
-    val reset_en  = RegInit(false.B)
-    val reset_idx = RegInit(0.U(log2Ceil(nSets).W))
-    when (reset_en) {
-        reset_idx := reset_idx + 1.U
-    }
-    when (reset_idx === (nSets - 1).U) {
-        reset_en := false.B
-    }
 // ---------------------------------------------
 
 // ---------------------------------------------
@@ -91,7 +83,7 @@ class BTBPredictor extends Module with HasBtbParameters{
 
     for (w <- 0 until fetchWidth) {
         // s1 stage
-        val resp_valid = !reset_en && s1_valid && s1_hits(w)
+        val resp_valid = s1_valid && s1_hits(w)
         val entry_meta = s1_meta(s1_hit_ways(w))(w)
         val entry_btb  = s1_btb(s1_hit_ways(w))(w)
         // s2 stage
@@ -156,14 +148,14 @@ class BTBPredictor extends Module with HasBtbParameters{
 
     for (w <- 0 until nWays) {
         val update_en = s1_update_way === w.U /* && !target_overflow */
-        meta(w).io.wen := reset_en || update_en
-        meta(w).io.waddr := Mux(reset_en, reset_idx, s1_update_idx)
-        meta(w).io.wdata := Mux(reset_en, VecInit(Seq.fill(fetchWidth) {0.U.asTypeOf(new BTBMeta)}), s1_update_wmeta)
-        meta(w).io.wstrobe := Mux(reset_en, ~0.U(fetchWidth.W), s1_update_wmeta_mask.asUInt)
-        btb(w).io.wen := reset_en || update_en
-        btb(w).io.waddr := Mux(reset_en, reset_idx, s1_update_idx)
-        btb(w).io.wdata := VecInit(Seq.fill(fetchWidth) {Mux(reset_en, 0.U.asTypeOf(new BTBEntry), s1_update_wbtb)})
-        btb(w).io.wstrobe := Mux(reset_en, ~0.U(fetchWidth.W), s1_update_wbtb_mask.asUInt)
+        meta(w).io.wen := update_en
+        meta(w).io.waddr := s1_update_idx
+        meta(w).io.wdata := s1_update_wmeta
+        meta(w).io.wstrobe := s1_update_wmeta_mask.asUInt
+        btb(w).io.wen := update_en
+        btb(w).io.waddr := s1_update_idx
+        btb(w).io.wdata := VecInit(Seq.fill(fetchWidth) {s1_update_wbtb})
+        btb(w).io.wstrobe := s1_update_wbtb_mask.asUInt
     }
 // ---------------------------------------------
 

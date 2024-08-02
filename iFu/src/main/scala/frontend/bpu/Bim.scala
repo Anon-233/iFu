@@ -28,14 +28,6 @@ class BimPredictor extends Module with HasBimParameters {
 
 // ---------------------------------------------
 //      Reset Logic
-    val reset_en  = RegInit(false.B)
-    val reset_idx = RegInit(0.U(log2Ceil(nSets).W))
-    when (reset_en) {
-        reset_idx := reset_idx + 1.U
-    }
-    when (reset_idx === (nSets - 1).U) {
-        reset_en := false.B
-    }
 // ---------------------------------------------
 
 // ---------------------------------------------
@@ -95,9 +87,9 @@ class BimPredictor extends Module with HasBimParameters {
     }
 
     bim_ram.write(
-        Mux(reset_en, reset_idx, s1_update_idx),
-        Mux(reset_en, VecInit(Seq.fill(fetchWidth){ 2.U(2.W) }), s1_update_data),
-        Mux(reset_en, (~(0.U(fetchWidth.W))), s1_update_mask.asUInt).asBools
+       s1_update_idx,
+        s1_update_data,
+        s1_update_mask
     )
 
 // ---------------------------------------------
