@@ -595,7 +595,7 @@ class NonBlockingDcache extends Module with HasDcacheParameters {
             io.lsu.resp(w).bits.data := io.lsu.llbit.asUInt
         }
 
-        when(s2req.map(x => isSC(x)).reduce(_||_) && !io.lsu.llbit){
+        when(isSC(s2req(0)) && !io.lsu.llbit){
             for(w <- 0 until memWidth){
                 sendResp(w) := s2valid(w)
                 sendNack(w) := false.B
