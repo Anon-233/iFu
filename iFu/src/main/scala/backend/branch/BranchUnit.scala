@@ -12,8 +12,8 @@ case class BRUType (
     to_lsu: Boolean
 )
 
-class BRUIO(t: BRUType) extends CoreBundle {
-    val br_infos  = Input(Vec(coreWidth, new BrResolutionInfo))
+class BRUIO(t: BRUType, brinfoWidth: Int) extends CoreBundle {
+    val br_infos  = Input(Vec(brinfoWidth, new BrResolutionInfo))
     val rob_flush = Input(Bool())
     val rob_head  = if (t.normal || t.to_lsu) Input(UInt(robParameters.robAddrSz.W)) else null
     val jalr_tgt  = if (t.normal) Input(UInt(vaddrBits.W)) else null
@@ -23,8 +23,8 @@ class BRUIO(t: BRUType) extends CoreBundle {
     val br_update        = Output(new BrUpdateInfo)
 }
 
-class BranchUnit(t: BRUType) extends CoreModule {
-    val io = IO(new BRUIO(t))
+class BranchUnit(t: BRUType, brinfoWidth: Int) extends CoreModule {
+    val io = IO(new BRUIO(t, brinfoWidth))
 
 // -----------------------------------------------------------------------
     // clear branch mask and kill instructions

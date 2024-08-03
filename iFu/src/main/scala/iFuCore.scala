@@ -50,11 +50,9 @@ class iFuCore extends CoreModule {
     val issue_units = Seq(mem_iss_unit, int_iss_unit)
     require(exe_units.length == issue_units.map(_.issueWidth).sum)
 
-    val iregfile = Module(new RegisterFileSynthesizable(
-        numPRegs,
+    val iregfile = Module(new RegisterFile(
         exe_units.map(_.numReadPorts).sum,
         numWritePorts,
-        xLen,
         Seq.fill(memWidth) { true } ++ exe_units.bypassable_write_port_mask
     ))
     val iregister_read = Module(new RegisterRead(
@@ -137,7 +135,7 @@ class iFuCore extends CoreModule {
         BRUType(normal = false, to_exu =  true, to_lsu = false),
         BRUType(normal = false, to_exu = false, to_lsu =  true)
     )
-    val brus = bruTypes map { t => Module(new BranchUnit(t)) }
+    val brus = bruTypes map { t => Module(new BranchUnit(t, exe_units.alu_units.length)) }
     brus zip bruTypes foreach { case (bru, t) =>
         bru.io.br_infos zip exe_units.alu_units foreach {
             case (b, e) => b := e.io.brinfo
@@ -610,7 +608,7 @@ class iFuCore extends CoreModule {
 
     var w_cnt = 0
     for (i <- 0 until memWidth) {
-        iregfile.io.write_ports(w_cnt) := WritePort(mem_resps(i), pregSz, xLen, RT_FIX)
+        iregfile.io.write_ports(w_cnt) := WritePort(mem_resps(i), RT_FIX)
         w_cnt += 1
     }
     for (i <- 0 until exe_units.length) {

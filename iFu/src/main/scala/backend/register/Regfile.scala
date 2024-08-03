@@ -7,25 +7,19 @@ import scala.collection.mutable.ArrayBuffer
 
 import iFu.common._
 
-class RegisterFileReadPortIO (
-    val addrWidth: Int, val dataWidth: Int
-) extends CoreBundle {
-    val addr = Input(UInt(addrWidth.W))
-    val data = Output(UInt(dataWidth.W))
+class RegisterFileReadPortIO extends CoreBundle {
+    val addr = Input(UInt(pregSz.W))
+    val data = Output(UInt(xLen.W))
 }
 
-class RegisterFileWritePort (
-    val addrWidth: Int, val dataWidth: Int
-) extends CoreBundle {
-    val addr = UInt(addrWidth.W)
-    val data = UInt(dataWidth.W)
+class RegisterFileWritePort extends CoreBundle {
+    val addr = UInt(pregSz.W)
+    val data = UInt(xLen.W)
 }
 
 object WritePort {
-    def apply(
-        enq: DecoupledIO[ExeUnitResp], addrWidth: Int, dataWidth: Int, rtype: UInt
-    ): Valid[RegisterFileWritePort] = {
-        val wport = Wire(Valid(new RegisterFileWritePort(addrWidth, dataWidth)))
+    def apply(enq: DecoupledIO[ExeUnitResp], rtype: UInt): Valid[RegisterFileWritePort] = {
+        val wport = Wire(Valid(new RegisterFileWritePort))
 
         enq.ready       := true.B
         wport.valid     := enq.valid && enq.bits.uop.dst_rtype === rtype
@@ -35,44 +29,26 @@ object WritePort {
     }
 }
 
-abstract class RegisterFile (
-    numRegisters: Int,
-    numReadPorts: Int,
-    numWritePorts: Int,
-    registerWidth: Int,
-    bypassableArray: Seq[Boolean]
-) extends CoreModule {
-    val io = IO(new CoreBundle{
-        val read_ports  = Vec(
-            numReadPorts, new RegisterFileReadPortIO(pregSz, registerWidth)
-        )
-        val write_ports = Flipped(Vec(
-            numWritePorts, Valid(new RegisterFileWritePort(pregSz, registerWidth))
-        ))
-    })
-}
-
-class RegisterFileSynthesizable (
-    numRegisters : Int,
+class RegisterFile (
     numReadPorts : Int,
     numWritePorts: Int,
-    registerWidth: Int,
     bypassableArray: Seq[Boolean]
-) extends RegisterFile(
-    numRegisters,
-    numReadPorts,
-    numWritePorts,
-    registerWidth,
-    bypassableArray
-) {
-    val regfile = Mem(numRegisters,UInt(registerWidth.W))
+) extends CoreModule {
+    val io = IO(new CoreBundle {
+        val read_ports = Vec(
+            numReadPorts, new RegisterFileReadPortIO
+        )
+        val write_ports = Flipped(Vec(
+            numWritePorts, Valid(new RegisterFileWritePort)
+        ))
+    })
+
+    val regfile = Mem(numPRegs,UInt(xLen.W))
 
     val read_addrs = io.read_ports.map(p => RegNext(p.addr)) // delay 1 cycle
-    val read_data  = Wire(Vec(numReadPorts,UInt(registerWidth.W)))
+    val read_data  = Wire(Vec(numReadPorts,UInt(xLen.W)))
 
-    for (i <- 0 until numReadPorts) {
-        read_data(i) := regfile(read_addrs(i))
-    }
+    read_data := read_addrs.map(regfile(_))
 
     if (bypassableArray.reduce(_||_)) {
         val bypassableWports = ArrayBuffer[Valid[RegisterFileWritePort]]()

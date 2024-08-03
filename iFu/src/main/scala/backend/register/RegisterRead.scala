@@ -18,7 +18,7 @@ class RegisterRead (
         val iss_valids = Input(Vec(issueWidth, Bool()))
         val iss_uops   = Input(Vec(issueWidth, new MicroOp))
 
-        val rf_read_ports  = Flipped(Vec(numReadPortsArray.sum, new RegisterFileReadPortIO(pregSz, registerWidth)))
+        val rf_read_ports  = Flipped(Vec(numReadPortsArray.sum, new RegisterFileReadPortIO))
 
         val bypass   = Input(Vec(numTotalBypassPorts, Valid(new ExeUnitResp(registerWidth))))
 
