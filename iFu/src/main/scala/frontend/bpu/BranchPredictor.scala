@@ -140,7 +140,7 @@ class BranchPredictor extends Module with HasBPUParameters {
     io.resp.f2.predInfos.takens := s2jumpvalid
     io.resp.f2.predInfos.tgts   := btb.io.s2targs
 
-    // f3以f2为基础，接收tage的输出结果
+    // f3以f2为基础，接收lh的输出结果
     io.resp.f3.predInfos := RegNext(io.resp.f2.predInfos)
     for (w <- 0 until fetchWidth) {
         io.resp.f3.predInfos.takens(w) := RegNext(
