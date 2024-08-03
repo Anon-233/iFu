@@ -168,13 +168,15 @@ class Lsu extends CoreModule {
     // -------------------------------------------------------------
 
     // -------------------------------------------------------------
-    val ldq = Reg(Vec(numLdqEntries, Valid(new LDQEntry)))
+    // val ldq = Reg(Vec(numLdqEntries, Valid(new LDQEntry)))
+    val ldq = RegInit(0.U.asTypeOf(Vec(numLdqEntries, Valid(new LDQEntry))))
     val ldq_head = Reg(UInt(ldqAddrSz.W))
     val ldq_tail = Reg(UInt(ldqAddrSz.W))
     // -------------------------------------------------------------
 
     // -------------------------------------------------------------
-    val stq = Reg(Vec(numStqEntries, Valid(new STQEntry)))
+    // val stq = Reg(Vec(numStqEntries, Valid(new STQEntry)))
+    val stq = RegInit(0.U.asTypeOf(Vec(numStqEntries, Valid(new STQEntry))))
     val stq_head = Reg(UInt(stqAddrSz.W)) // will dequeue
     val stq_tail = Reg(UInt(stqAddrSz.W))
     val stq_commit_head  = Reg(UInt(stqAddrSz.W))   // point to next store to commit
