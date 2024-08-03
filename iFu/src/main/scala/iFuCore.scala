@@ -458,18 +458,6 @@ class iFuCore extends CoreModule {
         renport <> intport
     }
 
-    // If we issue loads back-to-back endlessly (probably because we are executing some tight loop)
-    // the store buffer will never drain, breaking the memory-model forward-progress guarantee
-    // If we see a large number of loads saturate the LSU, pause for a cycle to let a store drain
-    val loads_saturating = mem_iss_unit.io.issueValids(0) && mem_iss_unit.io.issueUops(0).use_ldq
-    val saturating_loads_counter = RegInit(0.U(5.W))
-    when(loads_saturating) {
-        saturating_loads_counter := saturating_loads_counter + 1.U
-    } .otherwise {
-        saturating_loads_counter := 0.U
-    }
-    val pause_mem = RegNext(loads_saturating) && saturating_loads_counter === ~(0.U(5.W))
-
     var iss_idx = 0
     var int_iss_cnt = 0
     var mem_iss_cnt = 0
@@ -483,7 +471,7 @@ class iFuCore extends CoreModule {
             fu_types = fu_types & RegNext(~Mux(idiv_issued, FU_DIV, 0.U)).asUInt
         }
         if (exe_unit.hasMem) {
-            mem_iss_unit.io.fuTypes(mem_iss_cnt) := Mux(pause_mem, 0.U, fu_types)
+            mem_iss_unit.io.fuTypes(mem_iss_cnt) := fu_types
             iss_valids(iss_idx) := mem_iss_unit.io.issueValids(mem_iss_cnt)
             iss_uops(iss_idx)   := mem_iss_unit.io.issueUops(mem_iss_cnt)
             mem_iss_cnt += 1
