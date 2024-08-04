@@ -45,8 +45,8 @@ class iFuCore extends CoreModule {
 
     val rename_stage = Module(new RenameStage(numRenameWakeupPorts))
 
-    val mem_iss_unit = Module(new IssueUnitAgeOrdered(memIssueParam, numIssueWakeupPorts))
-    val int_iss_unit = Module(new IssueUnitAgeOrdered(intIssueParam, numIssueWakeupPorts))
+    val mem_iss_unit = Module(new IssueUnit(memIssueParam, numIssueWakeupPorts))
+    val int_iss_unit = Module(new IssueUnit(intIssueParam, numIssueWakeupPorts))
     val issue_units = Seq(mem_iss_unit, int_iss_unit)
     require(exe_units.length == issue_units.map(_.issueWidth).sum)
 
