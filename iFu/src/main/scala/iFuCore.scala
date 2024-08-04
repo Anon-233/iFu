@@ -132,28 +132,33 @@ class iFuCore extends CoreModule {
     ifu.io.core.getFtqPc(1).ftqIdx := ftq_arb(1).io.out.bits
 
     // --------------------------------------
-    val brus = (0 until 2) map { i =>
-        Module(new BranchUnit(i != 0))
-    }
-    brus foreach { bru =>
+    val bruTypes = Seq(
+        BRUType(normal =  true, to_exu = false, to_lsu = false),
+        BRUType(normal = false, to_exu =  true, to_lsu = false),
+        BRUType(normal = false, to_exu = false, to_lsu =  true)
+    )
+    val brus = bruTypes map { t => Module(new BranchUnit(t, exe_units.alu_units.length)) }
+    brus zip bruTypes foreach { case (bru, t) =>
         bru.io.br_infos zip exe_units.alu_units foreach {
             case (b, e) => b := e.io.brinfo
         }
         bru.io.rob_flush := rob.io.flush.valid
-        if (!bru.b1Only) {
+        if (t.normal || t.to_lsu) {
             bru.io.rob_head  := rob.io.rob_head_idx
+        }
+        if (t.normal) {
             bru.io.jalr_tgt  := jmp_unit.io.brinfo.jalrTarget
         }
     }
 
-    val b1_mispredict_val = brus(0).io.br_s1_mispredict
+    val b1_mispredict_val = brus(bruTypes.indexWhere(_.normal)).io.br_s1_mispredict
     mispred_req.valid := b1_mispredict_val
-    mispred_req.bits  := brus(0).io.mis_br_ftqIdx
-    val brUpdate = brus(0).io.br_update
+    mispred_req.bits  := brus(bruTypes.indexWhere(_.normal)).io.mis_br_ftqIdx
+    val brUpdate = brus(bruTypes.indexWhere(_.normal)).io.br_update
 
     ifu.io.core.brupdate := brUpdate
     for (exu <- exe_units) {
-        exu.io.brupdate := brus(1).io.br_update
+        exu.io.brupdate := brus(bruTypes.indexWhere(_.to_exu)).io.br_update
     }
 
     val mem_resps = mem_units.map(_.io.iresp)
@@ -518,7 +523,7 @@ class iFuCore extends CoreModule {
         u.iw_p2_poisoned := false.B
     }
 
-    iregister_read.io.brupdate := brus(1).io.br_update
+    iregister_read.io.brupdate := brus(bruTypes.indexWhere(_.to_exu)).io.br_update
     iregister_read.io.kill := RegNext(rob.io.flush.valid)
 
     iregister_read.io.bypass := bypasses
@@ -582,7 +587,7 @@ class iFuCore extends CoreModule {
     lsu.io.core.commit_load_at_rob_head := rob.io.com_load_is_at_rob_head
 
     lsu.io.core.exception    := RegNext(rob.io.flush.valid)
-    lsu.io.core.brupdate     := brUpdate
+    lsu.io.core.brupdate     := brus(bruTypes.indexWhere(_.to_lsu)).io.br_update
     lsu.io.core.rob_head_idx := rob.io.rob_head_idx
 
     //-------------------------------------------------------------

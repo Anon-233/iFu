@@ -75,7 +75,6 @@ class MicroOp extends CoreBundle {
     val is_ll: Bool = Bool()
     val is_sc: Bool = Bool()
 
-    val is_sys_pc2epc: Bool = Bool()
     val is_unique: Bool = Bool()
     val flush_on_commit: Bool = Bool()
 

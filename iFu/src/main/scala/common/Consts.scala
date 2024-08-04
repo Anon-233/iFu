@@ -254,7 +254,7 @@ object Consts {
     val CSR_DMW0 = 384.U(14.W)
     val CSR_DMW1 = 385.U(14.W) 
 
-    val FPGAPlatform = false
+    val FPGAPlatform = true
 }
 
 object FlushTypes {
