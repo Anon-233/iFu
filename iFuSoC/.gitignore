@@ -1,0 +1,9 @@
+.idea
+.bsp
+.vscode
+.metals
+iFu/build
+target
+project
+src/main/scala/.bsp
+src/main/scala/.scala-build
