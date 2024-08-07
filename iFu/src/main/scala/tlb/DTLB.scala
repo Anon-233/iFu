@@ -47,9 +47,7 @@ class DTLB(num_l0_dtlb_entries: Int = 2) extends CoreModule with L0TLBState {
         ))
     }
 
-    val csr_regs = io.dtlb_csr_context
-    val da_mode  =  csr_regs.crmd_da && !csr_regs.crmd_pg
-    val pg_mode  = !csr_regs.crmd_da &&  csr_regs.crmd_pg
+    val csr_regs = RegNext(io.dtlb_csr_context)
 
     // addr translation
     val l0_miss = WireInit(VecInit(Seq.fill(memWidth)(false.B)))
@@ -70,10 +68,10 @@ class DTLB(num_l0_dtlb_entries: Int = 2) extends CoreModule with L0TLBState {
         ) {
             trans_resp.exception.valid           := true.B
             trans_resp.exception.bits.xcpt_cause := CauseCode.ALE
-        } .elsewhen (da_mode) {
+        } .elsewhen (csr_regs.da_mode) {
             trans_resp.paddr          := vaddr
             trans_resp.is_uncacheable := csr_regs.crmd_datm === 0.U
-        } .elsewhen (pg_mode) {
+        } .elsewhen (csr_regs.pg_mode) {
             val dmw0_en = (
                 (csr_regs.dmw0_plv0 && csr_regs.crmd_plv === 0.U) ||
                 (csr_regs.dmw0_plv3 && csr_regs.crmd_plv === 3.U)

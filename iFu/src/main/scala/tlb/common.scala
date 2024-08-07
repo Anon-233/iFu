@@ -9,8 +9,8 @@ class TLBCsrContext extends CoreBundle {
     val inv_l0_tlb = Bool()
     val asid_asid  = UInt(10.W)
 
-    val crmd_da    = Bool()
-    val crmd_pg    = Bool()
+    val da_mode    = Bool()
+    val pg_mode    = Bool()
     val crmd_datm  = UInt(2.W)
     val crmd_plv   = UInt(2.W)
 

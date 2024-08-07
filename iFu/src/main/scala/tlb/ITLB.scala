@@ -42,9 +42,9 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule with L0TLBState {
         Seq.fill(num_l0_itlb_entries)(0.U.asTypeOf(new L0ITLBEntry))
     ))
 
-    val csr_regs = io.itlb_csr_cxt
-    val da_mode  = (csr_regs.crmd_da && !csr_regs.crmd_pg)
-    val pg_mode  = (!csr_regs.crmd_da &&  csr_regs.crmd_pg)
+    val csr_regs = WireInit(RegNext(io.itlb_csr_cxt))
+    csr_regs.da_mode := io.itlb_csr_cxt.da_mode
+    csr_regs.pg_mode := io.itlb_csr_cxt.pg_mode
 
     val vaddr        = io.req.bits.vaddr
     val l0_hit_oh    = VecInit(l0_entry.map(
@@ -72,9 +72,9 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule with L0TLBState {
     when (vaddr(1, 0) =/= 0.U) {
         io.resp.exception.valid           := true.B
         io.resp.exception.bits.xcpt_cause := CauseCode.ADEF
-    } .elsewhen (da_mode) {
+    } .elsewhen (csr_regs.da_mode) {
         io.resp.paddr := vaddr
-    } .elsewhen (pg_mode) {
+    } .elsewhen (csr_regs.pg_mode) {
         when (dmw0_en || dmw1_en) {
             io.resp.paddr           := Cat(
                 Mux(dmw0_en, (csr_regs.dmw0_pseg), (csr_regs.dmw1_pseg)), vaddr(28, 0)
