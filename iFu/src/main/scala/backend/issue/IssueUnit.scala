@@ -41,8 +41,7 @@ class IssueUnitIO (
     val issueUops = Output(Vec(issueWidth, new MicroOp))
 }
 
-
-class IssueUnit(
+class IssueUnit (
     issParams: IssueParams,
     numWakeupPorts: Int
 ) extends CoreModule with IssueState {
@@ -95,7 +94,6 @@ class IssueUnit(
 
     val shamtOH = vacants.scanLeft(0.U)(getShamtOH)
 
-
     val willBeValid = issueSlots.map(_.willBeValid) ++
         io.disUops.map(dis => dis.valid && !dis.bits.xcpt_valid && !dis.bits.is_ibar && !dis.bits.is_nop)
 
@@ -106,7 +104,6 @@ class IssueUnit(
         issueSlots(i).inUop.bits := uops(i + 1)
 
         for (j <- 1 to maxShift) {
-//            when (shamtOH(i + j)(j - 1)) {
             when (shamtOH(i + j) === (1 << (j - 1)).U) {
                 issueSlots(i).inUop.valid := willBeValid(i + j)
                 issueSlots(i).inUop.bits := uops(i + j)
@@ -128,10 +125,10 @@ class IssueUnit(
         io.issueUops(w).lrs2_rtype := RT_X
     }
 
-//    io.issueValids.foreach {
-//        _ := false.B
-//    }
-//    io.issueUops := DontCare
+    // io.issueValids.foreach {
+    //     _ := false.B
+    // }
+    // io.issueUops := DontCare
 
     // choose which uops to issue
     val requests = issueSlots.map(_.request)    // get request from each slot
@@ -157,9 +154,6 @@ class IssueUnit(
                 issueSlots(i).grant := true.B
                 io.issueValids(w) := true.B
                 io.issueUops(w) := issueSlots(i).uop
-                // why not?
-                // portIssued(w) = true.B
-                // uopIssued = true.B
             }
             val wasPortIssuedYet = portIssued(w)
             portIssued(w) = (canAllocate && requests(i) && !uopIssued) | portIssued(w)
@@ -167,4 +161,3 @@ class IssueUnit(
         }
     }
 }
-

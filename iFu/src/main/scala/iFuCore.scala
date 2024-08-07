@@ -50,9 +50,11 @@ class iFuCore extends CoreModule {
     val issue_units = Seq(mem_iss_unit, int_iss_unit)
     require(exe_units.length == issue_units.map(_.issueWidth).sum)
 
-    val iregfile = Module(new RegisterFile(
+    val iregfile = Module(new RegisterFileSynthesizable(
+        numPRegs,
         exe_units.map(_.numReadPorts).sum,
         numWritePorts,
+        xLen,
         Seq.fill(memWidth) { true } ++ exe_units.bypassable_write_port_mask
     ))
     val iregister_read = Module(new RegisterRead(
@@ -461,18 +463,6 @@ class iFuCore extends CoreModule {
         renport <> intport
     }
 
-    // If we issue loads back-to-back endlessly (probably because we are executing some tight loop)
-    // the store buffer will never drain, breaking the memory-model forward-progress guarantee
-    // If we see a large number of loads saturate the LSU, pause for a cycle to let a store drain
-    val loads_saturating = mem_iss_unit.io.issueValids(0) && mem_iss_unit.io.issueUops(0).use_ldq
-    val saturating_loads_counter = RegInit(0.U(5.W))
-    when(loads_saturating) {
-        saturating_loads_counter := saturating_loads_counter + 1.U
-    } .otherwise {
-        saturating_loads_counter := 0.U
-    }
-    val pause_mem = RegNext(loads_saturating) && saturating_loads_counter === ~(0.U(5.W))
-
     var iss_idx = 0
     var int_iss_cnt = 0
     var mem_iss_cnt = 0
@@ -486,7 +476,7 @@ class iFuCore extends CoreModule {
             fu_types = fu_types & RegNext(~Mux(idiv_issued, FU_DIV, 0.U)).asUInt
         }
         if (exe_unit.hasMem) {
-            mem_iss_unit.io.fuTypes(mem_iss_cnt) := Mux(pause_mem, 0.U, fu_types)
+            mem_iss_unit.io.fuTypes(mem_iss_cnt) := fu_types
             iss_valids(iss_idx) := mem_iss_unit.io.issueValids(mem_iss_cnt)
             iss_uops(iss_idx)   := mem_iss_unit.io.issueUops(mem_iss_cnt)
             mem_iss_cnt += 1
@@ -608,7 +598,7 @@ class iFuCore extends CoreModule {
 
     var w_cnt = 0
     for (i <- 0 until memWidth) {
-        iregfile.io.write_ports(w_cnt) := WritePort(mem_resps(i), RT_FIX)
+        iregfile.io.write_ports(w_cnt) := WritePort(mem_resps(i), pregSz, xLen, RT_FIX)
         w_cnt += 1
     }
     for (i <- 0 until exe_units.length) {
