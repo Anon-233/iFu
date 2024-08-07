@@ -1,7 +1,7 @@
-package iFu
+package common
 
-import chisel3._
 import chisel3.experimental.Analog
+import chisel3.{Bool, Bundle, Input, Output, UInt, fromIntToWidth}
 
 class GPIO extends Bundle {
     val led = Output(UInt(16.W))
@@ -32,32 +32,19 @@ class DDR3 extends Bundle {
     val ck_n = Output(Bool())
 }
 
-class TX extends Bundle {
+class MAC extends Bundle {
     val mtxclk_0 = Input(Bool())
     val mtxen_0 = Output(Bool())
     val mtxd_0 = Output(UInt(4.W))
     val mtxerr_0 = Output(Bool())
-}
-
-class RX extends Bundle {
     val mrxclk_0 = Input(Bool())
     val mrxdv_0 = Input(Bool())
     val mrxd_0 = Input(UInt(4.W))
     val mrxerr_0 = Input(Bool())
     val mcoll_0 = Input(Bool())
     val mcrs_0 = Input(Bool())
-}
-
-class MIIM extends Bundle {
     val mdc_0 = Output(Bool())
     val mdio_0 = Analog(1.W)
-}
-
-class MAC extends Bundle {
-    val tx = new TX
-    val rx = new RX
-    val miim = new MIIM
-    val phy_rstn = Output(Bool())
 }
 
 class EJTAG extends Bundle {
@@ -74,13 +61,14 @@ class UART extends Bundle {
 }
 
 class NAND extends Bundle {
-    val CLE = Output(Bool())
-    val ALE = Output(Bool())
-    val RDY = Input(Bool())
-    val DATA = Analog(8.W)
-    val RD = Output(Bool())
-    val CE = Output(Bool())
-    val WR = Output(Bool())
+    val cle = Output(Bool())
+    val ale = Output(Bool())
+    val rd = Output(Bool())
+    val ce = Output(UInt(4.W))
+    val wr = Output(Bool())
+    val dat_i = Input(UInt(8.W))
+    val dat_o = Output(UInt(8.W))
+    val rdy = Input(Bool())
 }
 
 class SPI extends Bundle {
@@ -91,18 +79,34 @@ class SPI extends Bundle {
 }
 
 class LCD extends Bundle {
-    val csel = Output(Bool())
-    val data_tri_io = Analog(16.W)
     val nrst = Output(Bool())
-    val rd = Output(Bool())
+    val csel = Output(Bool())
     val rs = Output(Bool())
     val wr = Output(Bool())
-    val lighton = Output(Bool())
+    val rd = Output(Bool())
+    val data_in = Input(UInt(16.W))
+    val data_out = Output(UInt(16.W))
+    val data_z = Output(UInt(16.W))
 }
 
 class PS2 extends Bundle {
-    val clk_tri_io = Analog(1.W)
-    val dat_tri_io = Analog(1.W)
+    val CLK_i = Input(Bool())
+    val CLK_o = Output(Bool())
+    val CLK_t = Output(Bool())
+    val DAT_i = Input(Bool())
+    val DAT_o = Output(Bool())
+    val DAT_t = Output(Bool())
+}
+
+class TFT extends Bundle {
+    val hsync = Output(Bool())
+    val vsync = Output(Bool())
+    val de = Output(Bool())
+    val dps = Output(Bool())
+    val vga_clk = Output(Bool())
+    val vga_r = Output(UInt(6.W))
+    val vga_g = Output(UInt(6.W))
+    val vga_b = Output(UInt(6.W))
 }
 
 class VGA extends Bundle {
@@ -111,20 +115,4 @@ class VGA extends Bundle {
     val b = Analog(4.W)
     val hsync = Output(Bool())
     val vsync = Output(Bool())
-}
-
-class iFuSoC extends Module {
-    val io = IO(new Bundle {
-        val gpio = new GPIO
-        val ddr3 = new DDR3
-        val mac = new MAC
-        val ejtag = new EJTAG
-        val uart = new UART
-        val nand = new NAND
-        val spi = new SPI
-        val lcd = new LCD
-        val ps2 = new PS2
-        val vga = new VGA
-    })
-    io := DontCare
 }
