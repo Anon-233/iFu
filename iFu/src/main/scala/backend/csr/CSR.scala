@@ -444,10 +444,13 @@ class CSRFile extends CoreModule {
         io.cmd === TLB_I
     )
 
+    val da_mode =  csrReg.crmd.da.asBool && !csrReg.crmd.pg.asBool
+    val pg_mode = !csrReg.crmd.da.asBool &&  csrReg.crmd.pg.asBool
+
     io.lsu_csr_ctx.dtlb_csr_ctx.inv_l0_tlb := inv_l0_tlb
     io.lsu_csr_ctx.dtlb_csr_ctx.asid_asid  := csrReg.asid.asid
-    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_da    := csrReg.crmd.da
-    io.lsu_csr_ctx.dtlb_csr_ctx.crmd_pg    := csrReg.crmd.pg
+    io.lsu_csr_ctx.dtlb_csr_ctx.da_mode    := da_mode
+    io.lsu_csr_ctx.dtlb_csr_ctx.pg_mode    :=pg_mode
     io.lsu_csr_ctx.dtlb_csr_ctx.crmd_datm  := csrReg.crmd.datm
     io.lsu_csr_ctx.dtlb_csr_ctx.crmd_plv   := csrReg.crmd.plv
     io.lsu_csr_ctx.dtlb_csr_ctx.dmw0_mat   := csrReg.dmw0.mat
@@ -465,8 +468,8 @@ class CSRFile extends CoreModule {
 
     io.itlb_csr_ctx.inv_l0_tlb := inv_l0_tlb
     io.itlb_csr_ctx.asid_asid  := csrReg.asid.asid
-    io.itlb_csr_ctx.da_mode    :=  csrReg.crmd.da && !csrReg.crmd.pg
-    io.itlb_csr_ctx.pg_mode    := !csrReg.crmd.da &&  csrReg.crmd.pg
+    io.itlb_csr_ctx.da_mode    := da_mode
+    io.itlb_csr_ctx.pg_mode    := pg_mode
     io.itlb_csr_ctx.crmd_datm  := csrReg.crmd.datm
     io.itlb_csr_ctx.crmd_plv   := csrReg.crmd.plv
     io.itlb_csr_ctx.dmw0_mat   := csrReg.dmw0.mat
