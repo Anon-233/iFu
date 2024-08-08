@@ -1,13 +1,13 @@
 package ip
 
-import chisel3.{BlackBox, Bool, Bundle, Flipped, Input, Output, UInt, fromIntToWidth}
-import common.{APB2, AXI}
+import chisel3.{BlackBox, Bool, Bundle, Input, Output, UInt, fromIntToWidth}
+import common.{APB2, AXI3}
 
 class dma_master extends BlackBox {
     val io = IO(new Bundle {
         val clk = Input(Bool())
         val rst_n = Input(Bool())
-        val axi = Flipped(new AXI)
+        val axi = new AXI3
         val dma_int = Output(Bool())
         val dma_ack_out = Output(Bool())
         val order_addr_in = Input(UInt(32.W))

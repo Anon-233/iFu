@@ -17,19 +17,19 @@ class GPIO extends Bundle {
 
 class DDR3 extends Bundle {
     val dq = Analog(16.W)
+    val dqs_p = Analog(2.W)
+    val dqs_n = Analog(2.W)
     val addr = Output(UInt(13.W))
     val ba = Output(UInt(2.W))
     val ras_n = Output(Bool())
     val cas_n = Output(Bool())
     val we_n = Output(Bool())
-    val odt = Output(Bool())
     val reset_n = Output(Bool())
-    val cke = Output(Bool())
-    val dm = Output(UInt(2.W))
-    val dqs_p = Input(UInt(2.W))
-    val dqs_n = Input(UInt(2.W))
     val ck_p = Output(Bool())
     val ck_n = Output(Bool())
+    val cke = Output(Bool())
+    val dm = Output(UInt(2.W))
+    val odt = Output(Bool())
 }
 
 class MAC extends Bundle {

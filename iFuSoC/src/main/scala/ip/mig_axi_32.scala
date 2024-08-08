@@ -1,7 +1,7 @@
 package ip
 
-import chisel3.{BlackBox, Bool, Bundle, Input, Output}
-import common.{AXI, DDR3}
+import chisel3.{BlackBox, Bool, Bundle, Flipped, Input, Output}
+import common.{AXI4Full, DDR3}
 
 class mig_axi_32 extends BlackBox {
     val io = IO(new Bundle {
@@ -19,6 +19,6 @@ class mig_axi_32 extends BlackBox {
         val app_ref_req = Input(Bool())
         val app_zq_req = Input(Bool())
         val aresetn = Input(Bool())
-        val s_axi = new AXI
+        val s_axi = Flipped(new AXI4Full)
     })
 }

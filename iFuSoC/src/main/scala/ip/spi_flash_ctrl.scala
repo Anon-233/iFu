@@ -1,7 +1,7 @@
 package ip
 
-import chisel3.{BlackBox, Bool, Bundle, Input, Output, UInt, fromIntToWidth}
-import common.AXI
+import chisel3.{BlackBox, Bool, Bundle, Flipped, Input, Output, UInt, fromIntToWidth}
+import common.AXI3
 
 class spi_flash_ctrl extends BlackBox {
     val io = IO(new Bundle {
@@ -9,7 +9,7 @@ class spi_flash_ctrl extends BlackBox {
         val aresetn = Input(Bool())
         val spi_addr = Input(UInt(16.W))
         val fast_wakeup = Input(Bool())
-        val s = new AXI
+        val s = Flipped(new AXI3)
         val power_down_req = Input(Bool())
         val power_down_ack = Input(Bool())
         val csn_o = Output(UInt(4.W))
