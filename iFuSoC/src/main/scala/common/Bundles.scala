@@ -73,12 +73,13 @@ class UART extends Bundle {
 class NAND extends Bundle {
     val cle = Output(Bool())
     val ale = Output(Bool())
+    val rdy = Input(UInt(4.W))
     val rd = Output(Bool())
     val ce = Output(UInt(4.W))
     val wr = Output(Bool())
     val dat_i = Input(UInt(8.W))
     val dat_o = Output(UInt(8.W))
-    val rdy = Input(Bool())
+    val dat_oe = Output(Bool())
 }
 
 class SPI extends Bundle {
@@ -122,12 +123,4 @@ class TFT extends Bundle {
     val vga_r = Output(UInt(6.W))
     val vga_g = Output(UInt(6.W))
     val vga_b = Output(UInt(6.W))
-}
-
-class VGA extends Bundle {
-    val r = Analog(4.W)
-    val g = Analog(4.W)
-    val b = Analog(4.W)
-    val hsync = Output(Bool())
-    val vsync = Output(Bool())
 }
