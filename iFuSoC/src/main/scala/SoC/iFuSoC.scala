@@ -231,7 +231,7 @@ class iFuSoC extends RawModule {
     interconnect_aresetn := main_reset.io.interconnect_aresetn
     aresetn := main_reset.io.peripheral_aresetn
     
-    core.io.axi <> axi_clock_converter.io.s_axi
+    BulkConnect(core.io, axi_clock_converter.io.s_axi, new AXI3)
     axi_clock_converter.io.m_axi <> main_xbar.io.s_axi
     main_xbar.io.m_axi <> axi_slave_mux.io.axi_s.zip(mig_axi_interconnect.io.S00_AXI.toLowerAXI3)
     axi_slave_mux.io.s0 <> axi_slave_mux2.io.axi_s
