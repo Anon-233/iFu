@@ -11,7 +11,7 @@ class spi_flash_ctrl extends BlackBox {
         val fast_wakeup = Input(Bool())
         val s = Flipped(new AXI3)
         val power_down_req = Input(Bool())
-        val power_down_ack = Input(Bool())
+        val power_down_ack = Output(Bool())
         val csn_o = Output(UInt(4.W))
         val csn_en = Output(UInt(4.W))
         val sck_o = Output(Bool())

@@ -14,6 +14,7 @@ class axi2apb_misc extends BlackBox {
         val dma_req_o = Output(Bool())
         val dma_ack_i = Input(Bool())
         val uart0 = new UART
+        val uart0_int = Output(Bool())
         val nand_type = Input(UInt(2.W))
         val nand = new NAND
         val nand_int = Output(Bool())

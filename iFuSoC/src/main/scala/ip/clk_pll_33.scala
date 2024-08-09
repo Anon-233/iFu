@@ -10,6 +10,6 @@ class clk_pll_33 extends BlackBox {
         val clk_25 = Output(Bool())
         val clk_in1 = Input(Bool())
         val resetn = Input(Bool())
-        val locked = Input(Bool())
+        val locked = Output(Bool())
     })
 }

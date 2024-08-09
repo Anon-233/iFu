@@ -1,6 +1,7 @@
 package common
 
-import chisel3.{Bool, Bundle, Input, Output, UInt, Wire, fromIntToWidth}
+import chisel3.reflect.DataMirror
+import chisel3.{ActualDirection, Bool, Bundle, Input, Output, UInt, Wire, fromIntToWidth}
 
 class APB2 extends Bundle {
     val psel = Output(Bool())
@@ -36,22 +37,6 @@ class APB4(width: Int) extends Bundle {
     val pslverr = Input(UInt(width.W))
     val pprot = Output(UInt(3.W))
     val pstrb = Output(UInt(4.W))
-    
-    def apply(i: Int): APB4 = {
-        assert(width == 2)
-        val copy = Wire(new APB4(1))
-        copy.paddr <> paddr
-        copy.psel <> psel(i)
-        copy.penable <> penable
-        copy.pwrite <> pwrite
-        copy.pwdata <> pwdata
-        copy.pready <> pready(i)
-        copy.prdata <> (if (i == 1) prdata else prdata2)
-        copy.pslverr <> pslverr(i)
-        copy.pprot <> pprot
-        copy.pstrb <> pstrb
-        copy
-    }
     
     def toAPB3: APB3 = {
         assert(width == 1)

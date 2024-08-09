@@ -56,8 +56,18 @@ class EJTAG extends Bundle {
 }
 
 class UART extends Bundle {
-    val RX = Analog(1.W)
-    val TX = Analog(1.W)
+    val txd_i = Input(Bool())
+    val txd_o = Output(Bool())
+    val txd_oe = Output(Bool())
+    val rxd_i = Input(Bool())
+    val rxd_o = Output(Bool())
+    val rxd_oe = Output(Bool())
+    val rts_o = Output(Bool())
+    val dtr_o = Output(Bool())
+    val cts_i = Input(Bool())
+    val dsr_i = Input(Bool())
+    val dcd_i = Input(Bool())
+    val ri_i = Input(Bool())
 }
 
 class NAND extends Bundle {
@@ -72,10 +82,15 @@ class NAND extends Bundle {
 }
 
 class SPI extends Bundle {
-    val CLK = Output(Bool())
-    val CS = Output(Bool())
-    val MISO = Analog(1.W)
-    val MOSI = Analog(1.W)
+    val csn_o = Output(UInt(4.W))
+    val csn_en = Output(UInt(4.W))
+    val sck_o = Output(Bool())
+    val sdo_i = Input(Bool())
+    val sdo_o = Output(Bool())
+    val sdo_en = Output(Bool())
+    val sdi_i = Input(Bool())
+    val sdi_o = Output(Bool())
+    val sdi_en = Output(Bool())
 }
 
 class LCD extends Bundle {

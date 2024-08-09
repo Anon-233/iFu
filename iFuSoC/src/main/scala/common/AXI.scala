@@ -1,88 +1,115 @@
 package common
 
-import chisel3.{Bundle, Input, Output, UInt, Wire, fromIntToWidth}
+import chisel3.reflect.DataMirror
+import chisel3.util.Cat
+import chisel3.{ActualDirection, Bundle, Data, Input, Output, UInt, Wire, fromIntToLiteral, fromIntToWidth}
 
-object AXI3Len {
-    val awaddr = 32
-    val awprot = 3
-    val awvalid = 1
-    val awready = 1
-    val awsize = 3
-    val awburst = 2
-    val awcache = 4
-    val awlen = 4
-    val awlock = 2
-    val awqos = 4
-    val awid = 4
-    val wdata = 32
-    val wstrb = 4
-    val wvalid = 1
-    val wready = 1
-    val wlast = 1
-    val wid = 4
-    val bresp = 2
-    val bvalid = 1
-    val bready = 1
-    val bid = 4
-    val araddr = 32
-    val arprot = 3
-    val arvalid = 1
-    val arready = 1
-    val arsize = 3
-    val arburst = 2
-    val arcache = 4
-    val arlock = 2
-    val arlen = 4
-    val arqos = 4
-    val arid = 4
-    val rdata = 32
-    val rresp = 2
-    val rvalid = 1
-    val rready = 1
-    val rlast = 1
-    val rid = 4
+object AssignZero {
+    def apply(data: Data): Unit = {
+        if (DataMirror.directionOf(data) == ActualDirection.Input) {
+            data := 0.U.asTypeOf(data)
+        }
+    }
 }
 
-object AXI4Len {
-    val awaddr = 32
-    val awprot = 3
-    val awvalid = 1
-    val awready = 1
-    val awsize = 3
-    val awburst = 2
-    val awcache = 4
-    val awlen = 4
-    val awlock = 2
-    val awqos = 4
-    val awregion = 4
-    val awid = 4
-    val wdata = 32
-    val wstrb = 4
-    val wvalid = 1
-    val wready = 1
-    val wlast = 1
-    val bresp = 2
-    val bvalid = 1
-    val bready = 1
-    val bid = 4
-    val araddr = 32
-    val arprot = 3
-    val arvalid = 1
-    val arready = 1
-    val arsize = 3
-    val arburst = 2
-    val arcache = 4
-    val arlock = 2
-    val arlen = 4
-    val arqos = 4
-    val arregion = 4
-    val arid = 4
-    val rdata = 32
-    val rresp = 2
-    val rvalid = 1
-    val rready = 1
-    val rlast = 1
-    val rid = 4
+class AXI3Len(dataWidth: Int = 32) {
+    assert(dataWidth == 32 || dataWidth == 64)
+    var width = dataWidth
+    var byteNum = dataWidth / 8
+    var awaddr = 32
+    var awprot = 3
+    var awvalid = 1
+    var awready = 1
+    var awsize = 3
+    var awburst = 2
+    var awcache = 4
+    var awlen = byteNum
+    var awlock = 2
+    var awqos = 4
+    var awid = 4
+    var wdata = dataWidth
+    var wstrb = byteNum
+    var wvalid = 1
+    var wready = 1
+    var wlast = 1
+    var wid = 4
+    var bresp = 2
+    var bvalid = 1
+    var bready = 1
+    var bid = 4
+    var araddr = 32
+    var arprot = 3
+    var arvalid = 1
+    var arready = 1
+    var arsize = 3
+    var arburst = 2
+    var arcache = 4
+    var arlock = 2
+    var arlen = byteNum
+    var arqos = 4
+    var arid = 4
+    var rdata = dataWidth
+    var rresp = 2
+    var rvalid = 1
+    var rready = 1
+    var rlast = 1
+    var rid = 4
+    
+    def double: AXI3Len = {
+        val newParam = new AXI3Len
+        getClass.getDeclaredFields.foreach(f => {
+            if (f.getType.getName == "int") {
+                val old = f.getInt(newParam)
+                f.setInt(newParam, old * 2)
+            }
+        })
+        newParam
+    }
+}
+
+class AXI4Len(dataWidth: Int = 32) {
+    assert(dataWidth == 32 || dataWidth == 64)
+    var width = dataWidth
+    var byteNum = dataWidth / 8
+    var awaddr = 32
+    var awprot = 3
+    var awvalid = 1
+    var awready = 1
+    var awsize = 3
+    var awburst = 2
+    var awcache = 4
+    var awlen = byteNum
+    var awlock = 2
+    var awqos = 4
+    var awregion = 4
+    var awid = 4
+    var wdata = dataWidth
+    var wstrb = byteNum
+    var wvalid = 1
+    var wready = 1
+    var wlast = 1
+    var bresp = 2
+    var bvalid = 1
+    var bready = 1
+    var bid = 4
+    var araddr = 32
+    var arprot = 3
+    var arvalid = 1
+    var arready = 1
+    var arsize = 3
+    var arburst = 2
+    var arcache = 4
+    var arlock = 2
+    var arlen = byteNum
+    var arqos = 4
+    var arregion = 4
+    var arid = 4
+    var rdata = dataWidth
+    var rresp = 2
+    var rvalid = 1
+    var rready = 1
+    var rlast = 1
+    var rid = 4
 }
 
 object AXI4SLen {
@@ -97,184 +124,215 @@ object AXI4SLen {
     val dest = 1
 }
 
-class AXI3 extends Bundle {
-    val awaddr = Output(UInt(AXI3Len.awaddr.W))
-    val awprot = Output(UInt(AXI3Len.awprot.W))
-    val awvalid = Output(UInt(AXI3Len.awvalid.W))
-    val awready = Input(UInt(AXI3Len.awready.W))
-    val awsize = Output(UInt(AXI3Len.awsize.W))
-    val awburst = Output(UInt(AXI3Len.awburst.W))
-    val awcache = Output(UInt(AXI3Len.awcache.W))
-    val awlen = Output(UInt(AXI3Len.awlen.W))
-    val awlock = Output(UInt(AXI3Len.awlock.W))
-    val awqos = Output(UInt(AXI3Len.awqos.W))
-    val awid = Output(UInt(AXI3Len.awid.W))
-    val wdata = Output(UInt(AXI3Len.wdata.W))
-    val wstrb = Output(UInt(AXI3Len.wstrb.W))
-    val wvalid = Output(UInt(AXI3Len.wvalid.W))
-    val wready = Input(UInt(AXI3Len.wready.W))
-    val wlast = Output(UInt(AXI3Len.wlast.W))
-    val wid = Output(UInt(AXI3Len.wid.W))
-    val bresp = Input(UInt(AXI3Len.bresp.W))
-    val bvalid = Input(UInt(AXI3Len.bvalid.W))
-    val bready = Output(UInt(AXI3Len.bready.W))
-    val bid = Input(UInt(AXI3Len.bid.W))
-    val araddr = Output(UInt(AXI3Len.araddr.W))
-    val arprot = Output(UInt(AXI3Len.arprot.W))
-    val arvalid = Output(UInt(AXI3Len.arvalid.W))
-    val arready = Input(UInt(AXI3Len.arready.W))
-    val arsize = Output(UInt(AXI3Len.arsize.W))
-    val arburst = Output(UInt(AXI3Len.arburst.W))
-    val arcache = Output(UInt(AXI3Len.arcache.W))
-    val arlock = Output(UInt(AXI3Len.arlock.W))
-    val arlen = Output(UInt(AXI3Len.arlen.W))
-    val arqos = Output(UInt(AXI3Len.arqos.W))
-    val arid = Output(UInt(AXI3Len.arid.W))
-    val rdata = Input(UInt(AXI3Len.rdata.W))
-    val rresp = Input(UInt(AXI3Len.rresp.W))
-    val rvalid = Input(UInt(AXI3Len.rvalid.W))
-    val rready = Output(UInt(AXI3Len.rready.W))
-    val rlast = Input(UInt(AXI3Len.rlast.W))
-    val rid = Input(UInt(AXI3Len.rid.W))
+class AXI3(len: AXI3Len = new AXI3Len) extends Bundle {
+    val awaddr = Output(UInt(len.awaddr.W))
+    val awprot = Output(UInt(len.awprot.W))
+    val awvalid = Output(UInt(len.awvalid.W))
+    val awready = Input(UInt(len.awready.W))
+    val awsize = Output(UInt(len.awsize.W))
+    val awburst = Output(UInt(len.awburst.W))
+    val awcache = Output(UInt(len.awcache.W))
+    val awlen = Output(UInt(len.awlen.W))
+    val awlock = Output(UInt(len.awlock.W))
+    val awqos = Output(UInt(len.awqos.W))
+    val awid = Output(UInt(len.awid.W))
+    val wdata = Output(UInt(len.wdata.W))
+    val wstrb = Output(UInt(len.wstrb.W))
+    val wvalid = Output(UInt(len.wvalid.W))
+    val wready = Input(UInt(len.wready.W))
+    val wlast = Output(UInt(len.wlast.W))
+    val wid = Output(UInt(len.wid.W))
+    val bresp = Input(UInt(len.bresp.W))
+    val bvalid = Input(UInt(len.bvalid.W))
+    val bready = Output(UInt(len.bready.W))
+    val bid = Input(UInt(len.bid.W))
+    val araddr = Output(UInt(len.araddr.W))
+    val arprot = Output(UInt(len.arprot.W))
+    val arvalid = Output(UInt(len.arvalid.W))
+    val arready = Input(UInt(len.arready.W))
+    val arsize = Output(UInt(len.arsize.W))
+    val arburst = Output(UInt(len.arburst.W))
+    val arcache = Output(UInt(len.arcache.W))
+    val arlock = Output(UInt(len.arlock.W))
+    val arlen = Output(UInt(len.arlen.W))
+    val arqos = Output(UInt(len.arqos.W))
+    val arid = Output(UInt(len.arid.W))
+    val rdata = Input(UInt(len.rdata.W))
+    val rresp = Input(UInt(len.rresp.W))
+    val rvalid = Input(UInt(len.rvalid.W))
+    val rready = Output(UInt(len.rready.W))
+    val rlast = Input(UInt(len.rlast.W))
+    val rid = Input(UInt(len.rid.W))
+    
+    def zip(that: AXI3): AXI3 = {
+        val result = Wire(new AXI3(len.double))
+        elements.foreach{ case (name, data) =>
+            val thatData = that.elements(name)
+            val resData = result.elements(name)
+            val width = data.getWidth
+            if (DataMirror.directionOf(data) == ActualDirection.Input) {
+                data := resData.asUInt(2 * width - 1, width)
+                thatData := resData.asUInt(width - 1, 0)
+            } else {
+                resData := Cat(data.asUInt, thatData.asUInt)
+            }
+        }
+        result
+    }
 }
 
-class AXI4Full extends Bundle {
-    val awaddr = Output(UInt(AXI4Len.awaddr.W))
-    val awprot = Output(UInt(AXI4Len.awprot.W))
-    val awvalid = Output(UInt(AXI4Len.awvalid.W))
-    val awready = Input(UInt(AXI4Len.awready.W))
-    val awsize = Output(UInt(AXI4Len.awsize.W))
-    val awburst = Output(UInt(AXI4Len.awburst.W))
-    val awcache = Output(UInt(AXI4Len.awcache.W))
-    val awlen = Output(UInt(AXI4Len.awlen.W))
-    val awlock = Output(UInt(AXI4Len.awlock.W))
-    val awqos = Output(UInt(AXI4Len.awqos.W))
-    val awregion = Output(UInt(AXI4Len.awregion.W))
-    val awid = Output(UInt(AXI4Len.awid.W))
-    val wdata = Output(UInt(AXI4Len.wdata.W))
-    val wstrb = Output(UInt(AXI4Len.wstrb.W))
-    val wvalid = Output(UInt(AXI4Len.wvalid.W))
-    val wready = Input(UInt(AXI4Len.wready.W))
-    val wlast = Output(UInt(AXI4Len.wlast.W))
-    val bresp = Input(UInt(AXI4Len.bresp.W))
-    val bvalid = Input(UInt(AXI4Len.bvalid.W))
-    val bready = Output(UInt(AXI4Len.bready.W))
-    val bid = Input(UInt(AXI4Len.bid.W))
-    val araddr = Output(UInt(AXI4Len.araddr.W))
-    val arprot = Output(UInt(AXI4Len.arprot.W))
-    val arvalid = Output(UInt(AXI4Len.arvalid.W))
-    val arready = Input(UInt(AXI4Len.arready.W))
-    val arsize = Output(UInt(AXI4Len.arsize.W))
-    val arburst = Output(UInt(AXI4Len.arburst.W))
-    val arcache = Output(UInt(AXI4Len.arcache.W))
-    val arlock = Output(UInt(AXI4Len.arlock.W))
-    val arlen = Output(UInt(AXI4Len.arlen.W))
-    val arqos = Output(UInt(AXI4Len.arqos.W))
-    val arregion = Output(UInt(AXI4Len.arregion.W))
-    val arid = Output(UInt(AXI4Len.arid.W))
-    val rdata = Input(UInt(AXI4Len.rdata.W))
-    val rresp = Input(UInt(AXI4Len.rresp.W))
-    val rvalid = Input(UInt(AXI4Len.rvalid.W))
-    val rready = Output(UInt(AXI4Len.rready.W))
-    val rlast = Input(UInt(AXI4Len.rlast.W))
-    val rid = Input(UInt(AXI4Len.rid.W))
+class AXI4Full(len: AXI4Len = new AXI4Len) extends Bundle {
+    val awaddr = Output(UInt(len.awaddr.W))
+    val awprot = Output(UInt(len.awprot.W))
+    val awvalid = Output(UInt(len.awvalid.W))
+    val awready = Input(UInt(len.awready.W))
+    val awsize = Output(UInt(len.awsize.W))
+    val awburst = Output(UInt(len.awburst.W))
+    val awcache = Output(UInt(len.awcache.W))
+    val awlen = Output(UInt(len.awlen.W))
+    val awlock = Output(UInt(len.awlock.W))
+    val awqos = Output(UInt(len.awqos.W))
+    val awregion = Output(UInt(len.awregion.W))
+    val awid = Output(UInt(len.awid.W))
+    val wdata = Output(UInt(len.wdata.W))
+    val wstrb = Output(UInt(len.wstrb.W))
+    val wvalid = Output(UInt(len.wvalid.W))
+    val wready = Input(UInt(len.wready.W))
+    val wlast = Output(UInt(len.wlast.W))
+    val bresp = Input(UInt(len.bresp.W))
+    val bvalid = Input(UInt(len.bvalid.W))
+    val bready = Output(UInt(len.bready.W))
+    val bid = Input(UInt(len.bid.W))
+    val araddr = Output(UInt(len.araddr.W))
+    val arprot = Output(UInt(len.arprot.W))
+    val arvalid = Output(UInt(len.arvalid.W))
+    val arready = Input(UInt(len.arready.W))
+    val arsize = Output(UInt(len.arsize.W))
+    val arburst = Output(UInt(len.arburst.W))
+    val arcache = Output(UInt(len.arcache.W))
+    val arlock = Output(UInt(len.arlock.W))
+    val arlen = Output(UInt(len.arlen.W))
+    val arqos = Output(UInt(len.arqos.W))
+    val arregion = Output(UInt(len.arregion.W))
+    val arid = Output(UInt(len.arid.W))
+    val rdata = Input(UInt(len.rdata.W))
+    val rresp = Input(UInt(len.rresp.W))
+    val rvalid = Input(UInt(len.rvalid.W))
+    val rready = Output(UInt(len.rready.W))
+    val rlast = Input(UInt(len.rlast.W))
+    val rid = Input(UInt(len.rid.W))
 }
 
-class AXI4FullUpper extends Bundle {
-    val AWADDR = Output(UInt(AXI4Len.awaddr.W))
-    val AWPROT = Output(UInt(AXI4Len.awprot.W))
-    val AWVALID = Output(UInt(AXI4Len.awvalid.W))
-    val AWREADY = Input(UInt(AXI4Len.awready.W))
-    val AWSIZE = Output(UInt(AXI4Len.awsize.W))
-    val AWBURST = Output(UInt(AXI4Len.awburst.W))
-    val AWCACHE = Output(UInt(AXI4Len.awcache.W))
-    val AWLEN = Output(UInt(AXI4Len.awlen.W))
-    val AWLOCK = Output(UInt(AXI4Len.awlock.W))
-    val AWQOS = Output(UInt(AXI4Len.awqos.W))
-    val AWREGION = Output(UInt(AXI4Len.awregion.W))
-    val AWID = Output(UInt(AXI4Len.awid.W))
-    val WDATA = Output(UInt(AXI4Len.wdata.W))
-    val WSTRB = Output(UInt(AXI4Len.wstrb.W))
-    val WVALID = Output(UInt(AXI4Len.wvalid.W))
-    val WREADY = Input(UInt(AXI4Len.wready.W))
-    val WLAST = Output(UInt(AXI4Len.wlast.W))
-    val BRESP = Input(UInt(AXI4Len.bresp.W))
-    val BVALID = Input(UInt(AXI4Len.bvalid.W))
-    val BREADY = Output(UInt(AXI4Len.bready.W))
-    val BID = Input(UInt(AXI4Len.bid.W))
-    val ARADDR = Output(UInt(AXI4Len.araddr.W))
-    val ARPROT = Output(UInt(AXI4Len.arprot.W))
-    val ARVALID = Output(UInt(AXI4Len.arvalid.W))
-    val ARREADY = Input(UInt(AXI4Len.arready.W))
-    val ARSIZE = Output(UInt(AXI4Len.arsize.W))
-    val ARBURST = Output(UInt(AXI4Len.arburst.W))
-    val ARCACHE = Output(UInt(AXI4Len.arcache.W))
-    val ARLOCK = Output(UInt(AXI4Len.arlock.W))
-    val ARLEN = Output(UInt(AXI4Len.arlen.W))
-    val ARQOS = Output(UInt(AXI4Len.arqos.W))
-    val ARREGION = Output(UInt(AXI4Len.arregion.W))
-    val ARID = Output(UInt(AXI4Len.arid.W))
-    val RDATA = Input(UInt(AXI4Len.rdata.W))
-    val RRESP = Input(UInt(AXI4Len.rresp.W))
-    val RVALID = Input(UInt(AXI4Len.rvalid.W))
-    val RREADY = Output(UInt(AXI4Len.rready.W))
-    val RLAST = Input(UInt(AXI4Len.rlast.W))
-    val RID = Input(UInt(AXI4Len.rid.W))
+class AXI4FullUpper(len: AXI4Len = new AXI4Len) extends Bundle {
+    val AWADDR = Output(UInt(len.awaddr.W))
+    val AWPROT = Output(UInt(len.awprot.W))
+    val AWVALID = Output(UInt(len.awvalid.W))
+    val AWREADY = Input(UInt(len.awready.W))
+    val AWSIZE = Output(UInt(len.awsize.W))
+    val AWBURST = Output(UInt(len.awburst.W))
+    val AWCACHE = Output(UInt(len.awcache.W))
+    val AWLEN = Output(UInt(len.awlen.W))
+    val AWLOCK = Output(UInt(len.awlock.W))
+    val AWQOS = Output(UInt(len.awqos.W))
+    val AWREGION = Output(UInt(len.awregion.W))
+    val AWID = Output(UInt(len.awid.W))
+    val WDATA = Output(UInt(len.wdata.W))
+    val WSTRB = Output(UInt(len.wstrb.W))
+    val WVALID = Output(UInt(len.wvalid.W))
+    val WREADY = Input(UInt(len.wready.W))
+    val WLAST = Output(UInt(len.wlast.W))
+    val BRESP = Input(UInt(len.bresp.W))
+    val BVALID = Input(UInt(len.bvalid.W))
+    val BREADY = Output(UInt(len.bready.W))
+    val BID = Input(UInt(len.bid.W))
+    val ARADDR = Output(UInt(len.araddr.W))
+    val ARPROT = Output(UInt(len.arprot.W))
+    val ARVALID = Output(UInt(len.arvalid.W))
+    val ARREADY = Input(UInt(len.arready.W))
+    val ARSIZE = Output(UInt(len.arsize.W))
+    val ARBURST = Output(UInt(len.arburst.W))
+    val ARCACHE = Output(UInt(len.arcache.W))
+    val ARLOCK = Output(UInt(len.arlock.W))
+    val ARLEN = Output(UInt(len.arlen.W))
+    val ARQOS = Output(UInt(len.arqos.W))
+    val ARREGION = Output(UInt(len.arregion.W))
+    val ARID = Output(UInt(len.arid.W))
+    val RDATA = Input(UInt(len.rdata.W))
+    val RRESP = Input(UInt(len.rresp.W))
+    val RVALID = Input(UInt(len.rvalid.W))
+    val RREADY = Output(UInt(len.rready.W))
+    val RLAST = Input(UInt(len.rlast.W))
+    val RID = Input(UInt(len.rid.W))
     
     def toLower: AXI4Full = {
-        val copy = Wire(new AXI4Full)
+        val copy = Wire(new AXI4Full(len))
         copy.elements.foreach { case (name, data) =>
             data <> elements(name.toUpperCase)
         }
         copy
     }
+    
+    def toLowerAXI3: AXI3 = {
+        elements.foreach{ case (_, data) => AssignZero(data) }
+        val axi3param = new AXI3Len(len.width)
+        val copy = Wire(new AXI3(axi3param))
+        copy.elements.foreach { case (name, data) =>
+            AssignZero(data)
+            val thisName = name.toUpperCase
+            if (elements.contains(thisName)) {
+                data <> elements(thisName)
+            }
+        }
+        
+        copy
+    }
 }
 
-class AXI4Lite extends Bundle {
-    val awaddr = Output(UInt(AXI4Len.awaddr.W))
-    val awprot = Output(UInt(AXI4Len.awprot.W))
-    val awvalid = Output(UInt(AXI4Len.awvalid.W))
-    val awready = Input(UInt(AXI4Len.awready.W))
-    val wdata = Output(UInt(AXI4Len.wdata.W))
-    val wstrb = Output(UInt(AXI4Len.wstrb.W))
-    val wvalid = Output(UInt(AXI4Len.wvalid.W))
-    val wready = Input(UInt(AXI4Len.wready.W))
-    val bresp = Input(UInt(AXI4Len.bresp.W))
-    val bvalid = Input(UInt(AXI4Len.bvalid.W))
-    val bready = Output(UInt(AXI4Len.bready.W))
-    val araddr = Output(UInt(AXI4Len.araddr.W))
-    val arprot = Output(UInt(AXI4Len.arprot.W))
-    val arvalid = Output(UInt(AXI4Len.arvalid.W))
-    val arready = Input(UInt(AXI4Len.arready.W))
-    val rdata = Input(UInt(AXI4Len.rdata.W))
-    val rresp = Input(UInt(AXI4Len.rresp.W))
-    val rvalid = Input(UInt(AXI4Len.rvalid.W))
-    val rready = Output(UInt(AXI4Len.rready.W))
+class AXI4Lite(len: AXI4Len = new AXI4Len) extends Bundle {
+    val awaddr = Output(UInt(len.awaddr.W))
+    val awprot = Output(UInt(len.awprot.W))
+    val awvalid = Output(UInt(len.awvalid.W))
+    val awready = Input(UInt(len.awready.W))
+    val wdata = Output(UInt(len.wdata.W))
+    val wstrb = Output(UInt(len.wstrb.W))
+    val wvalid = Output(UInt(len.wvalid.W))
+    val wready = Input(UInt(len.wready.W))
+    val bresp = Input(UInt(len.bresp.W))
+    val bvalid = Input(UInt(len.bvalid.W))
+    val bready = Output(UInt(len.bready.W))
+    val araddr = Output(UInt(len.araddr.W))
+    val arprot = Output(UInt(len.arprot.W))
+    val arvalid = Output(UInt(len.arvalid.W))
+    val arready = Input(UInt(len.arready.W))
+    val rdata = Input(UInt(len.rdata.W))
+    val rresp = Input(UInt(len.rresp.W))
+    val rvalid = Input(UInt(len.rvalid.W))
+    val rready = Output(UInt(len.rready.W))
 }
 
-class AXI4LiteUpper extends Bundle {
-    val AWADDR = Output(UInt(AXI4Len.awaddr.W))
-    val AWPROT = Output(UInt(AXI4Len.awprot.W))
-    val AWVALID = Output(UInt(AXI4Len.awvalid.W))
-    val AWREADY = Input(UInt(AXI4Len.awready.W))
-    val WDATA = Output(UInt(AXI4Len.wdata.W))
-    val WSTRB = Output(UInt(AXI4Len.wstrb.W))
-    val WVALID = Output(UInt(AXI4Len.wvalid.W))
-    val WREADY = Input(UInt(AXI4Len.wready.W))
-    val BRESP = Input(UInt(AXI4Len.bresp.W))
-    val BVALID = Input(UInt(AXI4Len.bvalid.W))
-    val BREADY = Output(UInt(AXI4Len.bready.W))
-    val ARADDR = Output(UInt(AXI4Len.araddr.W))
-    val ARPROT = Output(UInt(AXI4Len.arprot.W))
-    val ARVALID = Output(UInt(AXI4Len.arvalid.W))
-    val ARREADY = Input(UInt(AXI4Len.arready.W))
-    val RDATA = Input(UInt(AXI4Len.rdata.W))
-    val RRESP = Input(UInt(AXI4Len.rresp.W))
-    val RVALID = Input(UInt(AXI4Len.rvalid.W))
-    val RREADY = Output(UInt(AXI4Len.rready.W))
+class AXI4LiteUpper(len: AXI4Len = new AXI4Len) extends Bundle {
+    val AWADDR = Output(UInt(len.awaddr.W))
+    val AWPROT = Output(UInt(len.awprot.W))
+    val AWVALID = Output(UInt(len.awvalid.W))
+    val AWREADY = Input(UInt(len.awready.W))
+    val WDATA = Output(UInt(len.wdata.W))
+    val WSTRB = Output(UInt(len.wstrb.W))
+    val WVALID = Output(UInt(len.wvalid.W))
+    val WREADY = Input(UInt(len.wready.W))
+    val BRESP = Input(UInt(len.bresp.W))
+    val BVALID = Input(UInt(len.bvalid.W))
+    val BREADY = Output(UInt(len.bready.W))
+    val ARADDR = Output(UInt(len.araddr.W))
+    val ARPROT = Output(UInt(len.arprot.W))
+    val ARVALID = Output(UInt(len.arvalid.W))
+    val ARREADY = Input(UInt(len.arready.W))
+    val RDATA = Input(UInt(len.rdata.W))
+    val RRESP = Input(UInt(len.rresp.W))
+    val RVALID = Input(UInt(len.rvalid.W))
+    val RREADY = Output(UInt(len.rready.W))
     
     def toLower: AXI4Lite = {
-        val copy = Wire(new AXI4Lite)
+        val copy = Wire(new AXI4Lite(len))
         copy.elements.foreach { case (name, data) =>
             data <> elements(name.toUpperCase)
         }

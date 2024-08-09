@@ -1,7 +1,7 @@
 package ip
 
 import chisel3.{BlackBox, Bool, Bundle, Flipped, Input}
-import common.AXI3
+import common.{AXI3, AXI3Len}
 
 class axi_slave_mux2 extends BlackBox {
     val io = IO(new Bundle {
