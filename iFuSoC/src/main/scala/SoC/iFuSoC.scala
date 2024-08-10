@@ -77,7 +77,7 @@ class iFuSoC extends RawModule {
     spi.io.aclk := aclk
     spi.io.aresetn := aresetn
     spi.io.spi_addr := 0x1fe8.asUInt
-    spi.io.fast_wakeup := false.B
+    spi.io.fast_startup := false.B
     spi_inta_o := spi.io.inta_o
     spi.io.power_down_req := false.B
     BulkConnect(spi.io, io.spi, new SPI)
@@ -90,8 +90,8 @@ class iFuSoC extends RawModule {
     val ethernet = Module(new ethernet_top)
     ethernet.io.hclk := aclk
     ethernet.io.hrst_ := aresetn
-    ethernet.io.mac <> io.mac
-    mac_int := ethernet.io.interrupt0
+    BulkConnect(ethernet.io, io.mac, new MAC)
+    mac_int := ethernet.io.interrupt_0
     
     val clk_pll_33 = Module(new clk_pll_33)
     clk_pll_33.io.clk_in1 := io.clk
@@ -210,9 +210,9 @@ class iFuSoC extends RawModule {
     fb_read.io.ap_rst_n := aresetn
     
     val tft = Module(new axi_tft_0)
-    tft.io.s_axi_clk := clk_100
+    tft.io.s_axi_aclk := clk_100
     tft.io.s_axi_aresetn := aresetn
-    tft.io.m_axi_clk := clk_100
+    tft.io.m_axi_aclk := clk_100
     tft.io.m_axi_aresetn := aresetn
     tft.io.sys_tft_clk := clk_25
     tft.io.tft <> io.tft
@@ -265,7 +265,13 @@ class iFuSoC extends RawModule {
     confreg.io.write_dma_end := dma_master0.io.write_dma_end
     confreg.io.finish_read_order := dma_master0.io.finish_read_order
     
-    dma_master0.io.apb <> apb_dev.io.apb
+    apb_dev.io.apb_psel_dma := dma_master0.io.apb_psel
+    apb_dev.io.apb_valid_dma := dma_master0.io.apb_valid_req
+    apb_dev.io.apb_enab_dma := dma_master0.io.apb_penable
+    apb_dev.io.apb_rw_dma := dma_master0.io.apb_rw
+    apb_dev.io.apb_addr_dma := dma_master0.io.apb_addr
+    dma_master0.io.apb_rdata := apb_dev.io.apb_rdata_dma
+    apb_dev.io.apb_wdata_dma := dma_master0.io.apb_wdata
     dma_master0.io.dma_gnt := apb_dev.io.dma_grant
     apb_dev.io.dma_ack_i := dma_master0.io.dma_ack_out
     dma_master0.io.dma_req_in := apb_dev.io.dma_req_o
@@ -278,8 +284,6 @@ class iFuSoC extends RawModule {
     s0_apb.penable := m_apb.penable
     s0_apb.pwrite := m_apb.pwrite
     s0_apb.pwdata := m_apb.pwdata
-    s0_apb.pprot := m_apb.pprot
-    s0_apb.pstrb := m_apb.pstrb
     s1_apb.paddr := m_apb.paddr
     s1_apb.psel := m_apb.psel(1)
     s1_apb.penable := m_apb.penable
@@ -294,5 +298,5 @@ class iFuSoC extends RawModule {
     stream_ctl.io.ctl_reg1 := confreg.io.vga_reg
     
     io.phy_rstn := aresetn
-    io.ejtag.TDO := DontCare
+    io.ejtag.TDO := false.B
 }

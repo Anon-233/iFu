@@ -20,7 +20,7 @@ class DDR3 extends Bundle {
     val dqs_p = Analog(2.W)
     val dqs_n = Analog(2.W)
     val addr = Output(UInt(13.W))
-    val ba = Output(UInt(2.W))
+    val ba = Output(UInt(3.W))
     val ras_n = Output(Bool())
     val cas_n = Output(Bool())
     val we_n = Output(Bool())
@@ -34,17 +34,19 @@ class DDR3 extends Bundle {
 
 class MAC extends Bundle {
     val mtxclk_0 = Input(Bool())
-    val mtxen_0 = Output(Bool())
     val mtxd_0 = Output(UInt(4.W))
+    val mtxen_0 = Output(Bool())
     val mtxerr_0 = Output(Bool())
     val mrxclk_0 = Input(Bool())
-    val mrxdv_0 = Input(Bool())
     val mrxd_0 = Input(UInt(4.W))
+    val mrxdv_0 = Input(Bool())
     val mrxerr_0 = Input(Bool())
     val mcoll_0 = Input(Bool())
     val mcrs_0 = Input(Bool())
+    val md_i_0 = Input(Bool())
     val mdc_0 = Output(Bool())
-    val mdio_0 = Analog(1.W)
+    val md_o_0 = Output(Bool())
+    val md_oe_0 = Output(Bool())
 }
 
 class EJTAG extends Bundle {

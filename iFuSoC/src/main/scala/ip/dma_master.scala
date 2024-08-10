@@ -1,10 +1,12 @@
 package ip
 
 import chisel3.{BlackBox, Bool, Bundle, Input, Output, UInt, fromIntToWidth}
-import common.{APB2, AXI3, AXI3Len}
+import common.AXI3Len
 
 class dma_master extends BlackBox {
     val axiParams = new AXI3Len(64)
+    axiParams.awqos = 0
+    axiParams.arqos = 0
     val io = IO(new Bundle {
         val clk = Input(Bool())
         val rst_n = Input(Bool())
@@ -53,6 +55,12 @@ class dma_master extends BlackBox {
         val finish_read_order = Output(Bool())
         val write_dma_end = Output(Bool())
         val dma_gnt = Input(Bool())
-        val apb = new APB2
+        val apb_psel = Output(Bool())
+        val apb_valid_req = Output(Bool())
+        val apb_penable = Output(Bool())
+        val apb_rw = Output(Bool())
+        val apb_addr = Output(UInt(32.W))
+        val apb_rdata = Input(UInt(32.W))
+        val apb_wdata = Output(UInt(32.W))
     })
 }

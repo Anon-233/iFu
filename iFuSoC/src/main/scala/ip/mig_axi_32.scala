@@ -6,8 +6,10 @@ import common.{AXI4Full, AXI4Len, DDR3}
 class mig_axi_32 extends BlackBox {
     val sParams = new AXI4Len
     sParams.awid = 8
+    sParams.awregion = 0
     sParams.bid = 8
     sParams.arid = 8
+    sParams.arregion = 0
     sParams.rid = 8
     val io = IO(new Bundle {
         val ddr3 = new DDR3
@@ -16,7 +18,6 @@ class mig_axi_32 extends BlackBox {
         val ui_clk_sync_rst = Output(Bool())
         val sys_clk_i = Input(Bool())
         val clk_ref_i = Input(Bool())
-        val tg_compare_error = Output(Bool())
         val sys_rst = Input(Bool())
         val mmcm_locked = Output(Bool())
         val app_sr_active = Output(Bool())

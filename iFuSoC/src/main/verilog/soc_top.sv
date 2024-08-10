@@ -100,6 +100,16 @@ module soc_top (
     output wire VGA_vsync
 );
 
+logic io_mac_md_i_0;
+logic io_mac_md_o_0;
+logic io_mac_md_oe_0;
+IOBUF mac_iobuf (
+    .IO(mdio_0),
+    .I(io_mac_md_o_0),
+    .O(io_mac_md_i_0),
+    .T(io_mac_md_oe_0)
+);
+
 logic io_uart_txd_i;
 logic io_uart_txd_o;
 logic io_uart_txd_oe;
@@ -112,22 +122,22 @@ logic io_uart_cts_i;
 logic io_uart_dsr_i;
 logic io_uart_dcd_i;
 logic io_uart_ri_i;
-assign UART_RX = uart0_rxd_oe ? 1'bz : uart0_rxd_o;
-assign UART_TX = uart0_txd_oe ? 1'bz : uart0_txd_o;
-assign UART_RTS = uart0_rts_o;
-assign UART_DTR = uart0_dtr_o;
-assign uart0_txd_i = UART_TX;
-assign uart0_rxd_i = UART_RX;
-assign uart0_cts_i = UART_CTS;
-assign uart0_dcd_i = UART_DCD;
-assign uart0_dsr_i = UART_DSR;
-assign uart0_ri_i = UART_RI;
+assign UART_RX = io_uart_rxd_oe ? 1'bz : io_uart_rxd_o;
+assign UART_TX = io_uart_txd_oe ? 1'bz : io_uart_txd_o;
+assign UART_RTS = io_uart_rts_o;
+assign UART_DTR = io_uart_dtr_o;
+assign io_uart_txd_i = UART_TX;
+assign io_uart_rxd_i = UART_RX;
+assign io_uart_cts_i = '0;
+assign io_uart_dcd_i = '0;
+assign io_uart_dsr_i = '0;
+assign io_uart_ri_i = '0;
 
 logic [7:0] io_nand_dat_i;
 logic [7:0] io_nand_dat_o;
 logic io_nand_dat_oe;
 generate;
-    for (genvar i = 0; i < 8; i++) begin:
+    for (genvar i = 0; i < 8; i++) begin: NANDBLK
         IOBUF nand_iobuf(
             .IO(NAND_DATA[i]),
             .I(io_nand_dat_o[i]),
@@ -136,6 +146,8 @@ generate;
         );
     end
 endgenerate
+logic [3:0] io_nand_ce;
+assign NAND_CE = io_nand_ce[0];
 
 logic [3:0] io_spi_csn_o;
 logic [3:0] io_spi_csn_en;
@@ -151,11 +163,11 @@ logic [15:0] io_lcd_data_in;
 logic [15:0] io_lcd_data_out;
 logic [15:0] io_lcd_data_z;
 generate;
-    for (genvar i = 0; i < 16; i++) begin:
+    for (genvar i = 0; i < 16; i++) begin: LCDBLK
         IOBUF lcd_iobuf(
             .IO(LCD_data_tri_io[i]),
-            .I(io_lcd_data_in[i]),
-            .O(io_lcd_data_out[i]),
+            .I(io_lcd_data_out[i]),
+            .O(io_lcd_data_in[i]),
             .T(io_lcd_data_z[i])
         );
     end
@@ -185,14 +197,14 @@ logic [5:0] io_tft_vga_r;
 logic [5:0] io_tft_vga_g;
 logic [5:0] io_tft_vga_b;
 generate
-    for (genvar i = 0; i < 4; i++) begin:
-    assign VGA_r[i] = io_tft_vga_r[i+2] ? 1'b1 : 1'bZ;
-    assign VGA_g[i] = io_tft_vga_g[i+2] ? 1'b1 : 1'bZ;
-    assign VGA_b[i] = io_tft_vga_b[i+2] ? 1'b1 : 1'bZ;
+    for (genvar i = 0; i < 4; i++) begin: VGABLK
+        assign VGA_r[i] = io_tft_vga_r[i+2] ? 1'b1 : 1'bZ;
+        assign VGA_g[i] = io_tft_vga_g[i+2] ? 1'b1 : 1'bZ;
+        assign VGA_b[i] = io_tft_vga_b[i+2] ? 1'b1 : 1'bZ;
     end
 endgenerate
 
-iFuSoc soc (
+iFuSoC soc (
     .io_clk(clk),
     .io_resetn(resetn),
     .io_gpio_led(led),
@@ -219,8 +231,8 @@ iFuSoc soc (
     .io_ddr3_dm(ddr3_dm),
     .io_ddr3_odt(ddr3_odt),
     .io_mac_mtxclk_0(mtxclk_0),
-    .io_mac_mtxen_0(mtxen_0),
     .io_mac_mtxd_0(mtxd_0),
+    .io_mac_mtxen_0(mtxen_0),
     .io_mac_mtxerr_0(mtxerr_0),
     .io_mac_mrxclk_0(mrxclk_0),
     .io_mac_mrxdv_0(mrxdv_0),
@@ -229,7 +241,9 @@ iFuSoc soc (
     .io_mac_mcoll_0(mcoll_0),
     .io_mac_mcrs_0(mcrs_0),
     .io_mac_mdc_0(mdc_0),
-    .io_mac_mdio_0(mdio_0),
+    .io_mac_md_i_0,
+    .io_mac_md_o_0,
+    .io_mac_md_oe_0,
     .io_phy_rstn(phy_rstn),
     .io_ejtag_TRST(EJTAG_TRST),
     .io_ejtag_TCK(EJTAG_TCK),
@@ -252,7 +266,7 @@ iFuSoc soc (
     .io_nand_ale(NAND_ALE),
     .io_nand_rdy({3'b0, NAND_RDY}),
     .io_nand_rd(NAND_RD),
-    .io_nand_ce(NAND_CE),
+    .io_nand_ce,
     .io_nand_wr(NAND_WR),
     .io_nand_dat_i,
     .io_nand_dat_o,

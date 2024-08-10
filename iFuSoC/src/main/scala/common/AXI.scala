@@ -312,7 +312,6 @@ class AXI4Lite(len: AXI4Len = new AXI4Len) extends Bundle {
 
 class AXI4LiteUpper(len: AXI4Len = new AXI4Len) extends Bundle {
     val AWADDR = Output(UInt(len.awaddr.W))
-    val AWPROT = Output(UInt(len.awprot.W))
     val AWVALID = Output(UInt(len.awvalid.W))
     val AWREADY = Input(UInt(len.awready.W))
     val WDATA = Output(UInt(len.wdata.W))
@@ -323,7 +322,6 @@ class AXI4LiteUpper(len: AXI4Len = new AXI4Len) extends Bundle {
     val BVALID = Input(UInt(len.bvalid.W))
     val BREADY = Output(UInt(len.bready.W))
     val ARADDR = Output(UInt(len.araddr.W))
-    val ARPROT = Output(UInt(len.arprot.W))
     val ARVALID = Output(UInt(len.arvalid.W))
     val ARREADY = Input(UInt(len.arready.W))
     val RDATA = Input(UInt(len.rdata.W))
@@ -333,8 +331,8 @@ class AXI4LiteUpper(len: AXI4Len = new AXI4Len) extends Bundle {
     
     def toLower: AXI4Lite = {
         val copy = Wire(new AXI4Lite(len))
-        copy.elements.foreach { case (name, data) =>
-            data <> elements(name.toUpperCase)
+        elements.foreach { case (name, data) =>
+            data <> copy.elements(name.toLowerCase)
         }
         copy
     }

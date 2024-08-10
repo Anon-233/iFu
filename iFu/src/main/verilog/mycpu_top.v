@@ -94,6 +94,6 @@ module core_top (
         .io_axi3_b_bits_resp(bresp)
     );
 
-    arqos = 4'b0
-    awqos = 4'b0
+    assign arqos = 4'b0;
+    assign awqos = 4'b0;
 endmodule
