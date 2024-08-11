@@ -47,7 +47,7 @@ class DTLB(num_l0_dtlb_entries: Int = 2) extends CoreModule with L0TLBState {
         ))
     }
 
-    val csr_regs = RegNext(io.dtlb_csr_context)
+    val csr_regs = io.dtlb_csr_context
 
     // addr translation
     val l0_miss = WireInit(VecInit(Seq.fill(memWidth)(false.B)))

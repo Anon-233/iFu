@@ -42,9 +42,9 @@ class ITLB(num_l0_itlb_entries: Int = 2) extends CoreModule with L0TLBState {
         Seq.fill(num_l0_itlb_entries)(0.U.asTypeOf(new L0ITLBEntry))
     ))
 
-    val csr_regs = WireInit(RegNext(io.itlb_csr_cxt))
-    csr_regs.da_mode := io.itlb_csr_cxt.da_mode
-    csr_regs.pg_mode := io.itlb_csr_cxt.pg_mode
+    val csr_regs = WireInit(io.itlb_csr_cxt)
+    // csr_regs.da_mode := io.itlb_csr_cxt.da_mode
+    // csr_regs.pg_mode := io.itlb_csr_cxt.pg_mode
 
     val vaddr        = io.req.bits.vaddr
     val l0_hit_oh    = VecInit(l0_entry.map(
