@@ -47,7 +47,7 @@ class BranchUnit(t: BRUType, brinfoWidth: Int) extends CoreModule {
 // -----------------------------------------------------------------------
     if (t.normal || t.to_lsu) {
         // store branch resolution info for redirect
-        val br_infos = Reg(Vec(coreWidth, new BrResolutionInfo))
+        val br_infos = Reg(Vec(brinfoWidth, new BrResolutionInfo))
         br_infos zip io.br_infos map { case (r, i) => {
             r       := i
             r.valid := i.valid && !io.rob_flush
